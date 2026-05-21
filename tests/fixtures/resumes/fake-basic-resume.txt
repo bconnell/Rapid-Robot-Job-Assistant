@@ -1,0 +1,22 @@
+Alex Rivera
+alex@example.com
+555-010-3344
+https://www.linkedin.com/in/alex-rivera-example
+https://github.com/alex-example
+
+Summary
+Frontend developer with experience building accessible React and TypeScript tools for internal operations teams.
+
+Skills
+TypeScript, React, JavaScript, Accessibility, Testing, SQL
+
+Experience
+Frontend Developer at Example Tools
+- Built React dashboards for support teams.
+- Improved form accessibility and keyboard navigation.
+
+Education
+BS Computer Science, Example State University
+
+Certifications
+Example Accessibility Foundations
