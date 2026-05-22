@@ -8,19 +8,11 @@ It is built around user control. The extension can analyze the current page when
 
 This is not a mass application bot. It does not auto-submit applications, bypass CAPTCHA, evade bot detection, spoof fingerprints, fake user behavior, or invent qualifications.
 
-## Batch 1 Status
+## Update History
 
-Batch 1 provides the project foundation:
+Newest changes are listed first.
 
-- Manifest V3 extension skeleton with popup, side panel, options page, service worker, and user-triggered content analysis.
-- Strict TypeScript, React, Vite, Vitest, ESLint, and Prettier setup.
-- Local storage wrappers for Chrome storage and IndexedDB.
-- Deterministic job-page extraction, form-field detection, CAPTCHA and bot-check detection, sensitive-field rules, field mapping, and safe fill preview/fill execution.
-- Local resume text parsing and initial `.docx` extraction support through `mammoth`.
-- AI provider interfaces with a manual local fallback. AI requests require explicit review before anything is sent.
-- Fake-only fixtures and unit tests for core logic.
-
-Batch 2 adds practical workflow wiring:
+### 2026-05-21. Workflow Wiring
 
 - `.docx` resume import is wired into Options.
 - Parsed profiles can be reviewed, edited, saved, and loaded as the active profile.
@@ -29,6 +21,16 @@ Batch 2 adds practical workflow wiring:
 - Application field analysis creates local sessions with notes, manual status, fill preview, approvals, and fill results.
 - Local data export is available with a privacy warning. Import is validation-preview only for now.
 - CI validates build, tests, typecheck, lint, and formatting on GitHub.
+
+### 2026-05-21. Project Foundation
+
+- Manifest V3 extension skeleton with popup, side panel, options page, service worker, and user-triggered content analysis.
+- Strict TypeScript, React, Vite, Vitest, ESLint, and Prettier setup.
+- Local storage wrappers for Chrome storage and IndexedDB.
+- Deterministic job-page extraction, form-field detection, CAPTCHA and bot-check detection, sensitive-field rules, field mapping, and safe fill preview/fill execution.
+- Local resume text parsing and initial `.docx` extraction support through `mammoth`.
+- AI provider interfaces with a manual local fallback. AI requests require explicit review before anything is sent.
+- Fake-only fixtures and unit tests for core logic.
 
 Known limitations are documented in [docs/roadmap.md](docs/roadmap.md).
 
