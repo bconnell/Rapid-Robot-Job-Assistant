@@ -84,4 +84,75 @@ Lakeview College, Certificate in Web Development, Expected 2026
     expect(parsed.summary.needsReview).toContain('No clear experience entries found.');
     expect(parsed.summary.needsReview).not.toContain('No clear skills section found.');
   });
+
+  it('separates glued education degree, field, school, and expected date', () => {
+    const parsed = parseResumeSections(`
+Taylor Reed
+Professional Summary
+Software developer.
+Technical Skills
+TypeScript, React
+Professional Experience
+Software Developer | Prairie Software Works | 2022 - Present
+Education
+Master of Science in Software EngineeringLakeview Technical University - River CityExpected August 2026
+Bachelor of Science in Computer ScienceNorthstar State CollegeApril 2025
+`);
+
+    expect(parsed.profile.education[0]).toMatchObject({
+      degree: 'Master of Science',
+      field: 'Software Engineering',
+      school: 'Lakeview Technical University - River City',
+      graduationDate: 'Expected August 2026'
+    });
+    expect(parsed.profile.education[1]).toMatchObject({
+      degree: 'Bachelor of Science',
+      field: 'Computer Science',
+      school: 'Northstar State College',
+      graduationDate: 'April 2025'
+    });
+  });
+
+  it('handles school-first education entries without duplicating fields', () => {
+    const parsed = parseResumeSections(`
+Alex Morgan
+Professional Summary
+Developer.
+Technical Skills
+SQL, Testing
+Professional Experience
+QA Analyst - Lakeview Systems - 2020 - 2024
+Education
+Lakeview Technical University - River City Master of Science in Software Engineering Expected August 2026
+`);
+
+    expect(parsed.profile.experience).toHaveLength(1);
+    expect(parsed.profile.education[0]).toMatchObject({
+      school: 'Lakeview Technical University - River City',
+      degree: 'Master of Science',
+      field: 'Software Engineering',
+      graduationDate: 'Expected August 2026'
+    });
+  });
+
+  it('does not let certifications consume later sections', () => {
+    const parsed = parseResumeSections(`
+Jordan Lee
+Professional Summary
+Practical builder.
+Technical Skills
+Node, SQL
+Professional Experience
+Developer | Northstar Components | 2021 - Present
+Certifications
+Lakeview Cloud Foundations
+Projects
+Inventory Dashboard
+Education
+Northstar State College, BS Computer Science, 2020
+`);
+
+    expect(parsed.profile.certifications).toEqual(['Lakeview Cloud Foundations']);
+    expect(parsed.profile.certifications).not.toContain('Projects');
+  });
 });

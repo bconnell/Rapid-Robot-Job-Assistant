@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/validate-build-output.mjs",
+    "validate:build-output": "node scripts/validate-build-output.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

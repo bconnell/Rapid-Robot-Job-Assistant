@@ -28,6 +28,17 @@ function copyHtmlEntries(): Plugin {
   };
 }
 
+function copySharedStyles(): Plugin {
+  return {
+    name: 'copy-shared-styles',
+    writeBundle() {
+      const target = resolve('dist/shared/styles.css');
+      mkdirSync(dirname(target), { recursive: true });
+      copyFileSync(resolve('src/shared/styles.css'), target);
+    }
+  };
+}
+
 function copyDocs(): Plugin {
   return {
     name: 'copy-docs',
@@ -51,7 +62,7 @@ function copyDirectory(source: string, target: string): void {
 }
 
 export default defineConfig({
-  plugins: [react(), copyManifest(), copyHtmlEntries(), copyDocs()],
+  plugins: [react(), copyManifest(), copyHtmlEntries(), copySharedStyles(), copyDocs()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

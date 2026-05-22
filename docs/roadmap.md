@@ -1,6 +1,6 @@
 # Roadmap
 
-## Batch 1 Completed Foundation
+## Completed Foundation
 
 - MV3 extension structure.
 - React popup, side panel, and options page.
@@ -25,7 +25,7 @@
 - Resume parsing is improved but still review-first. Users should verify every parsed field.
 - Chrome Web Store packaging and publishing are future work.
 
-## Batch 2 Completed Workflow Wiring
+## Completed Workflow Wiring
 
 - `.docx` resume import is wired into Options.
 - Profile review/edit/save/load works locally.
@@ -52,10 +52,19 @@
 - Skills, experience, and education parsing handle more realistic fake resume structures.
 - Options shows a compact parser summary and review warnings.
 
+## Browser QA Styling And Parser Fixes Completed
+
+- Built extension pages now reference a deterministic shared stylesheet in `dist/shared/styles.css`.
+- Build validation checks that popup, side panel, and Options can load shared styles from the unpacked `dist` folder.
+- Options layout has stronger guards against horizontal overflow, stretched cards, and ultra-wide columns.
+- Education parsing better separates degree, field, school, city, honors, and graduation dates from glued `.docx` text.
+- Experience parsing has regression coverage for hyphen-separated fake roles.
+- Certification parsing has regression coverage to stop before later sections.
+
 ## Possible Next Work
 
 - Add safe merge/replace import after another review pass.
-- Fix issues found by real browser QA.
+- Continue real browser QA fixes as they appear.
 - Add better application form fixtures.
 - Add visible search-result extraction for controlled fake fixtures and current-page only.
 - Add richer application session history.

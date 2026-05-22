@@ -12,6 +12,15 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. Browser QA Styling And Parser Fixes
+
+- Made shared styles load deterministically from the built Chrome extension output.
+- Added build-output validation so popup, side panel, and Options keep their stylesheet links.
+- Tightened Options layout rules for centered desktop use, small screens, and wide monitors.
+- Fixed education parsing cases where degree, field, school, and dates could duplicate or glue together.
+- Improved experience and certification parsing regression coverage with fake resume data.
+- No change to local-first privacy, no auto-submit, or manual review rules.
+
 ### 2026-05-22. Options UI And Resume Parsing Hardening
 
 - Cleaned up the Options layout so wide screens use a centered main column and sidebar instead of many skinny columns.
@@ -111,7 +120,7 @@ Saved searches are local records. The extension records manual check status but 
 
 User data stays local by default. Profile data, pasted resume text, saved jobs, saved searches, field mapping history, and application sessions are stored in local browser storage.
 
-AI is disabled by default. If a provider is configured later, the extension must show the data that would be sent and wait for user approval. The Batch 1 fallback uses local rules only.
+AI is disabled by default. If a provider is configured later, the extension must show the data that would be sent and wait for user approval. The current fallback uses local rules only.
 
 The extension does not inject remote scripts, use `eval`, log private data, or submit forms.
 

@@ -67,7 +67,7 @@ export function normalizeResumeText(value: string): string {
     .replace(/\r\n?/g, '\n')
     .replace(/[ \t]+/g, ' ')
     .replace(/\u00a0/g, ' ')
-    .replace(/[•●▪]/g, '\n- ')
+    .replace(/[\u2022\u25cf\u25aa]/g, '\n- ')
     .replace(/\n{3,}/g, '\n\n');
 
   for (const label of gluedLabels) {

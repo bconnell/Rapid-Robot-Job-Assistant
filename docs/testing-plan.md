@@ -21,6 +21,8 @@ Batch 1 includes unit tests for:
 - Skills categories
 - Multi-role experience parsing
 - Education parsing with degree, school, dates, and honors
+- Build output validation for shared stylesheet links in popup, side panel, and Options
+- Fake regression coverage for glued education text, school-first education text, and certification section boundaries
 
 ## Fixtures
 
@@ -78,6 +80,7 @@ Manual checks should cover:
 7. Confirm raw resume text area has a sensible height.
 8. Resize to roughly 390px, 768px, 1280px, 1920px, and an ultra-wide width.
 9. Confirm the layout remains readable at each width.
+10. Confirm popup, side panel, and Options are styled when loaded from the built `dist` folder.
 
 ## Parser QA
 
@@ -89,6 +92,8 @@ Manual checks should cover:
 6. Confirm city/state/zip are parsed when present.
 7. Confirm summary is only summary, not the whole resume.
 8. Confirm warnings appear only for real uncertainty.
+9. Confirm education entries do not duplicate school, degree, field, and date values.
+10. Confirm certifications stop before Projects, Education, or other later sections.
 
 ## CI
 

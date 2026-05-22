@@ -56,7 +56,7 @@ const sectionAliases: Record<SectionKey, string[]> = {
 };
 
 const datePattern =
-  /\b(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2}\s*(?:-|–|to)\s*(?:present|current|(?:19|20)\d{2})|\b(?:expected\s+)?(?:graduation\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}|\b(?:19|20)\d{2}\b/i;
+  /\b(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2}\s*(?:-|\u2013|to)\s*(?:present|current|(?:19|20)\d{2})|\b(?:expected\s+)?(?:graduation\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}|\b(?:19|20)\d{2}\b/i;
 
 export function parseResumeSections(text: string): ParsedResume {
   const normalized = normalizeResumeText(text);
@@ -246,7 +246,7 @@ function cleanSummary(section: string): string {
 
 function parseSkills(section: string): string[] {
   const values = section
-    .split(/\n|,|\||;|•/)
+    .split(/\n|,|\||;|\u2022/)
     .map((value) =>
       value
         .replace(/^[-*]\s*/, '')
@@ -263,9 +263,9 @@ function parseSkills(section: string): string[] {
 function parseList(section: string): string[] {
   return uniqueStrings(
     section
-      .split(/\n|•/)
+      .split(/\n|\u2022/)
       .map((value) => value.replace(/^[-*]\s*/, '').trim())
-      .filter(Boolean)
+      .filter((value) => Boolean(value) && !detectHeading(value))
   );
 }
 
@@ -295,6 +295,7 @@ function looksLikeExperienceHeader(line: string): boolean {
     datePattern.test(line) ||
     /\s+at\s+/i.test(line) ||
     line.includes('|') ||
+    /\s+-\s+/.test(line) ||
     /(engineer|developer|manager|analyst|consultant|specialist|designer|administrator)/i.test(line)
   );
 }
@@ -305,7 +306,7 @@ function parseExperienceHeader(line: string): ProfileExperience {
   let title = withoutDate;
   let employer = 'Needs review';
   const parts = withoutDate
-    .split(/\s+\|\s+|\s*,\s*/)
+    .split(/\s+\|\s+|\s+-\s+|\s*,\s*/)
     .map(normalizeWhitespace)
     .filter(Boolean);
 
@@ -329,40 +330,115 @@ function parseExperienceHeader(line: string): ProfileExperience {
 }
 
 function parseEducation(section: string): ProfileEducation[] {
-  return section
-    .split(
-      /\n(?=.*(?:University|College|School|Institute|Bachelor|Master|Associate|Certificate|Degree|BS|MS|MBA))/i
-    )
-    .map(normalizeWhitespace)
-    .filter(Boolean)
-    .map(parseEducationLine);
+  const entries: string[] = [];
+  let current = '';
+
+  for (const line of section.split('\n').map(normalizeWhitespace).filter(Boolean)) {
+    if (detectHeading(line)) continue;
+    const startsNew =
+      current &&
+      /(University|College|School|Institute|Bachelor|Master|Associate|Certificate|Degree|BS|MS|MBA)/i.test(
+        line
+      );
+    if (startsNew) {
+      entries.push(current);
+      current = line;
+    } else {
+      current = normalizeWhitespace(`${current} ${line}`);
+    }
+  }
+  if (current) entries.push(current);
+  return entries.map(parseEducationLine).filter((entry) => entry.school || entry.degree);
 }
 
 function parseEducationLine(line: string): ProfileEducation {
-  const graduationDate = line.match(
-    /(?:expected\s+)?(?:graduation\s+)?(?:[A-Z][a-z]+\s+)?(?:19|20)\d{2}/i
-  )?.[0];
+  const normalizedLine = normalizeEducationLine(line);
+  const graduationDate = line
+    .match(
+      /(?:expected\s+)?(?:graduation\s+)?(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)[a-z]*\.?\s+)?(?:19|20)\d{2}/i
+    )?.[0]
+    ?.trim();
   const cleaned = normalizeWhitespace(
-    line
+    normalizedLine
       .replace(/magna cum laude|summa cum laude|cum laude|honors?/gi, '')
       .replace(graduationDate ?? '', '')
   );
-  const parts = cleaned
-    .split(/\s+\|\s+|\s*,\s*/)
-    .map(normalizeWhitespace)
-    .filter(Boolean);
-  const degreePart = parts.find((part) =>
-    /(Bachelor|Master|Associate|Certificate|Degree|BS|MS|MBA)/i.test(part)
+  const degreeMatch = cleaned.match(
+    /\b(?:(?:Master|Bachelor|Associate) of (?:Science|Arts|Applied Science|Business Administration)|(?:BS|BA|MS|MA|MBA|Certificate)(?:\s+[A-Z][A-Za-z&.' -]+)?)/i
   );
-  const schoolPart = parts.find((part) => /(University|College|School|Institute)/i.test(part));
-  const field = degreePart?.match(/\bin\s+(.+)$/i)?.[1];
+  const degreeRaw = normalizeEducationText(degreeMatch?.[0]);
+  const degree =
+    degreeRaw && /^(?:BS|BA|MS|MA|MBA|Certificate)\s+/i.test(degreeRaw)
+      ? degreeRaw
+      : degreeRaw?.replace(/\s+in\s+.+$/i, '');
+  const degreeIndex = degreeMatch?.index ?? -1;
+  const afterDegree =
+    degreeRaw && degreeIndex >= 0 ? cleaned.slice(degreeIndex + degreeRaw.length) : '';
+  const beforeDegree = degreeIndex > 0 ? cleaned.slice(0, degreeIndex) : '';
+  const school = findSchoolName(cleaned, beforeDegree);
+  const field =
+    degreeRaw && afterDegree
+      ? normalizeEducationText(
+          afterDegree
+            .trim()
+            .replace(/^in\s+/i, '')
+            .replace(school ?? '', '')
+            .replace(/[|,;-]+$/g, '')
+        )
+      : degreeRaw && /^(?:BS|BA|MS|MA|MBA|Certificate)\s+/i.test(degreeRaw)
+        ? normalizeEducationText(degreeRaw.replace(/^(?:BS|BA|MS|MA|MBA|Certificate)\s+/i, ''))
+        : undefined;
 
   return {
-    school: schoolPart ?? parts.find((part) => part !== degreePart) ?? 'Needs review',
-    degree: degreePart,
-    field,
+    school: school || 'Needs review',
+    degree,
+    field: field || undefined,
     graduationDate
   };
+}
+
+function normalizeEducationLine(line: string): string {
+  return normalizeWhitespace(
+    line
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(
+        /(University|College|School|Institute)(Expected|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December))/gi,
+        '$1 $2'
+      )
+  );
+}
+
+function findSchoolName(line: string, fallback: string): string | undefined {
+  const degreeStart = line.search(
+    /\b(?:Master|Bachelor|Associate) of (?:Science|Arts|Applied Science|Business Administration)|\b(?:BS|BA|MS|MA|MBA|Certificate)\b/i
+  );
+  const searchText = degreeStart > 0 ? line.slice(0, degreeStart) : line;
+  for (const match of searchText.matchAll(/\b(University|College|School|Institute)\b/g)) {
+    const prefixWords = (
+      searchText.slice(0, match.index).match(/\b[A-Z][A-Za-z&.'-]*\b/g) ?? []
+    ).filter(
+      (word) =>
+        !/^(Master|Bachelor|Associate|Science|Arts|Applied|Business|Administration|Computer|Software|Engineering|Expected)$/i.test(
+          word
+        )
+    );
+    const nameWords = prefixWords.slice(-2);
+    if (!nameWords.length) continue;
+    const cityMatch = searchText
+      .slice((match.index ?? 0) + match[0].length)
+      .match(
+        /^\s*-\s*(.+?)(?=\s+(?:Master|Bachelor|Associate|BS|BA|MS|MA|MBA|Certificate|Expected|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December|19|20)|$|,|\|)/
+      );
+    return normalizeEducationText(
+      `${nameWords.join(' ')} ${match[0]}${cityMatch?.[1] ? ` - ${cityMatch[1]}` : ''}`
+    );
+  }
+  return normalizeEducationText(fallback);
+}
+
+function normalizeEducationText(value?: string): string | undefined {
+  const cleaned = normalizeWhitespace((value ?? '').replace(/^[,|;-]+|[,|;-]+$/g, ''));
+  return cleaned || undefined;
 }
 
 function isContactLike(value: string): boolean {

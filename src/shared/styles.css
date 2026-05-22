@@ -229,8 +229,14 @@ h2 {
 .options-main,
 .options-sidebar,
 .options-card {
+  min-width: 0;
   align-items: stretch;
   align-content: start;
+}
+
+.options-card {
+  height: auto;
+  align-self: start;
 }
 
 .options-sidebar {
@@ -246,6 +252,12 @@ h2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
   align-items: start;
+}
+
+.profile-grid > label,
+.nested-editor,
+.mini-card {
+  min-width: 0;
 }
 
 .resume-source {

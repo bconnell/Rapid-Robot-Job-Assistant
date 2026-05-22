@@ -12,6 +12,8 @@ npm install
 npm run build
 ```
 
+The Chrome extension should be loaded from the built `dist` folder. Source HTML files under `src` are not loaded directly in Chrome. The build copies the shared stylesheet into `dist/shared/styles.css` and validates that popup, side panel, and Options HTML files reference it.
+
 ## Test
 
 ```bash
@@ -43,7 +45,7 @@ npm run format
 
 ## Troubleshooting
 
-If Chrome does not load the extension, run `npm run build` again and reload `dist`. If a page command fails, make sure the active tab is an `http` or `https` page and run the action from a user gesture.
+If Chrome does not load the extension or a page appears unstyled, run `npm run build` again and reload `dist`. If a page command fails, make sure the active tab is an `http` or `https` page and run the action from a user gesture.
 
 ## Local Workflow Check
 
