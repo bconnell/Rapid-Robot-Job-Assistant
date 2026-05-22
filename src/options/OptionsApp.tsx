@@ -14,7 +14,10 @@ import {
 } from '../shared/storage/TypedRepositories';
 import { extractTextFromDocx } from '../shared/parsing/DocxResumeParser';
 import { extractPlainTextFromPaste } from '../shared/parsing/ResumeTextExtractor';
-import { parseResumeSections } from '../shared/parsing/ResumeSectionParser';
+import {
+  parseResumeSections,
+  type ResumeParseSummary
+} from '../shared/parsing/ResumeSectionParser';
 import { createSavedSearch, markSavedSearchChecked } from '../shared/jobs/SavedSearchService';
 import { createLocalDataExport, validateLocalDataImport } from '../shared/data/LocalDataTransfer';
 import {
@@ -48,6 +51,7 @@ export function OptionsApp() {
   });
   const [status, setStatus] = useState('Local-only mode is on by default.');
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [parseSummary, setParseSummary] = useState<ResumeParseSummary | undefined>();
   const [importPreview, setImportPreview] = useState('');
 
   useEffect(() => {
@@ -119,7 +123,8 @@ export function OptionsApp() {
       warnings: parsed.warnings
     };
     setProfile(nextProfile);
-    setWarnings(parsed.warnings.map((warning) => warning.message));
+    setParseSummary(parsed.summary);
+    setWarnings(parsed.summary.needsReview);
     await Promise.all([profileRepo.save(nextProfile), resumeRepo.save(resumeDocument)]);
     await settingsRepo.setActiveProfileId(nextProfile.id);
     setActiveProfileId(nextProfile.id);
@@ -230,308 +235,476 @@ export function OptionsApp() {
     setSavedSearches([]);
     setResumeText('');
     setWarnings([]);
+    setParseSummary(undefined);
     setStatus('Local extension data cleared.');
   }
 
   return (
-    <main className="app stack">
-      <section className="hero">
-        <span className="pill ok">Local-only by default</span>
-        <h1>Options</h1>
-        <p className="muted">
-          Import a resume, review the profile, save searches, and manage local data.
-        </p>
-      </section>
-
-      <section className="grid two">
-        <section className="card stack">
-          <h2>Resume Import</h2>
-          <p className="muted">
-            Pasted text and `.docx` files are parsed locally. The original file blob is not stored.
-          </p>
-          <textarea
-            value={resumeText}
-            onChange={(event) => setResumeText(event.target.value)}
-            placeholder="Paste fake or personal resume text here. Real data stays in browser storage."
+    <main className="app options-page">
+      <StatusBanner status={status} />
+      <section className="options-layout">
+        <div className="options-main stack">
+          <ResumeImportPanel
+            resumeText={resumeText}
+            warnings={warnings}
+            parseSummary={parseSummary}
+            onResumeTextChange={setResumeText}
+            onParseText={() => parseAndSaveProfileFromText('pasted-text')}
+            onImportDocx={importDocx}
           />
-          <div className="row">
-            <button onClick={() => parseAndSaveProfileFromText('pasted-text')}>
-              Parse Pasted Text
-            </button>
-            <label className="file-picker">
-              Import .docx
-              <input
-                type="file"
-                accept=".docx"
-                onChange={(event) => importDocx(event.target.files?.[0])}
-              />
-            </label>
-          </div>
+          <ProfileReviewPanel
+            profile={profile}
+            activeProfileId={activeProfileId}
+            onProfileChange={setProfile}
+            onSaveProfile={saveProfile}
+          />
+        </div>
+        <aside className="options-sidebar stack">
+          <AiProviderSettingsPanel settings={settings} onSaveSettings={saveSettings} />
+          <SavedSearchesPanel
+            searchForm={searchForm}
+            savedSearches={savedSearches}
+            onSearchFormChange={setSearchForm}
+            onCreateSearch={createSearch}
+            onCheckSearch={checkSearch}
+            onDeleteSearch={deleteSearch}
+          />
+          <PrivacyControlsPanel
+            importPreview={importPreview}
+            onExport={exportLocalData}
+            onPreviewImport={previewImport}
+            onClearLocalData={clearLocalData}
+          />
+          <DocsPanel />
+        </aside>
+      </section>
+    </main>
+  );
+}
+
+function StatusBanner({ status }: { status: string }) {
+  return (
+    <section className="hero options-hero">
+      <span className="pill ok">Local-only by default</span>
+      <h1>Options</h1>
+      <p className="muted">
+        Import a resume, review the profile, save searches, and manage local data.
+      </p>
+      <p className="options-status">{status}</p>
+    </section>
+  );
+}
+
+function ResumeImportPanel({
+  resumeText,
+  warnings,
+  parseSummary,
+  onResumeTextChange,
+  onParseText,
+  onImportDocx
+}: {
+  resumeText: string;
+  warnings: string[];
+  parseSummary?: ResumeParseSummary;
+  onResumeTextChange: (value: string) => void;
+  onParseText: () => void;
+  onImportDocx: (file?: File) => void;
+}) {
+  return (
+    <section className="card stack options-card">
+      <h2>Resume Import</h2>
+      <p className="muted">
+        Pasted text and `.docx` files are parsed locally. The original file blob is not stored.
+      </p>
+      <textarea
+        className="resume-source"
+        value={resumeText}
+        onChange={(event) => onResumeTextChange(event.target.value)}
+        placeholder="Paste fake or personal resume text here. Real data stays in browser storage."
+      />
+      <div className="row">
+        <button onClick={onParseText}>Parse Pasted Text</button>
+        <label className="file-picker">
+          Import .docx
+          <input
+            type="file"
+            accept=".docx"
+            onChange={(event) => onImportDocx(event.target.files?.[0])}
+          />
+        </label>
+      </div>
+      {parseSummary ? (
+        <ParseSummaryCard summary={parseSummary} warnings={warnings} />
+      ) : (
+        <p className="empty-state">No resume parsed yet.</p>
+      )}
+    </section>
+  );
+}
+
+function ParseSummaryCard({
+  summary,
+  warnings
+}: {
+  summary: ResumeParseSummary;
+  warnings: string[];
+}) {
+  return (
+    <div className="parse-summary">
+      <span>Contact: {summary.contactFound ? 'found' : 'review'}</span>
+      <span>Summary: {summary.summaryFound ? 'found' : 'not found'}</span>
+      <span>Skills: {summary.skillsCount}</span>
+      <span>Experience: {summary.experienceCount}</span>
+      <span>Education: {summary.educationCount}</span>
+      <span>Certifications: {summary.certificationsCount}</span>
+      {warnings.length > 0 && (
+        <div className="warning-list">
+          <strong>Needs review</strong>
           {warnings.map((warning) => (
             <p key={warning} className="warn">
               {warning}
             </p>
           ))}
-        </section>
+        </div>
+      )}
+    </div>
+  );
+}
 
-        <section className="card stack">
-          <h2>Profile Review</h2>
-          <p className={activeProfileId ? 'ok' : 'warn'}>
-            {activeProfileId ? 'Active profile loaded.' : 'No active profile yet.'}
-          </p>
-          <div className="grid two">
-            <TextInput
-              label="Full name"
-              value={profile.contact.fullName ?? ''}
-              onChange={(value) => updateContact({ fullName: value })}
-            />
-            <TextInput
-              label="Preferred name"
-              value={profile.contact.preferredName ?? ''}
-              onChange={(value) => updateContact({ preferredName: value })}
-            />
-            <TextInput
-              label="Email"
-              value={profile.contact.email ?? ''}
-              onChange={(value) => updateContact({ email: value })}
-            />
-            <TextInput
-              label="Phone"
-              value={profile.contact.phone ?? ''}
-              onChange={(value) => updateContact({ phone: value })}
-            />
-            <TextInput
-              label="City"
-              value={profile.contact.city ?? ''}
-              onChange={(value) => updateContact({ city: value })}
-            />
-            <TextInput
-              label="State"
-              value={profile.contact.state ?? ''}
-              onChange={(value) => updateContact({ state: value })}
-            />
-            <TextInput
-              label="Zip"
-              value={profile.contact.zip ?? ''}
-              onChange={(value) => updateContact({ zip: value })}
-            />
-            <TextInput
-              label="LinkedIn"
-              value={profile.contact.linkedInUrl ?? ''}
-              onChange={(value) => updateContact({ linkedInUrl: value })}
-            />
-            <TextInput
-              label="GitHub"
-              value={profile.contact.githubUrl ?? ''}
-              onChange={(value) => updateContact({ githubUrl: value })}
-            />
-            <TextInput
-              label="Portfolio"
-              value={profile.contact.portfolioUrl ?? ''}
-              onChange={(value) => updateContact({ portfolioUrl: value })}
-            />
-          </div>
-          <label>
-            Summary
-            <textarea
-              value={profile.summary ?? ''}
-              onChange={(event) => setProfile({ ...profile, summary: event.target.value })}
-            />
-          </label>
-          <TextInput
-            label="Skills, comma separated"
-            value={profile.skills.join(', ')}
-            onChange={(value) => setProfile({ ...profile, skills: splitComma(value) })}
-          />
-          <TextInput
-            label="Desired titles, comma separated"
-            value={profile.desiredTitles.join(', ')}
-            onChange={(value) => setProfile({ ...profile, desiredTitles: splitComma(value) })}
-          />
-          <div className="grid two">
-            <TextInput
-              label="Work authorization"
-              value={profile.workAuthorization ?? ''}
-              onChange={(value) => setProfile({ ...profile, workAuthorization: value })}
-            />
-            <TextInput
-              label="Desired salary"
-              value={profile.desiredSalary ?? ''}
-              onChange={(value) => setProfile({ ...profile, desiredSalary: value })}
-            />
-            <TextInput
-              label="Earliest start date"
-              value={profile.earliestStartDate ?? ''}
-              onChange={(value) => setProfile({ ...profile, earliestStartDate: value })}
-            />
-            <label>
-              Sponsorship required
-              <select
-                value={
-                  profile.sponsorshipRequired === undefined
-                    ? ''
-                    : profile.sponsorshipRequired
-                      ? 'yes'
-                      : 'no'
-                }
-                onChange={(event) =>
-                  setProfile({
-                    ...profile,
-                    sponsorshipRequired:
-                      event.target.value === '' ? undefined : event.target.value === 'yes'
-                  })
-                }
-              >
-                <option value="">Not set</option>
-                <option value="no">No</option>
-                <option value="yes">Yes</option>
-              </select>
-            </label>
-          </div>
-          <EditableExperience
-            items={profile.experience}
-            onChange={(experience) => setProfile({ ...profile, experience })}
-          />
-          <EditableEducation
-            items={profile.education}
-            onChange={(education) => setProfile({ ...profile, education })}
-          />
-          <TextInput
-            label="Certifications, comma separated"
-            value={profile.certifications.join(', ')}
-            onChange={(value) => setProfile({ ...profile, certifications: splitComma(value) })}
-          />
-          <button onClick={saveProfile}>Save Profile Locally</button>
-        </section>
+function ProfileReviewPanel({
+  profile,
+  activeProfileId,
+  onProfileChange,
+  onSaveProfile
+}: {
+  profile: UserProfile;
+  activeProfileId?: string;
+  onProfileChange: (profile: UserProfile) => void;
+  onSaveProfile: () => void;
+}) {
+  function updateContact(next: Partial<UserProfile['contact']>) {
+    onProfileChange({ ...profile, contact: { ...profile.contact, ...next } });
+  }
 
-        <section className="card stack">
-          <h2>AI Provider Settings</h2>
-          <label>
-            <input
-              type="checkbox"
-              checked={settings.localOnlyMode}
-              onChange={(event) =>
-                saveSettings({ ...settings, localOnlyMode: event.target.checked, aiEnabled: false })
-              }
-            />{' '}
-            Local-only mode
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={settings.aiEnabled}
-              disabled={settings.localOnlyMode}
-              onChange={(event) => saveSettings({ ...settings, aiEnabled: event.target.checked })}
-            />{' '}
-            Enable AI provider after review
-          </label>
+  return (
+    <section className="card stack options-card">
+      <h2>Profile Review</h2>
+      <p className={activeProfileId ? 'ok' : 'warn'}>
+        {activeProfileId ? 'Active profile loaded.' : 'No active profile yet.'}
+      </p>
+      <div className="profile-grid">
+        <TextInput
+          label="Full name"
+          value={profile.contact.fullName ?? ''}
+          onChange={(value) => updateContact({ fullName: value })}
+        />
+        <TextInput
+          label="Preferred name"
+          value={profile.contact.preferredName ?? ''}
+          onChange={(value) => updateContact({ preferredName: value })}
+        />
+        <TextInput
+          label="Email"
+          value={profile.contact.email ?? ''}
+          onChange={(value) => updateContact({ email: value })}
+        />
+        <TextInput
+          label="Phone"
+          value={profile.contact.phone ?? ''}
+          onChange={(value) => updateContact({ phone: value })}
+        />
+        <TextInput
+          label="City"
+          value={profile.contact.city ?? ''}
+          onChange={(value) => updateContact({ city: value })}
+        />
+        <TextInput
+          label="State"
+          value={profile.contact.state ?? ''}
+          onChange={(value) => updateContact({ state: value })}
+        />
+        <TextInput
+          label="Zip"
+          value={profile.contact.zip ?? ''}
+          onChange={(value) => updateContact({ zip: value })}
+        />
+        <TextInput
+          label="LinkedIn"
+          value={profile.contact.linkedInUrl ?? ''}
+          onChange={(value) => updateContact({ linkedInUrl: value })}
+        />
+        <TextInput
+          label="GitHub"
+          value={profile.contact.githubUrl ?? ''}
+          onChange={(value) => updateContact({ githubUrl: value })}
+        />
+        <TextInput
+          label="Portfolio"
+          value={profile.contact.portfolioUrl ?? ''}
+          onChange={(value) => updateContact({ portfolioUrl: value })}
+        />
+      </div>
+      <label>
+        Summary
+        <textarea
+          className="profile-summary"
+          value={profile.summary ?? ''}
+          onChange={(event) => onProfileChange({ ...profile, summary: event.target.value })}
+        />
+      </label>
+      <TextInput
+        label="Skills, comma separated"
+        value={profile.skills.join(', ')}
+        onChange={(value) => onProfileChange({ ...profile, skills: splitComma(value) })}
+      />
+      <TextInput
+        label="Desired titles, comma separated"
+        value={profile.desiredTitles.join(', ')}
+        onChange={(value) => onProfileChange({ ...profile, desiredTitles: splitComma(value) })}
+      />
+      <div className="profile-grid">
+        <TextInput
+          label="Work authorization"
+          value={profile.workAuthorization ?? ''}
+          onChange={(value) => onProfileChange({ ...profile, workAuthorization: value })}
+        />
+        <TextInput
+          label="Desired salary"
+          value={profile.desiredSalary ?? ''}
+          onChange={(value) => onProfileChange({ ...profile, desiredSalary: value })}
+        />
+        <TextInput
+          label="Earliest start date"
+          value={profile.earliestStartDate ?? ''}
+          onChange={(value) => onProfileChange({ ...profile, earliestStartDate: value })}
+        />
+        <label>
+          Sponsorship required
           <select
-            value={settings.aiProvider}
+            value={
+              profile.sponsorshipRequired === undefined
+                ? ''
+                : profile.sponsorshipRequired
+                  ? 'yes'
+                  : 'no'
+            }
             onChange={(event) =>
-              saveSettings({
-                ...settings,
-                aiProvider: event.target.value as ExtensionSettings['aiProvider']
+              onProfileChange({
+                ...profile,
+                sponsorshipRequired:
+                  event.target.value === '' ? undefined : event.target.value === 'yes'
               })
             }
           >
-            <option value="manual">Manual local rules</option>
-            <option value="openai-compatible">OpenAI-compatible</option>
-            <option value="ollama">Ollama</option>
+            <option value="">Not set</option>
+            <option value="no">No</option>
+            <option value="yes">Yes</option>
           </select>
-          <p className="muted">AI remains disabled by default. API keys are not exported.</p>
-        </section>
-
-        <section className="card stack">
-          <h2>Saved Searches</h2>
-          <TextInput
-            label="Name"
-            value={searchForm.label}
-            onChange={(value) => setSearchForm({ ...searchForm, label: value })}
-          />
-          <TextInput
-            label="Search URL"
-            value={searchForm.url}
-            onChange={(value) => setSearchForm({ ...searchForm, url: value })}
-          />
-          <TextInput
-            label="Keywords"
-            value={searchForm.keywords}
-            onChange={(value) => setSearchForm({ ...searchForm, keywords: value })}
-          />
-          <TextInput
-            label="Location"
-            value={searchForm.location}
-            onChange={(value) => setSearchForm({ ...searchForm, location: value })}
-          />
-          <label>
-            <input
-              type="checkbox"
-              checked={searchForm.remoteOnly}
-              onChange={(event) =>
-                setSearchForm({ ...searchForm, remoteOnly: event.target.checked })
-              }
-            />{' '}
-            Remote only
-          </label>
-          <button className="secondary" onClick={createSearch}>
-            Save Search URL
-          </button>
-          {savedSearches.map((search) => (
-            <div className="mini-card" key={search.id}>
-              <strong>{search.label}</strong>
-              <p className="muted">{search.url}</p>
-              <p className="muted">{search.lastCheckStatus ?? 'Not checked yet.'}</p>
-              <div className="row">
-                <button className="secondary" onClick={() => checkSearch(search)}>
-                  Check Now
-                </button>
-                <button className="danger" onClick={() => deleteSearch(search.id)}>
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </section>
-
-        <section className="card stack">
-          <h2>Privacy Controls</h2>
-          <button className="secondary" onClick={exportLocalData}>
-            Export Local Data
-          </button>
-          <label className="file-picker secondary">
-            Preview Import JSON
-            <input
-              type="file"
-              accept="application/json,.json"
-              onChange={(event) => previewImport(event.target.files?.[0])}
-            />
-          </label>
-          {importPreview && <p className="muted">{importPreview}</p>}
-          <button className="danger" onClick={clearLocalData}>
-            Clear Local Data
-          </button>
-          <p className="muted">
-            Exports may contain private data. Import is preview-only in Batch 2.
-          </p>
-        </section>
-
-        <section className="card stack">
-          <h2>Docs</h2>
-          <a href="../docs/application-workflow.md">Application workflow</a>
-          <a href="../docs/privacy-model.md">Privacy model</a>
-          <a href="../docs/local-development.md">Local development</a>
-        </section>
-      </section>
-
-      <section className="card">
-        <p>{status}</p>
-      </section>
-    </main>
+        </label>
+      </div>
+      <EditableExperience
+        items={profile.experience}
+        onChange={(experience) => onProfileChange({ ...profile, experience })}
+      />
+      <EditableEducation
+        items={profile.education}
+        onChange={(education) => onProfileChange({ ...profile, education })}
+      />
+      <TextInput
+        label="Certifications, comma separated"
+        value={profile.certifications.join(', ')}
+        onChange={(value) => onProfileChange({ ...profile, certifications: splitComma(value) })}
+      />
+      <button onClick={onSaveProfile}>Save Profile Locally</button>
+    </section>
   );
+}
 
-  function updateContact(next: Partial<UserProfile['contact']>) {
-    setProfile({ ...profile, contact: { ...profile.contact, ...next } });
-  }
+function AiProviderSettingsPanel({
+  settings,
+  onSaveSettings
+}: {
+  settings: ExtensionSettings;
+  onSaveSettings: (settings: ExtensionSettings) => void;
+}) {
+  return (
+    <section className="card stack options-card compact-card">
+      <h2>AI Provider Settings</h2>
+      <label>
+        <input
+          type="checkbox"
+          checked={settings.localOnlyMode}
+          onChange={(event) =>
+            onSaveSettings({ ...settings, localOnlyMode: event.target.checked, aiEnabled: false })
+          }
+        />{' '}
+        Local-only mode
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={settings.aiEnabled}
+          disabled={settings.localOnlyMode}
+          onChange={(event) => onSaveSettings({ ...settings, aiEnabled: event.target.checked })}
+        />{' '}
+        Enable AI provider after review
+      </label>
+      <select
+        value={settings.aiProvider}
+        onChange={(event) =>
+          onSaveSettings({
+            ...settings,
+            aiProvider: event.target.value as ExtensionSettings['aiProvider']
+          })
+        }
+      >
+        <option value="manual">Manual local rules</option>
+        <option value="openai-compatible">OpenAI-compatible</option>
+        <option value="ollama">Ollama</option>
+      </select>
+      <p className="muted">AI remains disabled by default. API keys are not exported.</p>
+    </section>
+  );
+}
+
+function SavedSearchesPanel({
+  searchForm,
+  savedSearches,
+  onSearchFormChange,
+  onCreateSearch,
+  onCheckSearch,
+  onDeleteSearch
+}: {
+  searchForm: {
+    label: string;
+    url: string;
+    keywords: string;
+    location: string;
+    remoteOnly: boolean;
+  };
+  savedSearches: SavedSearch[];
+  onSearchFormChange: (form: {
+    label: string;
+    url: string;
+    keywords: string;
+    location: string;
+    remoteOnly: boolean;
+  }) => void;
+  onCreateSearch: () => void;
+  onCheckSearch: (search: SavedSearch) => void;
+  onDeleteSearch: (id: string) => void;
+}) {
+  return (
+    <section className="card stack options-card compact-card">
+      <h2>Saved Searches</h2>
+      <TextInput
+        label="Name"
+        value={searchForm.label}
+        onChange={(value) => onSearchFormChange({ ...searchForm, label: value })}
+      />
+      <TextInput
+        label="Search URL"
+        value={searchForm.url}
+        onChange={(value) => onSearchFormChange({ ...searchForm, url: value })}
+      />
+      <TextInput
+        label="Keywords"
+        value={searchForm.keywords}
+        onChange={(value) => onSearchFormChange({ ...searchForm, keywords: value })}
+      />
+      <TextInput
+        label="Location"
+        value={searchForm.location}
+        onChange={(value) => onSearchFormChange({ ...searchForm, location: value })}
+      />
+      <label>
+        <input
+          type="checkbox"
+          checked={searchForm.remoteOnly}
+          onChange={(event) =>
+            onSearchFormChange({ ...searchForm, remoteOnly: event.target.checked })
+          }
+        />{' '}
+        Remote only
+      </label>
+      <button className="secondary" onClick={onCreateSearch}>
+        Save Search URL
+      </button>
+      {savedSearches.length === 0 && <p className="empty-state">No saved searches yet.</p>}
+      {savedSearches.map((search) => (
+        <div className="mini-card" key={search.id}>
+          <strong>{search.label}</strong>
+          <p className="muted">{search.url}</p>
+          <p className="muted">{search.lastCheckStatus ?? 'Not checked yet.'}</p>
+          <div className="row">
+            <button className="secondary" onClick={() => onCheckSearch(search)}>
+              Check Now
+            </button>
+            <button className="danger" onClick={() => onDeleteSearch(search.id)}>
+              Delete
+            </button>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function PrivacyControlsPanel({
+  importPreview,
+  onExport,
+  onPreviewImport,
+  onClearLocalData
+}: {
+  importPreview: string;
+  onExport: () => void;
+  onPreviewImport: (file?: File) => void;
+  onClearLocalData: () => void;
+}) {
+  return (
+    <section className="card stack options-card compact-card">
+      <h2>Privacy Controls</h2>
+      <button className="secondary" onClick={onExport}>
+        Export Local Data
+      </button>
+      <label className="file-picker secondary">
+        Preview Import JSON
+        <input
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => onPreviewImport(event.target.files?.[0])}
+        />
+      </label>
+      {importPreview && <p className="muted">{importPreview}</p>}
+      <button className="danger danger-inline" onClick={onClearLocalData}>
+        Clear Local Data
+      </button>
+      <p className="muted">Exports may contain private data. Import is preview-only in Batch 2.</p>
+    </section>
+  );
+}
+
+function DocsPanel() {
+  const docs = [
+    [
+      'Application workflow',
+      '../docs/application-workflow.md',
+      'Profile import through reviewed field fill.'
+    ],
+    ['Privacy model', '../docs/privacy-model.md', 'What stays local and what export contains.'],
+    ['Local development', '../docs/local-development.md', 'Build, test, and load the extension.']
+  ];
+  return (
+    <section className="card stack options-card compact-card docs-card">
+      <h2>Docs</h2>
+      {docs.map(([label, href, description]) => (
+        <a className="doc-link" href={href} key={href}>
+          <strong>{label}</strong>
+          <span>{description}</span>
+        </a>
+      ))}
+    </section>
+  );
 }
 
 function TextInput({
@@ -559,8 +732,9 @@ function EditableExperience({
   onChange: (items: ProfileExperience[]) => void;
 }) {
   return (
-    <section className="stack">
+    <section className="stack nested-editor">
       <h3>Experience</h3>
+      {items.length === 0 && <p className="empty-state">No experience entries parsed yet.</p>}
       {items.map((item, index) => (
         <div className="mini-card stack" key={index}>
           <TextInput
@@ -580,7 +754,7 @@ function EditableExperience({
             }
           />
           <button
-            className="danger"
+            className="danger danger-inline"
             onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
           >
             Remove Experience
@@ -609,8 +783,9 @@ function EditableEducation({
   onChange: (items: ProfileEducation[]) => void;
 }) {
   return (
-    <section className="stack">
+    <section className="stack nested-editor">
       <h3>Education</h3>
+      {items.length === 0 && <p className="empty-state">No education entries parsed yet.</p>}
       {items.map((item, index) => (
         <div className="mini-card stack" key={index}>
           <TextInput
@@ -623,8 +798,18 @@ function EditableEducation({
             value={item.degree ?? ''}
             onChange={(value) => update(index, { ...item, degree: value })}
           />
+          <TextInput
+            label="Field"
+            value={item.field ?? ''}
+            onChange={(value) => update(index, { ...item, field: value })}
+          />
+          <TextInput
+            label="Graduation date"
+            value={item.graduationDate ?? ''}
+            onChange={(value) => update(index, { ...item, graduationDate: value })}
+          />
           <button
-            className="danger"
+            className="danger danger-inline"
             onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
           >
             Remove Education

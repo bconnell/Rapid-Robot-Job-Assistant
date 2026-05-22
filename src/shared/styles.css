@@ -141,6 +141,7 @@ textarea {
 .grid {
   display: grid;
   gap: 0.8rem;
+  align-items: start;
 }
 
 .two {
@@ -157,6 +158,7 @@ textarea {
 .stack {
   display: grid;
   gap: 0.7rem;
+  align-content: start;
 }
 
 .muted {
@@ -202,8 +204,139 @@ h2 {
   font-size: 1rem;
 }
 
+.options-page {
+  width: min(100%, 1280px);
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.options-hero {
+  margin-bottom: 1rem;
+}
+
+.options-status {
+  margin-bottom: 0;
+  color: var(--blue-2);
+}
+
+.options-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: 1rem;
+  align-items: start;
+}
+
+.options-main,
+.options-sidebar,
+.options-card {
+  align-items: stretch;
+  align-content: start;
+}
+
+.options-sidebar {
+  gap: 0.9rem;
+}
+
+.compact-card {
+  min-height: 0;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.resume-source {
+  min-height: 11rem;
+  max-height: 18rem;
+}
+
+.profile-summary {
+  min-height: 7rem;
+  max-height: 12rem;
+}
+
+.nested-editor textarea {
+  min-height: 5rem;
+  max-height: 10rem;
+}
+
+.danger-inline {
+  width: fit-content;
+  min-width: 10rem;
+  align-self: start;
+}
+
+.parse-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(8, 22, 37, 0.7);
+  padding: 0.7rem;
+}
+
+.parse-summary > span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+  color: var(--muted);
+  background: #091827;
+  font-size: 0.84rem;
+}
+
+.warning-list {
+  flex-basis: 100%;
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.warning-list p {
+  margin-bottom: 0;
+}
+
+.empty-state {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  margin-bottom: 0;
+  padding: 0.65rem;
+  color: var(--muted);
+  background: rgba(8, 22, 37, 0.5);
+}
+
+.docs-card {
+  gap: 0.5rem;
+}
+
+.doc-link {
+  display: grid;
+  gap: 0.15rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem;
+  color: var(--text);
+  text-decoration: none;
+  background: rgba(8, 22, 37, 0.7);
+}
+
+.doc-link span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 @media (max-width: 720px) {
   .field-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .options-layout,
+  .profile-grid {
     grid-template-columns: 1fr;
   }
 }

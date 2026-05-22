@@ -22,6 +22,7 @@
 - Field filling avoids file uploads and navigation.
 - Import is validation-preview only in Batch 2.
 - AI provider network calls are scaffolded but intentionally not executed.
+- Resume parsing is improved but still review-first. Users should verify every parsed field.
 - Chrome Web Store packaging and publishing are future work.
 
 ## Batch 2 Completed Workflow Wiring
@@ -38,10 +39,26 @@
 - Import validates JSON and shows preview counts, but does not merge records yet.
 - CI runs install, build, test, typecheck, lint, and format.
 
-## Possible Batch 3 Items
+## Options UI And Resume Parsing Hardening Completed
+
+- Options uses a centered main/sidebar layout instead of wide-screen auto-fit columns.
+- Cards align to the top and no longer stretch into large empty panels.
+- Resume Import and Profile Review have more usable width.
+- Clear Local Data is a normal danger action button.
+- Docs are shown as a compact link list.
+- `.docx` and pasted text normalization handles common glued labels and headings.
+- Resume section aliases are recognized for summary, skills, experience, education, certifications, and projects.
+- Contact parsing avoids email over-capture and detects LinkedIn/GitHub links without a protocol.
+- Skills, experience, and education parsing handle more realistic fake resume structures.
+- Options shows a compact parser summary and review warnings.
+
+## Possible Next Work
 
 - Add safe merge/replace import after another review pass.
+- Fix issues found by real browser QA.
+- Add better application form fixtures.
 - Add visible search-result extraction for controlled fake fixtures and current-page only.
 - Add richer application session history.
+- Add optional site permission management.
 - Add stronger manual QA pages for extension testing.
 - Add controlled browser QA fixtures.

@@ -14,7 +14,10 @@ export interface LocalDataExport {
   settings: Omit<ExtensionSettings, 'aiEndpoint'>;
 }
 
-interface LocalDataExportInput extends Omit<LocalDataExport, 'schemaVersion' | 'exportedAt' | 'settings'> {
+interface LocalDataExportInput extends Omit<
+  LocalDataExport,
+  'schemaVersion' | 'exportedAt' | 'settings'
+> {
   settings: ExtensionSettings;
 }
 
@@ -72,7 +75,8 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
     ? undefined
     : ({
         schemaVersion: 1,
-        exportedAt: typeof value.exportedAt === 'string' ? value.exportedAt : new Date().toISOString(),
+        exportedAt:
+          typeof value.exportedAt === 'string' ? value.exportedAt : new Date().toISOString(),
         profiles: profiles as UserProfile[],
         savedSearches: savedSearches as SavedSearch[],
         jobPostings: jobPostings as JobPosting[],

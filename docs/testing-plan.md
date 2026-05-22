@@ -15,6 +15,12 @@ Batch 1 includes unit tests for:
 - Local export/import validation
 - Saved search creation and manual check status
 - Typed IndexedDB repositories
+- Resume text normalization for collapsed `.docx`-style text
+- Section heading aliases
+- Contact extraction without email/link over-capture
+- Skills categories
+- Multi-role experience parsing
+- Education parsing with degree, school, dates, and honors
 
 ## Fixtures
 
@@ -60,6 +66,29 @@ Manual checks should cover:
 19. Save notes.
 20. Clear local data.
 21. Confirm no private files appear in git status.
+
+## Options UI QA
+
+1. Open Options at normal desktop width.
+2. Confirm Options is centered and does not become six skinny columns.
+3. Confirm cards do not stretch into huge empty panels.
+4. Confirm Resume Import and Profile Review have enough width.
+5. Confirm Clear Local Data is a normal danger button, not a large red panel.
+6. Confirm Docs is a compact list.
+7. Confirm raw resume text area has a sensible height.
+8. Resize to roughly 390px, 768px, 1280px, 1920px, and an ultra-wide width.
+9. Confirm the layout remains readable at each width.
+
+## Parser QA
+
+1. Paste fake resume text with Professional Summary, Technical Skills, Professional Experience, Education, and Certifications.
+2. Confirm parser finds skills and experience.
+3. Import a fake `.docx` resume.
+4. Confirm email does not include LinkedIn or other adjacent labels.
+5. Confirm LinkedIn and GitHub links are normalized.
+6. Confirm city/state/zip are parsed when present.
+7. Confirm summary is only summary, not the whole resume.
+8. Confirm warnings appear only for real uncertainty.
 
 ## CI
 

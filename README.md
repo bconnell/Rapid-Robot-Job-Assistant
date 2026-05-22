@@ -12,6 +12,15 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. Options UI And Resume Parsing Hardening
+
+- Cleaned up the Options layout so wide screens use a centered main column and sidebar instead of many skinny columns.
+- Added better `.docx` text normalization for glued labels and headings.
+- Improved resume section detection for common heading aliases.
+- Improved contact, skills, experience, and education parsing.
+- Added a compact parsing summary so users can see what was found and what needs review.
+- No change to local-first privacy, no auto-submit, or manual review rules.
+
 ### 2026-05-21. Workflow Wiring
 
 - `.docx` resume import is wired into Options.
@@ -96,7 +105,7 @@ The extension uses `activeTab`, `scripting`, `storage`, and `sidePanel`. It does
 8. Fill approved fields only.
 9. Review the page yourself and submit manually if you choose.
 
-Saved searches are local records. Batch 2 records manual check status but does not crawl job boards in the background.
+Saved searches are local records. The extension records manual check status but does not crawl job boards in the background.
 
 ## Security And Privacy Summary
 

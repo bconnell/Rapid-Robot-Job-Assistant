@@ -1,4 +1,5 @@
 import { err, ok, type Result } from '../utils/Result';
+import { normalizeResumeText } from './ResumeTextExtractor';
 
 export async function extractTextFromDocx(file: File): Promise<Result<string>> {
   if (!file.name.toLowerCase().endsWith('.docx')) {
@@ -9,7 +10,7 @@ export async function extractTextFromDocx(file: File): Promise<Result<string>> {
     const mammoth = await import('mammoth/mammoth.browser');
     const buffer = await file.arrayBuffer();
     const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-    const text = result.value.trim();
+    const text = normalizeResumeText(result.value);
     if (!text) {
       return err('No text could be extracted from the .docx file.');
     }
