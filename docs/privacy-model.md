@@ -10,6 +10,9 @@ Rapid Robot Job Assistant is local-first.
 - Saved job postings
 - Saved searches
 - Application sessions
+- Application notes
+- Fill preview approval state
+- Fill results
 - Field mappings
 - Tailoring suggestions
 - Local settings
@@ -35,6 +38,16 @@ AI is disabled by default. If a provider is configured later, the user must revi
 ## Clear Data
 
 The options page includes a clear local data control. It clears extension settings and IndexedDB records. It does not touch browser settings, OS settings, downloads, or files outside the extension storage area.
+
+## Resume Import
+
+Pasted resume text and `.docx` files are parsed in the browser. The original `.docx` file blob is not stored. Extracted text and parsed profile fields are stored locally when the user saves/imports.
+
+## Export And Import
+
+Export creates `rapid-robot-job-assistant-export.json`. It can contain private profile, resume-derived, job, saved search, and application session data. Do not commit exported files.
+
+Import validates JSON shape and shows preview counts in Batch 2. It does not merge records yet. API endpoints and keys are not imported or exported.
 
 ## Public Repo Rule
 

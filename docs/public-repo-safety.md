@@ -15,6 +15,7 @@ This repository is public. Treat every committed file as public.
 - Extension storage dumps
 - Private logs
 - Generated exports
+- `rapid-robot-job-assistant-export.json`
 - `.crx` packages
 
 ## Use Fake Data
@@ -35,3 +36,5 @@ npm run lint
 ```
 
 Check that private file patterns are covered by `.gitignore`.
+
+If you use local export while testing, keep the exported JSON outside the repo or delete it before checking `git status`.

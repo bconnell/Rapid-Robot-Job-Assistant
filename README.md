@@ -20,6 +20,16 @@ Batch 1 provides the project foundation:
 - AI provider interfaces with a manual local fallback. AI requests require explicit review before anything is sent.
 - Fake-only fixtures and unit tests for core logic.
 
+Batch 2 adds practical workflow wiring:
+
+- `.docx` resume import is wired into Options.
+- Parsed profiles can be reviewed, edited, saved, and loaded as the active profile.
+- Saved searches can be created, listed, checked manually, and deleted.
+- Job page analysis saves or updates local job records.
+- Application field analysis creates local sessions with notes, manual status, fill preview, approvals, and fill results.
+- Local data export is available with a privacy warning. Import is validation-preview only for now.
+- CI validates build, tests, typecheck, lint, and formatting on GitHub.
+
 Known limitations are documented in [docs/roadmap.md](docs/roadmap.md).
 
 ## Public Repo Privacy Warning
@@ -59,6 +69,7 @@ Run type checking and linting:
 ```bash
 npm run typecheck
 npm run lint
+npm run format
 ```
 
 ## Load The Extension In Chrome
@@ -71,6 +82,20 @@ npm run lint
 
 The extension uses `activeTab`, `scripting`, `storage`, and `sidePanel`. It does not request default broad host permissions. Page analysis and field detection are user-triggered.
 
+## Basic Workflow
+
+1. Open Options.
+2. Paste resume text or import a `.docx` resume.
+3. Review and edit the parsed profile.
+4. Save the profile locally.
+5. Open a job page and analyze it from the side panel.
+6. Analyze application fields.
+7. Edit field values, approve safe fields, and skip unclear fields.
+8. Fill approved fields only.
+9. Review the page yourself and submit manually if you choose.
+
+Saved searches are local records. Batch 2 records manual check status but does not crawl job boards in the background.
+
 ## Security And Privacy Summary
 
 User data stays local by default. Profile data, pasted resume text, saved jobs, saved searches, field mapping history, and application sessions are stored in local browser storage.
@@ -78,6 +103,8 @@ User data stays local by default. Profile data, pasted resume text, saved jobs, 
 AI is disabled by default. If a provider is configured later, the extension must show the data that would be sent and wait for user approval. The Batch 1 fallback uses local rules only.
 
 The extension does not inject remote scripts, use `eval`, log private data, or submit forms.
+
+Exports may contain private data. Keep `rapid-robot-job-assistant-export.json` out of git and shared folders.
 
 ## CAPTCHA And Bot Checks
 

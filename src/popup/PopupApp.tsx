@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
+import { ProfileRepository } from '../shared/storage/TypedRepositories';
 
 interface TabStatus {
   title?: string;
@@ -8,12 +10,25 @@ interface TabStatus {
 export function PopupApp() {
   const [status, setStatus] = useState<TabStatus>({});
   const [message, setMessage] = useState('Ready. Nothing is submitted automatically.');
+  const [profileStatus, setProfileStatus] = useState('Checking active profile...');
 
   useEffect(() => {
     void chrome.runtime
       .sendMessage({ command: 'GET_CURRENT_TAB_STATUS' })
       .then((result) => setStatus(result.tab ?? {}));
+    void loadProfileStatus();
   }, []);
+
+  async function loadProfileStatus() {
+    const storage = new ChromeStorageRepository();
+    const profileId = await storage.getActiveProfileId();
+    const profile = profileId ? await new ProfileRepository().get(profileId) : undefined;
+    setProfileStatus(
+      profile
+        ? `Active profile: ${profile.contact.fullName ?? profile.contact.email ?? 'Saved profile'}`
+        : 'No active profile saved yet.'
+    );
+  }
 
   async function run(command: string, done: string) {
     const result = await chrome.runtime.sendMessage({ command });
@@ -51,6 +66,7 @@ export function PopupApp() {
 
       <section className="card">
         <p className="ok">Privacy status: local-only mode is the default.</p>
+        <p className={profileStatus.startsWith('No') ? 'warn' : 'ok'}>{profileStatus}</p>
         <p className="muted">{message}</p>
       </section>
     </main>

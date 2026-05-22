@@ -35,11 +35,14 @@ export interface FieldMapping {
   fillable: boolean;
   requiresDirectReview: boolean;
   warning?: string;
+  explanation?: string;
 }
 
 export interface FillPreviewItem extends FieldMapping {
   value?: string;
   approved: boolean;
+  rejected?: boolean;
+  status?: 'pending' | 'approved' | 'rejected' | 'filled' | 'failed' | 'manual-only';
 }
 
 export interface FillResult {

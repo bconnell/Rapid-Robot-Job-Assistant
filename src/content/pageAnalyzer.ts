@@ -17,6 +17,7 @@ export function analyzeApplicationFields() {
   const verification = detectCaptchaAndBotCheck(document);
   const fields = detectFormFields(document);
   return {
+    pageUrl: document.location.href,
     fields,
     mappings: mapFieldCandidates(fields),
     verification

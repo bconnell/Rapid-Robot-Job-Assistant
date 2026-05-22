@@ -34,6 +34,8 @@ export function parseResumeSections(text: string): ParsedResume {
       experience,
       education,
       certifications,
+      projects: [],
+      desiredTitles: [],
       updatedAt: new Date().toISOString()
     },
     warnings

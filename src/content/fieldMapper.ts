@@ -14,6 +14,17 @@ const rules: Array<{ kind: FieldMappingKind; terms: string[]; confidence: number
   { kind: 'fullName', terms: ['full name', 'legal name', 'name'], confidence: 0.86 },
   { kind: 'address', terms: ['address', 'street'], confidence: 0.86 },
   { kind: 'city', terms: ['city'], confidence: 0.9 },
+  {
+    kind: 'workAuthorization',
+    terms: [
+      'authorized to work',
+      'work authorization',
+      'work_authorization',
+      'authorization',
+      'work'
+    ],
+    confidence: 0.93
+  },
   { kind: 'state', terms: ['state', 'province'], confidence: 0.9 },
   { kind: 'zip', terms: ['zip', 'postal'], confidence: 0.9 },
   { kind: 'linkedInUrl', terms: ['linkedin'], confidence: 0.94 },
@@ -21,11 +32,6 @@ const rules: Array<{ kind: FieldMappingKind; terms: string[]; confidence: number
   { kind: 'portfolioUrl', terms: ['portfolio', 'website'], confidence: 0.84 },
   { kind: 'resumeUpload', terms: ['resume', 'cv'], confidence: 0.91 },
   { kind: 'coverLetterUpload', terms: ['cover letter'], confidence: 0.91 },
-  {
-    kind: 'workAuthorization',
-    terms: ['authorized to work', 'work authorization'],
-    confidence: 0.9
-  },
   { kind: 'sponsorship', terms: ['sponsorship', 'visa'], confidence: 0.9 },
   {
     kind: 'desiredSalary',
@@ -74,7 +80,9 @@ export function mapFieldCandidate(candidate: FormFieldCandidate): FieldMapping {
   const confidence = matched?.confidence ?? 0.35;
   const sensitive = isSensitiveMappingKind(kind) || isSensitiveFieldText(haystack);
   const requiresDirectReview = sensitive || (confidence >= 0.7 && confidence < 0.9);
-  const fillable = confidence >= 0.9 && !sensitive && candidate.visible;
+  const manualOnly =
+    candidate.inputType === 'file' || kind === 'resumeUpload' || kind === 'coverLetterUpload';
+  const fillable = confidence >= 0.9 && !sensitive && candidate.visible && !manualOnly;
 
   return {
     candidate,
@@ -83,7 +91,8 @@ export function mapFieldCandidate(candidate: FormFieldCandidate): FieldMapping {
     sensitive,
     fillable,
     requiresDirectReview,
-    warning: buildWarning(kind, confidence, sensitive, candidate.visible)
+    warning: buildWarning(kind, confidence, sensitive, candidate.visible, manualOnly),
+    explanation: buildExplanation(kind, confidence, candidate)
   };
 }
 
@@ -95,11 +104,31 @@ function buildWarning(
   kind: FieldMappingKind,
   confidence: number,
   sensitive: boolean,
-  visible: boolean
+  visible: boolean,
+  manualOnly: boolean
 ): string | undefined {
   if (!visible) return 'Field is not visible and will not be filled.';
+  if (manualOnly) return 'Manual file selection required.';
   if (sensitive) return 'Sensitive field. Direct user review is required.';
   if (kind === 'unknown' || confidence < 0.7) return 'Low confidence. Do not fill automatically.';
   if (confidence < 0.9) return 'Needs direct review before filling.';
   return undefined;
+}
+
+function buildExplanation(
+  kind: FieldMappingKind,
+  confidence: number,
+  candidate: FormFieldCandidate
+): string {
+  if (kind === 'unknown') return 'No strong label, attribute, or nearby-text match was found.';
+  const signals = [
+    candidate.labelText ? 'label' : undefined,
+    candidate.ariaLabel ? 'ARIA label' : undefined,
+    candidate.placeholder ? 'placeholder' : undefined,
+    candidate.name ? 'name' : undefined,
+    candidate.id ? 'id' : undefined,
+    candidate.autocomplete ? 'autocomplete' : undefined,
+    candidate.sectionHeading ? 'section heading' : undefined
+  ].filter(Boolean);
+  return `${kind} matched from ${signals.join(', ') || 'field context'} at ${Math.round(confidence * 100)}% confidence.`;
 }

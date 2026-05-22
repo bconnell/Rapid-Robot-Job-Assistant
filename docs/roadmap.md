@@ -18,17 +18,30 @@
 
 ## Known Limitations
 
-- `.docx` parsing exists as a browser parser service but is not fully wired into the options UI yet.
-- Saved search checking is conservative and UI-only in Batch 1.
+- Saved search checking is conservative and manual. There is no background crawling.
 - Field filling avoids file uploads and navigation.
-- AI provider network calls are scaffolded but intentionally not executed in Batch 1.
+- Import is validation-preview only in Batch 2.
+- AI provider network calls are scaffolded but intentionally not executed.
 - Chrome Web Store packaging and publishing are future work.
 
-## Possible Batch 2 Items
+## Batch 2 Completed Workflow Wiring
 
-- Wire `.docx` import into options after browser testing.
-- Persist analyzed jobs and application sessions from the side panel.
-- Add richer saved search management.
-- Add a stronger fill-preview approval table.
-- Add import/export with explicit private-data warnings.
+- `.docx` resume import is wired into Options.
+- Profile review/edit/save/load works locally.
+- Active profile ID is stored in `chrome.storage.local`.
+- Saved searches can be created, listed, manually checked, and deleted.
+- Job analysis saves or updates local job records.
+- Application sessions persist field preview, notes, manual verification state, fill results, and user-marked status.
+- Side panel has per-field edit, approve, skip, bulk-safe approval, clear approvals, and fill-result feedback.
+- Profile value resolution fills only saved values and does not invent missing data.
+- Local export is implemented with a privacy warning.
+- Import validates JSON and shows preview counts, but does not merge records yet.
+- CI runs install, build, test, typecheck, lint, and format.
+
+## Possible Batch 3 Items
+
+- Add safe merge/replace import after another review pass.
+- Add visible search-result extraction for controlled fake fixtures and current-page only.
+- Add richer application session history.
+- Add stronger manual QA pages for extension testing.
 - Add controlled browser QA fixtures.

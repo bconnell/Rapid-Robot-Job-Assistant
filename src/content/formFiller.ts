@@ -35,7 +35,27 @@ function fillField(item: FillPreviewItem, doc: Document): FillResult {
   }
 
   element.focus();
-  element.value = item.value;
+
+  if (element instanceof HTMLSelectElement) {
+    const option = Array.from(element.options).find(
+      (candidate) =>
+        candidate.value.toLowerCase() === item.value?.toLowerCase() ||
+        candidate.textContent?.trim().toLowerCase() === item.value?.toLowerCase()
+    );
+    if (!option) {
+      return {
+        selector: item.candidate.selector,
+        ok: false,
+        message: 'No matching select option.'
+      };
+    }
+    element.value = option.value;
+  } else if (element instanceof HTMLInputElement && ['checkbox', 'radio'].includes(element.type)) {
+    const normalized = item.value.toLowerCase();
+    element.checked = ['yes', 'true', '1', element.value.toLowerCase()].includes(normalized);
+  } else {
+    element.value = item.value;
+  }
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
   element.dispatchEvent(new Event('blur', { bubbles: true }));

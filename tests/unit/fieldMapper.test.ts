@@ -28,4 +28,18 @@ describe('field mapping', () => {
     expect(mappings.every((mapping) => mapping.sensitive)).toBe(true);
     expect(mappings.every((mapping) => mapping.requiresDirectReview)).toBe(true);
   });
+
+  it('keeps file uploads manual and explains eligibility mappings', () => {
+    document.body.innerHTML = readFileSync(
+      resolve('tests/fixtures/application-forms/fake-advanced-form.html'),
+      'utf8'
+    );
+    const mappings = mapFieldCandidates(detectFormFields(document));
+
+    expect(mappings.find((mapping) => mapping.kind === 'resumeUpload')?.fillable).toBe(false);
+    expect(mappings.find((mapping) => mapping.kind === 'workAuthorization')?.sensitive).toBe(true);
+    expect(mappings.find((mapping) => mapping.kind === 'earliestStartDate')?.explanation).toContain(
+      'earliestStartDate'
+    );
+  });
 });

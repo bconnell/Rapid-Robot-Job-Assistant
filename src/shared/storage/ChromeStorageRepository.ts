@@ -37,4 +37,19 @@ export class ChromeStorageRepository {
     }
     await chrome.storage.local.remove([STORAGE_KEYS.settings, STORAGE_KEYS.activeProfileId]);
   }
+
+  async getActiveProfileId(): Promise<string | undefined> {
+    if (!globalThis.chrome?.storage?.local) {
+      return undefined;
+    }
+    const result = await chrome.storage.local.get(STORAGE_KEYS.activeProfileId);
+    return result[STORAGE_KEYS.activeProfileId] as string | undefined;
+  }
+
+  async setActiveProfileId(profileId: string): Promise<void> {
+    if (!globalThis.chrome?.storage?.local) {
+      return;
+    }
+    await chrome.storage.local.set({ [STORAGE_KEYS.activeProfileId]: profileId });
+  }
 }

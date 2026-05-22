@@ -18,6 +18,7 @@ npm run build
 npm test
 npm run typecheck
 npm run lint
+npm run format
 ```
 
 ## Load Unpacked
@@ -43,3 +44,7 @@ npm run lint
 ## Troubleshooting
 
 If Chrome does not load the extension, run `npm run build` again and reload `dist`. If a page command fails, make sure the active tab is an `http` or `https` page and run the action from a user gesture.
+
+## Local Workflow Check
+
+Use Options to import a fake pasted resume or `.docx`, save the profile, then use the side panel to analyze a job page and an application form. Fill only approved fields. The extension does not submit applications.

@@ -70,6 +70,11 @@ select {
   padding: 0.65rem;
 }
 
+input[type='checkbox'],
+input[type='radio'] {
+  width: auto;
+}
+
 textarea {
   min-height: 7rem;
   resize: vertical;
@@ -90,6 +95,47 @@ textarea {
 
 .hero {
   margin-bottom: 0.9rem;
+}
+
+.mini-card,
+.field-row {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(8, 22, 37, 0.72);
+  padding: 0.8rem;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.2fr) minmax(160px, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.status-banner {
+  border-color: rgba(61, 165, 255, 0.55);
+}
+
+.file-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  color: #02111f;
+  background: linear-gradient(135deg, var(--blue), var(--blue-2));
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.file-picker.secondary {
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.file-picker input {
+  display: none;
 }
 
 .grid {
@@ -154,4 +200,10 @@ h1 {
 
 h2 {
   font-size: 1rem;
+}
+
+@media (max-width: 720px) {
+  .field-row {
+    grid-template-columns: 1fr;
+  }
 }

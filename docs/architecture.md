@@ -29,6 +29,8 @@ Small settings use `chrome.storage.local`. Larger local records use IndexedDB:
 - Saved searches
 - Tailoring suggestions
 
+Typed repository wrappers sit on top of the generic IndexedDB wrapper for profiles, resume documents, job postings, application sessions, saved searches, field mappings, and tailoring suggestions.
+
 ## AI Flow
 
 AI is disabled by default. Batch 1 includes provider interfaces and local manual rules. Any future provider call must create a review preview, redact sensitive text where possible, and wait for explicit user approval.
@@ -36,3 +38,5 @@ AI is disabled by default. Batch 1 includes provider interfaces and local manual
 ## Form Filling Flow
 
 The extension detects fields, maps them with deterministic rules, shows a preview, and fills only approved fields. It does not click submit, apply, CAPTCHA, MFA, or bot-check controls.
+
+Batch 2 persists the application session for the current page. Sessions store the field preview, notes, fill results, manual verification state, and user-marked status.

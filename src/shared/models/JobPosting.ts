@@ -12,4 +12,6 @@ export interface JobPosting {
   sourceUrl: string;
   sourceSite: string;
   dateFound: string;
+  status?: 'saved' | 'reviewing' | 'applied' | 'skipped';
+  updatedAt?: string;
 }

@@ -14,12 +14,7 @@ function toCandidate(element: HTMLElement, doc: Document): FormFieldCandidate {
   const id = input.id || undefined;
   const name = input.getAttribute('name') || undefined;
   const labelText = findLabelText(input, doc);
-  const options =
-    input instanceof HTMLSelectElement
-      ? Array.from(input.options)
-          .map((option) => normalizeWhitespace(option.textContent ?? ''))
-          .filter(Boolean)
-      : [];
+  const options = collectOptions(input, doc);
 
   return {
     selector: buildSelector(input),
@@ -44,6 +39,32 @@ function isIgnoredInput(element: HTMLElement): boolean {
     element instanceof HTMLInputElement &&
     ['hidden', 'submit', 'button', 'reset', 'image'].includes(element.type)
   );
+}
+
+function collectOptions(
+  input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  doc: Document
+): string[] {
+  if (input instanceof HTMLSelectElement) {
+    return Array.from(input.options)
+      .map((option) => normalizeWhitespace(option.textContent ?? option.value))
+      .filter(Boolean);
+  }
+  if (input instanceof HTMLInputElement && ['radio', 'checkbox'].includes(input.type)) {
+    const name = input.name;
+    const group = name
+      ? Array.from(
+          doc.querySelectorAll<HTMLInputElement>(
+            `input[type="${input.type}"][name="${escapeCss(name)}"]`
+          )
+        )
+      : [input];
+    return group
+      .map((item) => findLabelText(item, doc) ?? item.value)
+      .map(normalizeWhitespace)
+      .filter(Boolean);
+  }
+  return [];
 }
 
 function findLabelText(input: HTMLElement, doc: Document): string | undefined {

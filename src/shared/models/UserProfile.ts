@@ -2,6 +2,7 @@ export interface ProfileContact {
   firstName?: string;
   lastName?: string;
   fullName?: string;
+  preferredName?: string;
   email?: string;
   phone?: string;
   city?: string;
@@ -27,6 +28,12 @@ export interface ProfileEducation {
   graduationDate?: string;
 }
 
+export interface ProfileProject {
+  name: string;
+  description: string;
+  technologies: string[];
+}
+
 export interface UserProfile {
   id: string;
   contact: ProfileContact;
@@ -35,8 +42,11 @@ export interface UserProfile {
   experience: ProfileExperience[];
   education: ProfileEducation[];
   certifications: string[];
+  projects: ProfileProject[];
   workAuthorization?: string;
   sponsorshipRequired?: boolean;
+  remotePreference?: 'remote' | 'hybrid' | 'onsite' | 'flexible';
+  desiredTitles: string[];
   desiredSalary?: string;
   earliestStartDate?: string;
   updatedAt: string;
@@ -49,5 +59,7 @@ export const emptyUserProfile = (): UserProfile => ({
   experience: [],
   education: [],
   certifications: [],
+  projects: [],
+  desiredTitles: [],
   updatedAt: new Date().toISOString()
 });
