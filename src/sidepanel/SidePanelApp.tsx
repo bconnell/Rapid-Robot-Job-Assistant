@@ -7,7 +7,9 @@ import type {
   ExtensionCommandResult,
   PermissionRequestResult
 } from '../shared/extension/ExtensionMessaging';
+import { requestCurrentSitePermissionFromUi } from '../shared/extension/PermissionRequestClient';
 import type { TabCapabilityResult } from '../shared/extension/TabPermissions';
+import { canOfferSitePermission, canRunPageCommand } from '../shared/extension/TabPermissions';
 import { approveSafeHighConfidence, clearApprovals } from '../shared/fill/FillApprovalRules';
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
 import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
@@ -169,14 +171,10 @@ export function SidePanelApp() {
   }
 
   async function requestSitePermission() {
-    const result = (await chrome.runtime.sendMessage({
-      command: 'REQUEST_CURRENT_SITE_PERMISSION'
-    })) as ExtensionCommandResult<PermissionRequestResult>;
-    setStatus(
-      result.data?.userMessage ??
-        result.userMessage ??
-        'Permission was not granted. Analysis cannot run on this site until permission is allowed.'
-    );
+    const result = (await requestCurrentSitePermissionFromUi(
+      pageStatus
+    )) as PermissionRequestResult;
+    setStatus(result.userMessage);
     await loadTabStatus();
   }
 
@@ -230,8 +228,8 @@ export function SidePanelApp() {
     );
   }
 
-  const needsPermission = Boolean(pageStatus?.needsPermission && pageStatus.canRequestPermission);
-  const blockedPage = pageStatus ? !pageStatus.ok : false;
+  const canOfferPermission = canOfferSitePermission(pageStatus);
+  const blockedPage = !canRunPageCommand(pageStatus);
 
   return (
     <main className="app stack">
@@ -243,11 +241,11 @@ export function SidePanelApp() {
             ? `Active profile: ${profile.contact.fullName ?? profile.contact.email ?? 'Saved profile'}`
             : 'No active profile selected.'}
         </p>
-        <p className={pageStatus?.ok ? 'ok' : needsPermission ? 'warn' : 'muted'}>
+        <p className={pageStatus?.ok ? 'ok' : 'muted'}>
           {pageStatus?.userMessage ?? 'Current page status will appear here.'}
         </p>
         <div className="row">
-          {needsPermission && <button onClick={requestSitePermission}>Allow This Site</button>}
+          {canOfferPermission && <button onClick={requestSitePermission}>Allow This Site</button>}
           <button disabled={blockedPage} onClick={analyzeJob}>
             Analyze Job Page
           </button>

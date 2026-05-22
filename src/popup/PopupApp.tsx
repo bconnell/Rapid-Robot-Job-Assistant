@@ -3,7 +3,9 @@ import type {
   ExtensionCommandResult,
   PermissionRequestResult
 } from '../shared/extension/ExtensionMessaging';
+import { requestCurrentSitePermissionFromUi } from '../shared/extension/PermissionRequestClient';
 import type { TabCapabilityResult } from '../shared/extension/TabPermissions';
+import { canOfferSitePermission, canRunPageCommand } from '../shared/extension/TabPermissions';
 import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
 import { ProfileRepository } from '../shared/storage/TypedRepositories';
 
@@ -42,20 +44,14 @@ export function PopupApp() {
   }
 
   async function requestSitePermission() {
-    const result = (await chrome.runtime.sendMessage({
-      command: 'REQUEST_CURRENT_SITE_PERMISSION'
-    })) as ExtensionCommandResult<PermissionRequestResult>;
-    setMessage(
-      result.data?.userMessage ??
-        result.userMessage ??
-        'Permission was not granted. Analysis cannot run on this site until permission is allowed.'
-    );
+    const result = (await requestCurrentSitePermissionFromUi(status)) as PermissionRequestResult;
+    setMessage(result.userMessage);
     await loadTabStatus();
   }
 
-  const isBlocked = status ? !status.ok : true;
-  const needsPermission = Boolean(status?.needsPermission && status.canRequestPermission);
-  const canAnalyze = Boolean(status?.ok);
+  const canAnalyze = canRunPageCommand(status);
+  const isBlocked = !canAnalyze;
+  const canOfferPermission = canOfferSitePermission(status);
 
   return (
     <main className="app stack">
@@ -67,11 +63,11 @@ export function PopupApp() {
 
       <section className="card stack">
         <h2>Current Page</h2>
-        <p className={status?.ok ? 'ok' : needsPermission ? 'warn' : 'danger-text'}>
+        <p className={status?.ok ? 'ok' : 'danger-text'}>
           {status?.userMessage ?? 'Open a normal web page before analyzing.'}
         </p>
         <p className="muted">{status?.url ?? 'Open a job page or application page to begin.'}</p>
-        {needsPermission && <button onClick={requestSitePermission}>Allow This Site</button>}
+        {canOfferPermission && <button onClick={requestSitePermission}>Allow This Site</button>}
       </section>
 
       <section className="grid">
@@ -98,9 +94,11 @@ export function PopupApp() {
       <section className="card">
         <p className="ok">Privacy status: local-only mode is the default.</p>
         <p className={profileStatus.startsWith('No') ? 'warn' : 'ok'}>{profileStatus}</p>
-        {!canAnalyze && (
+        {!canAnalyze && <p className="muted">Analysis runs only on normal web pages.</p>}
+        {canAnalyze && (
           <p className="muted">
-            Analysis runs only on normal web pages after this site is allowed.
+            Analysis works from this button on normal web pages. If Chrome blocks the page, allow
+            this site and retry.
           </p>
         )}
         <p className="muted">{message}</p>

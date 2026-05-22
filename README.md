@@ -12,6 +12,15 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. Active Tab Analysis And Permission Flow Correction
+
+- One-off analysis now uses `activeTab` on normal web pages before asking for persistent site permission.
+- Current-site permission is a fallback or convenience, not a hard requirement.
+- Permission requests stay current-origin only, such as `https://example.com/*`.
+- Restricted browser pages remain blocked with clear messages.
+- Failed analysis does not save empty jobs or application sessions.
+- No change to local-first privacy, no auto-submit, or manual review rules.
+
 ### 2026-05-22. Site Permission And Command Reliability Fixes
 
 - Added clearer page checks before job analysis, field analysis, and approved filling.

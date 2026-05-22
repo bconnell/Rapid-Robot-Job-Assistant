@@ -45,11 +45,11 @@ npm run format
 
 ## Troubleshooting
 
-If Chrome does not load the extension or a page appears unstyled, run `npm run build` again and reload `dist`. If a page command fails, make sure the active tab is an `http` or `https` page and run the action from a user gesture.
+If Chrome does not load the extension or a page appears unstyled, run `npm run build` again and reload `dist`. If a page command fails, make sure the active tab is an `http` or `https` page and run the action from a user-triggered button.
 
 Analyze and fill commands only run on normal `http` and `https` pages. Chrome blocks extensions from internal pages such as `chrome://extensions`, extension pages, browser settings pages, local files, and Chrome Web Store pages.
 
-When a normal site needs access, the popup and side panel show **Allow This Site**. That requests only the current origin, such as `https://example.com/*`. If permission is granted but analysis still fails, reload the page and try the command again.
+Normal web pages can be analyzed from the popup or side panel button with `activeTab`. If Chrome still blocks script injection, use **Allow This Site** as a fallback. That requests only the current origin, such as `https://example.com/*`. If permission is granted but analysis still fails, reload the page and try the command again.
 
 ## Local Workflow Check
 

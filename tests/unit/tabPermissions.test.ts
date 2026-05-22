@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildOriginPattern,
+  canOfferSitePermission,
+  canRunPageCommand,
+  classifyInjectionFailure,
   isRestrictedUrl,
   isSupportedWebUrl,
   preflightTab
@@ -28,17 +31,20 @@ describe('tab permission preflight', () => {
     expect(isSupportedWebUrl('file:///C:/test.html')).toBe(false);
   });
 
-  it('returns a missing permission result for a valid page without site permission', () => {
-    const result = preflightTab({ id: 1, url: 'https://example.com/jobs/123' }, false);
+  it('allows activeTab analysis on a valid page without persistent permission', () => {
+    const result = preflightTab({ id: 1, url: 'https://jobs.example.com/apply/123' }, false);
 
     expect(result).toMatchObject({
-      ok: false,
-      reason: 'missing-permission',
-      needsPermission: true,
+      ok: true,
+      reason: 'ready',
+      canAnalyzeWithActiveTab: true,
+      hasPersistentPermission: false,
       canRequestPermission: true,
-      originPattern: 'https://example.com/*'
+      originPattern: 'https://jobs.example.com/*'
     });
-    expect(result.userMessage).toContain('needs permission');
+    expect(result.userMessage).toContain('can be analyzed from this button');
+    expect(canRunPageCommand(result)).toBe(true);
+    expect(canOfferSitePermission(result)).toBe(true);
   });
 
   it('returns ready when the current site permission is granted', () => {
@@ -47,10 +53,14 @@ describe('tab permission preflight', () => {
     expect(result).toMatchObject({
       ok: true,
       reason: 'ready',
-      hasPermission: true,
+      canAnalyzeWithActiveTab: true,
+      hasPersistentPermission: true,
+      canRequestPermission: false,
       originPattern: 'https://example.com/*'
     });
     expect(result.userMessage).toBe('The page is ready for analysis.');
+    expect(canRunPageCommand(result)).toBe(true);
+    expect(canOfferSitePermission(result)).toBe(false);
   });
 
   it('uses specific user-facing messages for restricted or missing tab states', () => {
@@ -61,5 +71,19 @@ describe('tab permission preflight', () => {
       'Chrome blocks extensions from analyzing this page.'
     );
     expect(preflightTab({ id: 3, url: 'about:blank' }, false).reason).toBe('restricted-url');
+    expect(canRunPageCommand(preflightTab({ id: 3, url: 'about:blank' }, false))).toBe(false);
+  });
+
+  it('classifies injection failures with safe user messages', () => {
+    expect(classifyInjectionFailure(new Error('Cannot access contents of url')).reason).toBe(
+      'host-access-denied'
+    );
+    expect(classifyInjectionFailure(new Error('No tab with id: 5')).reason).toBe('tab-changed');
+    expect(classifyInjectionFailure(new Error('Cannot access chrome://extensions')).reason).toBe(
+      'restricted-url'
+    );
+    expect(classifyInjectionFailure(new Error('Unexpected failure')).reason).toBe(
+      'script-injection-failed'
+    );
   });
 });

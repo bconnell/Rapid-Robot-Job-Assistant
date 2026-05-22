@@ -70,6 +70,14 @@
 - Failed permission or restricted-page commands do not save empty jobs or application sessions.
 - Injection and content-message failures return safer reload-and-retry guidance.
 
+## Active Tab Analysis And Permission Flow Correction Completed
+
+- Normal `http` and `https` pages can run one-off analysis through `activeTab`.
+- Missing persistent site permission no longer blocks analysis before script injection is attempted.
+- Current-site permission is requested directly from popup or side panel button handlers.
+- Host-access injection failures point users to **Allow This Site** as a fallback.
+- Permission requests remain limited to the current origin.
+
 ## Possible Next Work
 
 - Add safe merge/replace import after another review pass.

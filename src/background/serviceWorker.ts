@@ -1,11 +1,11 @@
 import type { ContentCommand } from '../content/contentMessenger';
 import type {
   BackgroundMessage,
-  ExtensionCommandResult,
-  PermissionRequestResult
+  ExtensionCommandResult
 } from '../shared/extension/ExtensionMessaging';
 import {
   buildOriginPattern,
+  classifyInjectionFailure,
   preflightTab,
   type TabCapabilityResult
 } from '../shared/extension/TabPermissions';
@@ -50,7 +50,7 @@ async function handleMessage(
       data: tabStatus,
       response: tabStatus,
       userMessage: tabStatus.userMessage,
-      needsPermission: tabStatus.needsPermission,
+      needsPermission: tabStatus.needsPersistentPermission,
       originPattern: tabStatus.originPattern,
       tabUrl: tabStatus.url,
       reason: tabStatus.reason
@@ -58,14 +58,10 @@ async function handleMessage(
   }
 
   if (message.command === 'REQUEST_CURRENT_SITE_PERMISSION') {
-    const data = await requestCurrentSitePermission();
     return {
-      ok: data.granted,
-      data,
-      response: data,
-      userMessage: data.userMessage,
-      originPattern: data.originPattern,
-      reason: data.granted ? 'permission-granted' : 'permission-denied'
+      ok: false,
+      userMessage: 'Use the Allow This Site button in the popup or side panel.',
+      reason: 'permission-request-must-start-in-ui'
     };
   }
 
@@ -98,14 +94,16 @@ async function sendToActiveContent(
       target: { tabId: capability.tabId },
       files: ['content/pageAnalyzer.js']
     });
-  } catch {
+  } catch (error) {
+    const classified = classifyInjectionFailure(error);
     return {
       ok: false,
-      error: 'The content script could not be injected. Reload the page and try again.',
-      userMessage: 'The content script could not be injected. Reload the page and try again.',
+      error: classified.userMessage,
+      userMessage: classified.userMessage,
+      needsPermission: classified.needsPersistentPermission,
       tabUrl: capability.url,
       originPattern: capability.originPattern,
-      reason: 'script-injection-failed'
+      reason: classified.reason
     };
   }
 
@@ -146,34 +144,12 @@ async function getTabCapability(): Promise<TabCapabilityResult> {
   return preflightTab(tab, hasPermission);
 }
 
-async function requestCurrentSitePermission(): Promise<PermissionRequestResult> {
-  const tab = await getActiveTab();
-  const originPattern = tab?.url ? buildOriginPattern(tab.url) : undefined;
-  const capability = preflightTab(tab, Boolean(originPattern));
-
-  if (!originPattern || !tab?.url || !tab.id || !capability.ok) {
-    return {
-      granted: false,
-      userMessage: capability.userMessage
-    };
-  }
-
-  const granted = await chrome.permissions.request({ origins: [originPattern] });
-  return {
-    granted,
-    originPattern,
-    userMessage: granted
-      ? 'Permission granted. Reload this page if analysis still fails.'
-      : 'Permission was not granted. Analysis cannot run on this site until permission is allowed.'
-  };
-}
-
 function commandFailureFromCapability(capability: TabCapabilityResult): ExtensionCommandResult {
   return {
     ok: false,
     error: capability.userMessage,
     userMessage: capability.userMessage,
-    needsPermission: capability.needsPermission,
+    needsPermission: capability.needsPersistentPermission,
     originPattern: capability.originPattern,
     tabUrl: capability.url,
     reason: capability.reason

@@ -23,7 +23,7 @@ Batch 1 includes unit tests for:
 - Education parsing with degree, school, dates, and honors
 - Build output validation for shared stylesheet links in popup, side panel, and Options
 - Fake regression coverage for glued education text, school-first education text, and certification section boundaries
-- Active tab permission preflight, restricted URL detection, and current-origin permission patterns
+- Active tab permission preflight, restricted URL detection, injection failure classification, and current-origin permission patterns
 
 ## Fixtures
 
@@ -78,15 +78,20 @@ Manual checks should cover:
 4. Click Analyze.
 5. Confirm the extension says Chrome blocks internal pages.
 6. Open a normal job page or test page.
-7. Click Analyze.
-8. If permission is needed, click **Allow This Site**.
-9. Retry Analyze Job Page.
-10. Retry Analyze Fields.
-11. Confirm no empty job or session is saved when permission fails.
-12. Confirm restricted pages do not produce generic command failed messages.
-13. Confirm the page remains styled.
-14. Confirm no submit buttons are clicked.
-15. Confirm no CAPTCHA or bot checks are bypassed.
+7. Without clicking **Allow This Site**, click Analyze Job Page from the popup.
+8. Confirm it either analyzes successfully or gives a specific host-access-denied message.
+9. If host-access-denied appears, click **Allow This Site**.
+10. Retry analysis.
+11. Open the side panel.
+12. Click Analyze Job Page from the side panel.
+13. Click Analyze Fields on a fake or real application page.
+14. Confirm failed commands do not create empty job or session records.
+15. Confirm restricted pages do not produce generic command failed messages.
+16. Confirm the page remains styled.
+17. Confirm no submit buttons are clicked.
+18. Confirm no CAPTCHA or bot checks are bypassed.
+19. Confirm local-only privacy language remains visible.
+20. Deny the current-site permission request on a normal page and confirm the UI explains one-off analysis can still be tried.
 
 ## Options UI QA
 

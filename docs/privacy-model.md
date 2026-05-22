@@ -37,9 +37,11 @@ AI is disabled by default. If a provider is configured later, the user must revi
 
 ## Site Permissions
 
-Site permission lets the extension inspect the current page for job details, application fields, and approved fill targets when the user asks. The permission request is for the current site origin only, not all sites.
+The extension uses `activeTab` for one-off analysis from user-triggered buttons on normal web pages. This lets the extension inspect the current page only when the user asks.
 
-Granting site permission does not submit applications, click CAPTCHA or bot checks, send data to AI, or upload profile data. Page analysis stays local unless the user later reviews and approves an AI request.
+Optional persistent site permission is a fallback for pages where Chrome blocks one-off script injection, or a convenience for smoother access. The permission request is for the current site origin only, not all sites.
+
+Granting site permission does not submit applications, click CAPTCHA or bot checks, send data to AI, or upload profile data. Page analysis remains user-triggered and stays local unless the user later reviews and approves an AI request.
 
 ## Clear Data
 

@@ -12,13 +12,13 @@ Review the parsed profile before using it. Edit contact details, links, summary,
 
 ## 3. Analyze Job
 
-Open a job page and use the side panel to analyze it. If the site needs permission, click **Allow This Site** and retry analysis. Permission is site-specific and user-controlled. If permission is denied, the extension cannot analyze or fill that site.
+Open a job page and use the side panel to analyze it. On normal web pages, try **Analyze Job Page** first. If Chrome blocks page access, click **Allow This Site** and retry analysis. Site permission is current-origin only and user-controlled. It is not always required.
 
 The job is saved locally only after analysis succeeds. If the same job is analyzed again, the saved record is updated instead of duplicated.
 
 ## 4. Analyze Fields
 
-Open an application page and analyze fields. The extension creates or updates a local application session only after field analysis succeeds. Restricted pages and permission failures do not create empty sessions.
+Open an application page and analyze fields. If permission is denied, one-off analysis may still work from the button, but some pages may require allowing the current site. The extension creates or updates a local application session only after field analysis succeeds. Restricted pages and failed commands do not create empty sessions.
 
 ## 5. Review Fill Preview
 
