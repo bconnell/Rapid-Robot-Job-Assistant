@@ -24,6 +24,14 @@ const profileRepo = new ProfileRepository();
 const jobRepo = new JobPostingRepository();
 const sessionRepo = new ApplicationSessionRepository();
 
+interface FieldAnalysisSummary {
+  fieldCount: number;
+  fillableCount: number;
+  manualOnlyCount: number;
+  sensitiveCount: number;
+  unknownCount: number;
+}
+
 export function SidePanelApp() {
   const [profile, setProfile] = useState<UserProfile | undefined>();
   const [job, setJob] = useState<JobPosting | undefined>();
@@ -34,6 +42,8 @@ export function SidePanelApp() {
   const [status, setStatus] = useState('Open a job or application page, then analyze when ready.');
   const [notes, setNotes] = useState('');
   const [pageStatus, setPageStatus] = useState<TabCapabilityResult>();
+  const [fieldSummary, setFieldSummary] = useState<FieldAnalysisSummary>();
+  const [pageWarnings, setPageWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     void loadActiveProfile();
@@ -91,6 +101,13 @@ export function SidePanelApp() {
       pageUrl?: string;
       mappings?: Parameters<typeof buildFillPreview>[0];
       verification?: { detected?: boolean };
+      warnings?: string[];
+      iframeWarnings?: string[];
+      fieldCount?: number;
+      fillableCount?: number;
+      manualOnlyCount?: number;
+      sensitiveCount?: number;
+      unknownCount?: number;
     }>;
     if (!result.ok) {
       await handleCommandFailure(result);
@@ -102,6 +119,20 @@ export function SidePanelApp() {
       return;
     }
     const nextPreview = buildFillPreview(response?.mappings ?? [], profile);
+    const nextWarnings = [...(response.warnings ?? []), ...(response.iframeWarnings ?? [])].filter(
+      (warning, index, all) => all.indexOf(warning) === index
+    );
+    const nextSummary = {
+      fieldCount: response.fieldCount ?? nextPreview.length,
+      fillableCount: response.fillableCount ?? nextPreview.filter((item) => item.fillable).length,
+      manualOnlyCount:
+        response.manualOnlyCount ??
+        nextPreview.filter((item) => item.status === 'manual-only').length,
+      sensitiveCount:
+        response.sensitiveCount ?? nextPreview.filter((item) => item.sensitive).length,
+      unknownCount:
+        response.unknownCount ?? nextPreview.filter((item) => item.kind === 'unknown').length
+    };
     const pageUrl = response.pageUrl;
     const existing = await sessionRepo.findByPageUrl(pageUrl);
     const now = new Date().toISOString();
@@ -122,6 +153,8 @@ export function SidePanelApp() {
     await sessionRepo.save(nextSession);
     setSession(nextSession);
     setPreview(nextPreview);
+    setFieldSummary(nextSummary);
+    setPageWarnings(nextWarnings);
     setNotes(nextSession.notes);
     setFillResults(nextSession.fillResults);
     setVerification(
@@ -129,7 +162,9 @@ export function SidePanelApp() {
         ? 'Manual verification required.'
         : 'No manual verification detected.'
     );
-    setStatus(`${nextPreview.length} fields detected. Review values before filling.`);
+    setStatus(
+      `${nextSummary.fieldCount} fields found. ${nextSummary.fillableCount} safe fill candidates. Review values before filling.`
+    );
   }
 
   async function fillApproved() {
@@ -270,7 +305,25 @@ export function SidePanelApp() {
       <section className="status-banner card">
         <p>{status}</p>
         <p className={verification.includes('required') ? 'warn' : 'ok'}>{verification}</p>
+        {pageWarnings.map((warning) => (
+          <p className="warn" key={warning}>
+            {warning}
+          </p>
+        ))}
       </section>
+
+      {fieldSummary && (
+        <section className="card">
+          <h2>Field Analysis Summary</h2>
+          <div className="row">
+            <span className="pill">Fields found: {fieldSummary.fieldCount}</span>
+            <span className="pill">Safe fill candidates: {fieldSummary.fillableCount}</span>
+            <span className="pill">Manual-only: {fieldSummary.manualOnlyCount}</span>
+            <span className="pill">Sensitive: {fieldSummary.sensitiveCount}</span>
+            <span className="pill">Needs review: {fieldSummary.unknownCount}</span>
+          </div>
+        </section>
+      )}
 
       <section className="grid two">
         <Card title="Job Summary">
@@ -316,10 +369,20 @@ export function SidePanelApp() {
               </strong>
               <p className="muted">
                 {item.kind} | {item.candidate.inputType ?? item.candidate.tagName} |{' '}
-                {Math.round(item.confidence * 100)}%
+                {confidenceLabel(item.confidence)} ({Math.round(item.confidence * 100)}%)
               </p>
+              <div className="row">
+                {item.status === 'manual-only' && <span className="pill">Manual-only</span>}
+                {item.sensitive && <span className="pill">Sensitive</span>}
+                {item.candidate.disabled && <span className="pill">Disabled</span>}
+                {item.candidate.readOnly && <span className="pill">Read-only</span>}
+                {item.candidate.candidateSource === 'aria-widget' && (
+                  <span className="pill">Custom widget</span>
+                )}
+                {!item.value && <span className="pill">No saved value</span>}
+              </div>
               <p className={item.sensitive ? 'warn' : 'muted'}>
-                {item.warning || item.explanation}
+                {[item.warning, item.explanation].filter(Boolean).join(' ')}
               </p>
             </div>
             <input
@@ -339,7 +402,10 @@ export function SidePanelApp() {
                     !item.value ||
                     item.status === 'manual-only' ||
                     item.sensitive ||
-                    !item.candidate.visible
+                    !item.candidate.visible ||
+                    item.candidate.disabled ||
+                    item.candidate.readOnly ||
+                    item.candidate.stableSelector === false
                   }
                   onChange={(event) =>
                     updatePreview(item.candidate.selector, {
@@ -404,4 +470,10 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       {children}
     </section>
   );
+}
+
+function confidenceLabel(confidence: number): string {
+  if (confidence >= 0.9) return 'High confidence';
+  if (confidence >= 0.7) return 'Review needed';
+  return 'Low confidence';
 }

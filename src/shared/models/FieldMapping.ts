@@ -22,9 +22,18 @@ export type FieldMappingKind =
   | 'currentEmployer'
   | 'education'
   | 'workExperience'
+  | 'yearsExperience'
+  | 'highestDegree'
+  | 'availability'
+  | 'willingToRelocate'
+  | 'remotePreference'
   | 'voluntaryDemographic'
   | 'disability'
   | 'veteranStatus'
+  | 'gender'
+  | 'race'
+  | 'ethnicity'
+  | 'pronouns'
   | 'unknown';
 
 export interface FieldMapping {

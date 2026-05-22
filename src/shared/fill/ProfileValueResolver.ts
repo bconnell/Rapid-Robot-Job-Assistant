@@ -71,6 +71,12 @@ export function resolveProfileValue(
       );
     case 'currentEmployer':
       return valueOrWarning(profile.experience[0]?.employer, 'No saved current employer.');
+    case 'remotePreference':
+      return valueOrWarning(profile.remotePreference, 'No saved remote preference.');
+    case 'availability':
+      return valueOrWarning(profile.earliestStartDate, 'No saved availability answer.');
+    case 'highestDegree':
+      return valueOrWarning(profile.education[0]?.degree, 'No saved highest degree.');
     default:
       return { warning: 'No saved value for this field type.' };
   }
@@ -82,10 +88,8 @@ export function buildFillPreview(
 ): FillPreviewItem[] {
   return mappings.map((mapping) => {
     const resolved = resolveProfileValue(mapping, profile);
-    const manualOnly =
-      mapping.candidate.inputType === 'file' ||
-      mapping.kind === 'resumeUpload' ||
-      mapping.kind === 'coverLetterUpload';
+    const manualOnlyReason = getManualOnlyReason(mapping);
+    const manualOnly = Boolean(manualOnlyReason);
     const canApprove = Boolean(resolved.value) && mapping.fillable && !manualOnly;
     return {
       ...mapping,
@@ -93,15 +97,35 @@ export function buildFillPreview(
       approved: false,
       rejected: !canApprove,
       status: manualOnly ? 'manual-only' : canApprove ? 'pending' : 'rejected',
-      warning: [
-        mapping.warning,
-        resolved.warning,
-        manualOnly ? 'Manual file selection required.' : undefined
-      ]
-        .filter(Boolean)
-        .join(' ')
+      warning: [mapping.warning, resolved.warning, manualOnlyReason].filter(Boolean).join(' ')
     };
   });
+}
+
+export function getManualOnlyReason(mapping: FieldMapping): string | undefined {
+  const candidate = mapping.candidate;
+  if (!candidate.visible) return 'Hidden fields are not filled.';
+  if (candidate.disabled) return 'Disabled fields are not filled.';
+  if (candidate.readOnly) return 'Read-only fields are not filled.';
+  if (candidate.stableSelector === false) {
+    return 'Manual review required because no stable selector was found.';
+  }
+  if (
+    candidate.inputType === 'file' ||
+    mapping.kind === 'resumeUpload' ||
+    mapping.kind === 'coverLetterUpload'
+  ) {
+    return 'File uploads require manual selection.';
+  }
+  if (
+    candidate.controlFamily === 'aria-combobox' ||
+    candidate.controlFamily === 'custom-select' ||
+    candidate.controlFamily === 'unknown-widget' ||
+    candidate.candidateSource === 'aria-widget'
+  ) {
+    return 'Custom widgets are manual-only in this version.';
+  }
+  return undefined;
 }
 
 function valueOrWarning(value: string | undefined, warning: string): ResolvedProfileValue {

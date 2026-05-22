@@ -20,6 +20,8 @@
 
 - Saved search checking is conservative and manual. There is no background crawling.
 - Field filling avoids file uploads and navigation.
+- Custom widgets are detected but manual-only. The extension does not click custom dropdowns.
+- Cross-origin iframe forms are not inspected. Users may need to open the frame directly or fill it manually.
 - Import is validation-preview only in Batch 2.
 - AI provider network calls are scaffolded but intentionally not executed.
 - Resume parsing is improved but still review-first. Users should verify every parsed field.
@@ -87,11 +89,20 @@
 - Parser warnings now distinguish inferred experience from truly missing experience.
 - Options shows a small review prompt near parsed experience entries.
 
+## Application Form Detection And Fill Reliability Completed
+
+- Native detection now uses stronger label, ARIA, fieldset, required, disabled, read-only, and select option signals.
+- Radio buttons and checkbox sets are grouped for review instead of shown as repeated individual controls.
+- Custom dropdowns, ARIA widgets, file uploads, hidden fields, disabled fields, read-only fields, and unstable selectors are manual-only.
+- Mapping explanations now show the signals that drove the deterministic match.
+- Approved-only filling handles React-style text inputs, native selects, radio groups, and checkbox groups more safely.
+- Field analysis returns summary counts and iframe warnings for the side panel.
+
 ## Possible Next Work
 
 - Add safe merge/replace import after another review pass.
 - Continue real browser QA fixes as they appear.
-- Add better application form fixtures.
+- Add more application form fixture coverage.
 - Continue improving resume parsing for unusual layouts after real browser QA.
 - Add visible search-result extraction for controlled fake fixtures and current-page only.
 - Add richer application session history.

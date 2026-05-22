@@ -12,6 +12,15 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. Application Form Detection And Fill Reliability
+
+- Improved native form detection for labels, ARIA references, fieldsets, grouped radio/checkbox questions, disabled fields, read-only fields, and select options.
+- Added custom widget and file-upload detection so those fields stay manual-only.
+- Improved deterministic mapping explanations and fill-preview safety rules.
+- Improved approved-only filling for React-style text inputs, selects, radio groups, and checkbox groups.
+- Added iframe warnings when an application may be embedded somewhere the extension should not force access.
+- No change to no-auto-submit, local-first privacy, CAPTCHA boundaries, or manual review rules.
+
 ### 2026-05-22. Experience Parsing Reliability Fix
 
 - Added more experience section aliases, including Additional Experience, Work History, Employment, and Professional Background.

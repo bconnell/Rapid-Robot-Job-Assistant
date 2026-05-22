@@ -7,6 +7,10 @@ const sensitiveTerms = [
   'ethnicity',
   'disability',
   'veteran',
+  'gender identity',
+  'hispanic',
+  'latino',
+  'pronouns',
   'protected',
   'ssn',
   'social security',
@@ -24,6 +28,10 @@ const sensitiveKinds: FieldMappingKind[] = [
   'voluntaryDemographic',
   'disability',
   'veteranStatus',
+  'gender',
+  'race',
+  'ethnicity',
+  'pronouns',
   'workAuthorization',
   'sponsorship'
 ];

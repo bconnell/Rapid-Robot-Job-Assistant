@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <body>
+    <form aria-label="Lakeview Hiring Portal">
+      <section>
+        <h2>Profile</h2>
+        <div class="field">
+          <span id="linkedin-label">LinkedIn profile</span>
+          <input aria-labelledby="linkedin-label" name="candidateLinkedIn" />
+        </div>
+        <div class="field">
+          <span class="label">Portfolio website</span>
+          <input name="portfolioUrl" type="url" />
+        </div>
+        <div class="field">
+          <span id="cover-label">Cover letter upload</span>
+          <input aria-labelledby="cover-label" type="file" name="coverLetter" />
+        </div>
+      </section>
+      <section>
+        <h2>Availability</h2>
+        <label for="start">Earliest start date</label>
+        <input id="start" name="availabilityDate" />
+      </section>
+    </form>
+  </body>
+</html>

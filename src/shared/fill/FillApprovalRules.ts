@@ -1,4 +1,5 @@
 import type { FillPreviewItem } from '../models/FieldMapping';
+import { getManualOnlyReason } from './ProfileValueResolver';
 
 export function approveSafeHighConfidence(items: FillPreviewItem[]): FillPreviewItem[] {
   return items.map((item) => {
@@ -6,7 +7,11 @@ export function approveSafeHighConfidence(items: FillPreviewItem[]): FillPreview
       item.confidence >= 0.9 &&
       !item.sensitive &&
       item.candidate.visible &&
+      !item.candidate.disabled &&
+      !item.candidate.readOnly &&
+      item.candidate.stableSelector !== false &&
       item.status !== 'manual-only' &&
+      !getManualOnlyReason(item) &&
       Boolean(item.value);
     return safe ? { ...item, approved: true, rejected: false, status: 'approved' } : item;
   });

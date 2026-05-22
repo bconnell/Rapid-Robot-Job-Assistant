@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <body>
+    <form aria-label="Northstar Careers application">
+      <h1>Northstar Careers</h1>
+      <label for="first-name">First name</label>
+      <input id="first-name" name="firstName" autocomplete="given-name" required />
+      <label for="last-name">Last name</label>
+      <input id="last-name" name="lastName" autocomplete="family-name" required />
+      <label for="email">Email address</label>
+      <input id="email" name="email" type="email" autocomplete="email" required />
+      <label for="phone">Phone number</label>
+      <input id="phone" name="phone" type="tel" autocomplete="tel" />
+      <label for="city">City</label>
+      <input id="city" name="city" autocomplete="address-level2" />
+      <label for="state">State</label>
+      <select id="state" name="state" autocomplete="address-level1">
+        <option value="">Select</option>
+        <option value="IL">Illinois</option>
+        <option value="IA">Iowa</option>
+      </select>
+      <label for="zip">Zip code</label>
+      <input id="zip" name="zip" autocomplete="postal-code" />
+      <label for="resume">Upload resume</label>
+      <input id="resume" name="resume" type="file" />
+    </form>
+  </body>
+</html>

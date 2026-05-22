@@ -51,10 +51,27 @@ describe('ProfileValueResolver', () => {
 
   it('builds preview items and bulk-approves only safe high-confidence fields', () => {
     const sensitive = { ...emailMapping, kind: 'sponsorship' as const, sensitive: true };
-    const preview = buildFillPreview([emailMapping, sensitive], profile);
+    const customWidget = {
+      ...emailMapping,
+      candidate: {
+        ...emailMapping.candidate,
+        selector: '#degree',
+        controlFamily: 'aria-combobox' as const,
+        candidateSource: 'aria-widget' as const
+      },
+      kind: 'highestDegree' as const
+    };
+    const disabled = {
+      ...emailMapping,
+      candidate: { ...emailMapping.candidate, selector: '#disabled', disabled: true }
+    };
+    const preview = buildFillPreview([emailMapping, sensitive, customWidget, disabled], profile);
     const approved = approveSafeHighConfidence(preview);
 
     expect(approved[0].approved).toBe(true);
     expect(approved[1].approved).toBe(false);
+    expect(approved[2].approved).toBe(false);
+    expect(approved[2].status).toBe('manual-only');
+    expect(approved[3].approved).toBe(false);
   });
 });

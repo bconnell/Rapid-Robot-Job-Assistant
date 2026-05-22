@@ -43,6 +43,12 @@ Optional persistent site permission is a fallback for pages where Chrome blocks 
 
 Granting site permission does not submit applications, click CAPTCHA or bot checks, send data to AI, or upload profile data. Page analysis remains user-triggered and stays local unless the user later reviews and approves an AI request.
 
+## Form Analysis
+
+Application form analysis runs locally after the user asks for it. The extension collects field metadata such as labels, input type, required status, options, visibility, and mapping confidence. That metadata may be stored only as part of local application sessions.
+
+Sensitive fields are marked for direct review and are not bulk-approved. File uploads, custom widgets, disabled fields, read-only fields, hidden fields, and fields without stable selectors are manual-only. No application is submitted by the extension.
+
 ## Clear Data
 
 The options page includes a clear local data control. It clears extension settings and IndexedDB records. It does not touch browser settings, OS settings, downloads, or files outside the extension storage area.

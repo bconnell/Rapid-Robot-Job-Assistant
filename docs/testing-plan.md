@@ -25,6 +25,9 @@ Batch 1 includes unit tests for:
 - Fake regression coverage for glued education text, school-first education text, and certification section boundaries
 - Experience parser regression coverage for Additional Experience, Work History, Employment, Professional Background, fallback project blocks, freelance entries, and no-experience cases
 - Active tab permission preflight, restricted URL detection, injection failure classification, and current-origin permission patterns
+- Application form detection for native labels, ARIA references, fieldset legends, grouped radio/checkbox controls, select options, disabled fields, read-only fields, hidden fields, custom widgets, and iframe warnings
+- Field mapping false-positive prevention, manual-only rules, sensitive direct-review rules, and page-level analysis summary counts
+- Approved-only filling for React-style text inputs, native selects, radio groups, checkbox groups, and unsafe/manual-only fields
 
 ## Fixtures
 
@@ -93,6 +96,30 @@ Manual checks should cover:
 18. Confirm no CAPTCHA or bot checks are bypassed.
 19. Confirm local-only privacy language remains visible.
 20. Deny the current-site permission request on a normal page and confirm the UI explains one-off analysis can still be tried.
+
+## Application Form QA
+
+1. Run `npm run build`.
+2. Reload the unpacked extension from `dist`.
+3. Open a fake simple application form.
+4. Analyze fields.
+5. Confirm summary counts match the page.
+6. Confirm first name, last name, email, phone, city, state, and zip are mapped correctly.
+7. Confirm resume upload is manual-only.
+8. Confirm cover letter upload is manual-only.
+9. Confirm work authorization and sponsorship fields require review when shown as select or radio fields.
+10. Confirm voluntary demographic fields are sensitive and not bulk-approved.
+11. Confirm disabled and read-only fields are not fillable.
+12. Confirm custom dropdowns are manual-only.
+13. Approve safe fields.
+14. Fill approved fields.
+15. Confirm React-style inputs update visibly.
+16. Confirm select, radio, and checkbox fields fill only when matching is safe.
+17. Confirm no submit button is clicked.
+18. Confirm CAPTCHA or bot-check detection still pauses filling.
+19. Confirm iframe warnings appear when fields may be inside an iframe.
+20. Confirm no empty session is saved on failed analysis.
+21. Confirm no private files appear in git status.
 
 ## Options UI QA
 

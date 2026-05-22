@@ -42,4 +42,63 @@ describe('field mapping', () => {
       'earliestStartDate'
     );
   });
+
+  it('maps grouped eligibility fields without relying on weak words alone', () => {
+    document.body.innerHTML = readFileSync(
+      resolve('tests/fixtures/application-forms/grouped-radio-checkbox-form.html'),
+      'utf8'
+    );
+    const mappings = mapFieldCandidates(detectFormFields(document));
+
+    expect(mappings.find((mapping) => mapping.kind === 'workAuthorization')?.sensitive).toBe(true);
+    expect(mappings.find((mapping) => mapping.kind === 'sponsorship')?.requiresDirectReview).toBe(
+      true
+    );
+    expect(
+      mappings.find((mapping) => mapping.kind === 'remotePreference')?.confidence
+    ).toBeGreaterThanOrEqual(0.7);
+  });
+
+  it('does not confuse statement with state or weak work text with authorization', () => {
+    document.body.innerHTML = readFileSync(
+      resolve('tests/fixtures/application-forms/disabled-readonly-hidden-fields-form.html'),
+      'utf8'
+    );
+    const mappings = mapFieldCandidates(detectFormFields(document));
+
+    expect(mappings.find((mapping) => mapping.candidate.name === 'personalStatement')?.kind).toBe(
+      'unknown'
+    );
+    expect(
+      mapFieldCandidates([
+        {
+          selector: '#work-style',
+          inputType: 'text',
+          tagName: 'input',
+          labelText: 'Preferred work style',
+          options: [],
+          required: false,
+          visible: true
+        }
+      ])[0].kind
+    ).not.toBe('workAuthorization');
+  });
+
+  it('keeps custom widgets and voluntary disclosure fields manual or direct-review only', () => {
+    document.body.innerHTML = readFileSync(
+      resolve('tests/fixtures/application-forms/custom-dropdown-form.html'),
+      'utf8'
+    );
+    const customMapping = mapFieldCandidates(detectFormFields(document))[0];
+    expect(customMapping.fillable).toBe(false);
+    expect(customMapping.warning).toContain('Custom');
+
+    document.body.innerHTML = readFileSync(
+      resolve('tests/fixtures/application-forms/sensitive-voluntary-disclosures-form.html'),
+      'utf8'
+    );
+    const sensitiveMappings = mapFieldCandidates(detectFormFields(document));
+    expect(sensitiveMappings.every((mapping) => mapping.sensitive)).toBe(true);
+    expect(sensitiveMappings.every((mapping) => !mapping.fillable)).toBe(true);
+  });
 });
