@@ -13,6 +13,8 @@ export interface ResumeParseSummary {
   summaryFound: boolean;
   skillsCount: number;
   experienceCount: number;
+  experienceSource: 'parsed-section' | 'inferred-fallback' | 'none';
+  experienceNeedsReviewCount: number;
   educationCount: number;
   certificationsCount: number;
   guessedSections: string[];
@@ -46,9 +48,26 @@ const sectionAliases: Record<SectionKey, string[]> = {
     'experience',
     'work experience',
     'professional experience',
+    'additional experience',
+    'additional professional experience',
+    'work history',
+    'employment',
+    'employment experience',
     'employment history',
+    'career experience',
+    'relevant work',
     'relevant experience',
-    'project experience'
+    'professional background',
+    'related experience',
+    'selected experience',
+    'development experience',
+    'software development experience',
+    'project experience',
+    'technical experience',
+    'freelance experience',
+    'contract experience',
+    'independent projects',
+    'client projects'
   ],
   education: ['education', 'academic background', 'degrees'],
   certifications: ['certifications', 'certificates', 'licenses', 'training'],
@@ -57,13 +76,23 @@ const sectionAliases: Record<SectionKey, string[]> = {
 
 const datePattern =
   /\b(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2}\s*(?:-|\u2013|to)\s*(?:present|current|(?:19|20)\d{2})|\b(?:expected\s+)?(?:graduation\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}|\b(?:19|20)\d{2}\b/i;
+const roleKeywordPattern =
+  /(engineer|developer|technician|manager|analyst|consultant|specialist|designer|administrator|support|lead|coordinator|freelance|contractor|project lead)/i;
 
 export function parseResumeSections(text: string): ParsedResume {
   const normalized = normalizeResumeText(text);
   const { sections, guessedSections } = splitSections(normalized);
   const contact = parseContact(normalized);
   const skills = parseSkills(sections.skills ?? '');
-  const experience = parseExperience(sections.experience ?? '');
+  const parsedExperience = parseExperience(sections.experience ?? '');
+  const fallbackExperience = parsedExperience.length ? [] : inferExperienceFromResume(normalized);
+  const experience = parsedExperience.length ? parsedExperience : fallbackExperience;
+  const experienceSource = parsedExperience.length
+    ? 'parsed-section'
+    : fallbackExperience.length
+      ? 'inferred-fallback'
+      : 'none';
+  const experienceNeedsReviewCount = countExperienceEntriesNeedingReview(experience);
   const education = parseEducation(sections.education ?? '');
   const certifications = parseList(sections.certifications ?? '');
   const warnings: ParsedResume['warnings'] = [];
@@ -74,6 +103,13 @@ export function parseResumeSections(text: string): ParsedResume {
     warnings.push({ section: 'skills', message: 'No clear skills section found.' });
   if (!experience.length) {
     warnings.push({ section: 'experience', message: 'No clear experience entries found.' });
+  } else if (experienceSource === 'inferred-fallback') {
+    warnings.push({
+      section: 'experience',
+      message: 'Experience entries were inferred and need review.'
+    });
+  } else if (experienceNeedsReviewCount > 0) {
+    warnings.push({ section: 'experience', message: 'Some experience entries need review.' });
   }
   for (const section of guessedSections) {
     warnings.push({ section, message: `${section} section was guessed from nearby text.` });
@@ -100,6 +136,8 @@ export function parseResumeSections(text: string): ParsedResume {
       summaryFound: Boolean(summary),
       skillsCount: skills.length,
       experienceCount: experience.length,
+      experienceSource,
+      experienceNeedsReviewCount,
       educationCount: education.length,
       certificationsCount: certifications.length,
       guessedSections,
@@ -291,18 +329,27 @@ function parseExperience(section: string): ProfileExperience[] {
 }
 
 function looksLikeExperienceHeader(line: string): boolean {
+  const shortRoleLine =
+    line.length < 80 &&
+    roleKeywordPattern.test(line) &&
+    !/[.!?]$/.test(line) &&
+    !isContactLike(line);
   return (
-    datePattern.test(line) ||
+    (datePattern.test(line) &&
+      (roleKeywordPattern.test(line) || /[|,]|\s+-\s+|\s+at\s+/i.test(line))) ||
     /\s+at\s+/i.test(line) ||
     line.includes('|') ||
     /\s+-\s+/.test(line) ||
-    /(engineer|developer|manager|analyst|consultant|specialist|designer|administrator)/i.test(line)
+    shortRoleLine
   );
 }
 
 function parseExperienceHeader(line: string): ProfileExperience {
   const date = line.match(datePattern)?.[0];
-  const withoutDate = normalizeWhitespace(line.replace(datePattern, '').replace(/[|,;-]+$/, ''));
+  const withoutDate = normalizeWhitespace(line.replace(datePattern, '')).replace(
+    /\s*[|,;-]+\s*$/,
+    ''
+  );
   let title = withoutDate;
   let employer = 'Needs review';
   const parts = withoutDate
@@ -313,20 +360,103 @@ function parseExperienceHeader(line: string): ProfileExperience {
   if (/\s+at\s+/i.test(withoutDate)) {
     [title, employer] = withoutDate.split(/\s+at\s+/i, 2);
   } else if (parts.length >= 2) {
-    const firstLooksTitle =
-      /(engineer|developer|manager|analyst|consultant|specialist|designer|administrator)/i.test(
-        parts[0]
-      );
+    const firstLooksTitle = roleKeywordPattern.test(parts[0]);
     title = firstLooksTitle ? parts[0] : parts[1];
     employer = firstLooksTitle ? parts[1] : parts[0];
   }
 
   return {
-    title: title || 'Needs review',
-    employer: employer || 'Needs review',
+    title: cleanExperiencePart(title) || 'Needs review',
+    employer: cleanExperiencePart(employer) || 'Needs review',
     startDate: date,
     highlights: []
   };
+}
+
+function inferExperienceFromResume(normalized: string): ProfileExperience[] {
+  const candidateBlocks = collectExperienceLikeBlocks(normalized).trim();
+  if (!candidateBlocks) return [];
+  return dedupeExperienceEntries(
+    parseExperience(candidateBlocks).map((entry) => ({
+      ...entry,
+      employer: entry.employer || 'Needs review'
+    }))
+  );
+}
+
+function collectExperienceLikeBlocks(text: string): string {
+  const lines = text.split('\n').map(normalizeWhitespace).filter(Boolean);
+  const collected: string[] = [];
+  let currentBlock: string[] = [];
+  let currentSection: SectionKey | undefined;
+
+  for (const line of lines) {
+    const heading = detectHeading(line);
+    if (heading) {
+      flushBlock();
+      currentSection = heading.key;
+      if (heading.key === 'experience' && heading.remainder) currentBlock.push(heading.remainder);
+      continue;
+    }
+
+    if (
+      currentSection &&
+      ['summary', 'skills', 'education', 'certifications'].includes(currentSection)
+    ) {
+      continue;
+    }
+
+    if (looksLikeExperienceHeader(line) || /^[-*]/.test(line)) {
+      currentBlock.push(line);
+      continue;
+    }
+
+    if (currentBlock.length && line.length < 180 && !isContactLike(line)) {
+      currentBlock.push(line);
+    }
+  }
+  flushBlock();
+  return collected.join('\n');
+
+  function flushBlock() {
+    if (blockHasStrongExperienceEvidence(currentBlock)) collected.push(...currentBlock, '');
+    currentBlock = [];
+  }
+}
+
+function blockHasStrongExperienceEvidence(lines: string[]): boolean {
+  if (!lines.length) return false;
+  const text = lines.join(' ');
+  const bulletCount = lines.filter((line) => /^[-*]/.test(line)).length;
+  return (
+    (roleKeywordPattern.test(text) &&
+      (datePattern.test(text) || /[|,]|\s+-\s+|\s+at\s+/i.test(text))) ||
+    (roleKeywordPattern.test(lines[0] ?? '') && bulletCount >= 2)
+  );
+}
+
+function countExperienceEntriesNeedingReview(entries: ProfileExperience[]): number {
+  return entries.filter(
+    (entry) =>
+      !entry.title ||
+      !entry.employer ||
+      entry.title === 'Needs review' ||
+      entry.employer === 'Needs review'
+  ).length;
+}
+
+function dedupeExperienceEntries(entries: ProfileExperience[]): ProfileExperience[] {
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    const key = [entry.title, entry.employer, entry.startDate].join('|').toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function cleanExperiencePart(value: string): string {
+  return normalizeWhitespace(value.replace(/^[|,;-]+|[|,;-]+$/g, ''));
 }
 
 function parseEducation(section: string): ProfileEducation[] {

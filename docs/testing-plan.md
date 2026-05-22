@@ -23,6 +23,7 @@ Batch 1 includes unit tests for:
 - Education parsing with degree, school, dates, and honors
 - Build output validation for shared stylesheet links in popup, side panel, and Options
 - Fake regression coverage for glued education text, school-first education text, and certification section boundaries
+- Experience parser regression coverage for Additional Experience, Work History, Employment, Professional Background, fallback project blocks, freelance entries, and no-experience cases
 - Active tab permission preflight, restricted URL detection, injection failure classification, and current-origin permission patterns
 
 ## Fixtures
@@ -118,6 +119,10 @@ Manual checks should cover:
 8. Confirm warnings appear only for real uncertainty.
 9. Confirm education entries do not duplicate school, degree, field, and date values.
 10. Confirm certifications stop before Projects, Education, or other later sections.
+11. Paste fake resume text with Additional Experience and confirm experience entries are found.
+12. Paste fake resume text with Work History or Employment and confirm experience entries are found.
+13. Paste fake resume text with Freelance Software Developer and bullets, then confirm the entry is marked for review instead of missing.
+14. Confirm summary and skills text with developer-related words do not create fake experience entries.
 
 ## CI
 

@@ -51,7 +51,7 @@ The options page includes a clear local data control. It clears extension settin
 
 Pasted resume text and `.docx` files are parsed in the browser. The original `.docx` file blob is not stored. Extracted text and parsed profile fields are stored locally when the user saves/imports.
 
-Resume parsing is local and review-first. The parser normalizes text, detects sections, and guesses common fields, but the user should review profile data before using it to fill anything. Education, experience, certification, and contact parsing can still need correction when a resume uses unusual formatting.
+Resume parsing is local and review-first. The parser normalizes text, detects sections, and guesses common fields, but the user should review profile data before using it to fill anything. Conservative fallback parsing can infer experience entries from local resume text when clear section headings are missing. No resume content is logged or sent externally. Education, experience, certification, and contact parsing can still need correction when a resume uses unusual formatting.
 
 ## Export And Import
 

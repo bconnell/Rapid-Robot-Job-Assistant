@@ -17,9 +17,26 @@ const headingAliases = [
   'Programming Languages',
   'Work Experience',
   'Professional Experience',
+  'Additional Experience',
+  'Additional Professional Experience',
+  'Work History',
+  'Employment',
+  'Employment Experience',
   'Employment History',
+  'Career Experience',
+  'Relevant Work',
   'Relevant Experience',
+  'Professional Background',
+  'Related Experience',
+  'Selected Experience',
+  'Development Experience',
+  'Software Development Experience',
   'Project Experience',
+  'Technical Experience',
+  'Freelance Experience',
+  'Contract Experience',
+  'Independent Projects',
+  'Client Projects',
   'Academic Background',
   'Selected Projects',
   'Technical Projects',
@@ -55,6 +72,24 @@ const gluedLabels = [
   'Professional Summary',
   'Technical Skills',
   'Professional Experience',
+  'Additional Experience',
+  'Additional Professional Experience',
+  'Work History',
+  'Employment',
+  'Employment Experience',
+  'Career Experience',
+  'Relevant Work',
+  'Relevant Experience',
+  'Professional Background',
+  'Related Experience',
+  'Selected Experience',
+  'Development Experience',
+  'Software Development Experience',
+  'Technical Experience',
+  'Freelance Experience',
+  'Contract Experience',
+  'Independent Projects',
+  'Client Projects',
   'Education',
   'Certifications',
   'Projects'
@@ -78,6 +113,10 @@ export function normalizeResumeText(value: string): string {
   }
 
   for (const heading of headingAliases.sort((a, b) => b.length - a.length)) {
+    text = text.replace(
+      new RegExp(`(?<=[a-z0-9])(${escapeRegExp(heading)})(:?)(?=\\S|$)`, 'g'),
+      '\n$1$2\n'
+    );
     text = text.replace(
       new RegExp(`(^|\\n|\\s)(${escapeRegExp(heading)})(:?)(?=\\s|[A-Z])`, 'gi'),
       (_match, prefix: string, found: string, colon: string) =>

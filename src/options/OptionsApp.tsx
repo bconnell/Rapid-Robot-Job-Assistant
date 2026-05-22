@@ -255,6 +255,7 @@ export function OptionsApp() {
           <ProfileReviewPanel
             profile={profile}
             activeProfileId={activeProfileId}
+            parseSummary={parseSummary}
             onProfileChange={setProfile}
             onSaveProfile={saveProfile}
           />
@@ -374,11 +375,13 @@ function ParseSummaryCard({
 function ProfileReviewPanel({
   profile,
   activeProfileId,
+  parseSummary,
   onProfileChange,
   onSaveProfile
 }: {
   profile: UserProfile;
   activeProfileId?: string;
+  parseSummary?: ResumeParseSummary;
   onProfileChange: (profile: UserProfile) => void;
   onSaveProfile: () => void;
 }) {
@@ -504,6 +507,7 @@ function ProfileReviewPanel({
       </div>
       <EditableExperience
         items={profile.experience}
+        parseSummary={parseSummary}
         onChange={(experience) => onProfileChange({ ...profile, experience })}
       />
       <EditableEducation
@@ -726,14 +730,33 @@ function TextInput({
 
 function EditableExperience({
   items,
+  parseSummary,
   onChange
 }: {
   items: ProfileExperience[];
+  parseSummary?: ResumeParseSummary;
   onChange: (items: ProfileExperience[]) => void;
 }) {
+  const needsReview =
+    parseSummary?.experienceSource === 'inferred-fallback' ||
+    items.some((item) => item.title === 'Needs review' || item.employer === 'Needs review');
+  const reviewCount =
+    parseSummary?.experienceSource === 'inferred-fallback'
+      ? Math.max(1, parseSummary.experienceNeedsReviewCount)
+      : (parseSummary?.experienceNeedsReviewCount ?? 0);
   return (
     <section className="stack nested-editor">
       <h3>Experience</h3>
+      <p className="muted">Review parsed experience before using it to fill applications.</p>
+      {items.length > 0 && (
+        <p className={needsReview ? 'warn' : 'muted'}>
+          Experience source:{' '}
+          {parseSummary?.experienceSource === 'inferred-fallback'
+            ? 'inferred fallback'
+            : 'parsed section'}
+          {needsReview ? ` | Entries needing review: ${reviewCount}` : ''}
+        </p>
+      )}
       {items.length === 0 && <p className="empty-state">No experience entries parsed yet.</p>}
       {items.map((item, index) => (
         <div className="mini-card stack" key={index}>

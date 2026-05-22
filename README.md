@@ -12,6 +12,14 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. Experience Parsing Reliability Fix
+
+- Added more experience section aliases, including Additional Experience, Work History, Employment, and Professional Background.
+- Improved `.docx` heading splitting for Additional Experience and related headings.
+- Added conservative fallback parsing for experience-like resume blocks.
+- Improved review warnings so inferred experience is flagged for review instead of reported as missing.
+- No change to local-first privacy, no auto-submit, or manual review rules.
+
 ### 2026-05-22. Active Tab Analysis And Permission Flow Correction
 
 - One-off analysis now uses `activeTab` on normal web pages before asking for persistent site permission.

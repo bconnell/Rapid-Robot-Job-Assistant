@@ -13,4 +13,13 @@ describe('normalizeResumeText', () => {
     expect(normalized).toContain('Professional Experience');
     expect(normalized).toContain('linkedin.com/in/alex-example');
   });
+
+  it('splits collapsed additional experience headings from docx-style text', () => {
+    const normalized = normalizeResumeText(
+      'CertificationsLakeview Cloud FoundationsAdditional ExperienceSoftware Developer | Prairie Software Works | 2022 - Present'
+    );
+
+    expect(normalized).toContain('Certifications\nLakeview Cloud Foundations');
+    expect(normalized).toMatch(/Additional Experience\n+Software Developer/);
+  });
 });

@@ -155,4 +155,177 @@ Northstar State College, BS Computer Science, 2020
     expect(parsed.profile.certifications).toEqual(['Lakeview Cloud Foundations']);
     expect(parsed.profile.certifications).not.toContain('Projects');
   });
+
+  it.each(['Additional Experience', 'Work History', 'Employment', 'Professional Background'])(
+    'parses %s as experience',
+    (heading) => {
+      const parsed = parseResumeSections(`
+Alex Morgan
+alex@example.com
+Professional Summary
+Software developer focused on practical internal tools.
+Technical Skills
+C#, SQL, JavaScript
+${heading}
+Software Developer | Prairie Software Works | 2022 - Present
+- Built internal tools with C# and SQL.
+Education
+Bachelor of Science in Computer Science
+Lakeview Technical University
+2020
+`);
+
+      expect(parsed.profile.experience).toHaveLength(1);
+      expect(parsed.profile.experience[0]).toMatchObject({
+        title: 'Software Developer',
+        employer: 'Prairie Software Works'
+      });
+      expect(parsed.summary.needsReview).not.toContain('No clear experience entries found.');
+    }
+  );
+
+  it('keeps professional and additional experience entries together', () => {
+    const parsed = parseResumeSections(`
+Alex Morgan
+alex@example.com
+Professional Summary
+Software developer focused on practical internal tools.
+Technical Skills
+C#, SQL, JavaScript
+Professional Experience
+Software Developer | Prairie Software Works | 2022 - Present
+- Built internal tools with C# and SQL.
+Additional Experience
+IT Support Technician | Northstar Components | 2020 - 2022
+- Resolved workstation and software issues.
+Education
+Bachelor of Science in Computer Science
+Lakeview Technical University
+2020
+`);
+
+    expect(parsed.profile.experience).toHaveLength(2);
+    expect(parsed.profile.experience.map((entry) => entry.employer)).toEqual([
+      'Prairie Software Works',
+      'Northstar Components'
+    ]);
+  });
+
+  it('splits glued docx text before additional experience and keeps certifications separate', () => {
+    const parsed = parseResumeSections(`
+Jordan Lee
+jordan@example.com
+Professional Summary
+Developer focused on local business tools.
+Technical Skills
+JavaScript, SQL
+CertificationsLakeview Cloud FoundationsAdditional ExperienceSoftware Developer | Prairie Software Works | 2022 - Present
+- Built reporting utilities.
+`);
+
+    expect(parsed.profile.certifications).toEqual(['Lakeview Cloud Foundations']);
+    expect(parsed.profile.experience[0]).toMatchObject({
+      title: 'Software Developer',
+      employer: 'Prairie Software Works'
+    });
+  });
+
+  it('infers experience without dates when a title has multiple bullets', () => {
+    const parsed = parseResumeSections(`
+Taylor Reed
+alex@example.com
+Professional Summary
+Software developer focused on practical internal tools.
+Technical Skills
+C#, SQL, JavaScript
+Selected Projects
+Freelance Software Developer
+- Built small business websites.
+- Automated spreadsheet workflows.
+Education
+Lakeview Technical University
+2020
+`);
+
+    expect(parsed.profile.experience).toHaveLength(1);
+    expect(parsed.profile.experience[0]).toMatchObject({
+      title: 'Freelance Software Developer',
+      employer: 'Needs review'
+    });
+    expect(parsed.summary.experienceSource).toBe('inferred-fallback');
+    expect(parsed.summary.needsReview).toContain(
+      'Experience entries were inferred and need review.'
+    );
+    expect(parsed.summary.needsReview).not.toContain('No clear experience entries found.');
+  });
+
+  it('infers technical project role evidence without pulling summary or skills', () => {
+    const parsed = parseResumeSections(`
+Alex Morgan
+alex@example.com
+Professional Summary
+Software developer focused on practical internal tools.
+Technical Skills
+Developer tools, SQL, JavaScript
+Technical Projects
+Remote Software Engineer | Riverbend Apps
+Full stack application development using C#, SQL, and JavaScript.
+Education
+Lakeview Technical University
+2020
+`);
+
+    expect(parsed.profile.experience).toHaveLength(1);
+    expect(parsed.profile.experience[0]).toMatchObject({
+      title: 'Remote Software Engineer',
+      employer: 'Riverbend Apps'
+    });
+    expect(parsed.summary.experienceSource).toBe('inferred-fallback');
+  });
+
+  it('does not infer experience from summary, skills, or education alone', () => {
+    const parsed = parseResumeSections(`
+Jordan Lee
+jordan@example.com
+Professional Summary
+Software developer focused on practical internal tools.
+Technical Skills
+Developer tools, SQL, application support
+Education
+Bachelor of Science in Computer Science
+Lakeview Technical University
+2020
+`);
+
+    expect(parsed.profile.experience).toHaveLength(0);
+    expect(parsed.summary.needsReview).toContain('No clear experience entries found.');
+  });
+
+  it('parses common experience formats without requiring dates', () => {
+    const parsed = parseResumeSections(`
+Alex Morgan
+alex@example.com
+Professional Summary
+Builder of practical tools.
+Technical Skills
+C#, SQL
+Professional Experience
+IT Support Technician - Northstar Components - 2020 - 2022
+Resolved workstation, software, and account issues.
+Developer at Lakeview Systems
+Built reporting tools and workflow utilities.
+Remote Software Engineer | Riverbend Apps
+Full stack application development using C#, SQL, and JavaScript.
+Project Lead, Atlas Support Group, 2021 - 2023
+- Coordinated internal software updates.
+`);
+
+    expect(parsed.profile.experience).toHaveLength(4);
+    expect(parsed.profile.experience.map((entry) => entry.employer)).toEqual([
+      'Northstar Components',
+      'Lakeview Systems',
+      'Riverbend Apps',
+      'Atlas Support Group'
+    ]);
+  });
 });

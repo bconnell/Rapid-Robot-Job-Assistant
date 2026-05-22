@@ -4,11 +4,11 @@
 
 Open Options. Paste resume text or import a `.docx` file. The extension extracts text locally and does not store the original file blob.
 
-After parsing, review the compact parser summary. It shows whether contact data and summary were found, plus counts for skills, experience, education, and certifications. Warnings point to fields that need manual review. The parser separates common degree, field, school, date, and certification patterns, but the saved profile is still only a draft until you review it.
+After parsing, review the compact parser summary. It shows whether contact data and summary were found, plus counts for skills, experience, education, and certifications. Warnings point to fields that need manual review. The parser separates common degree, field, school, date, certification, and experience patterns, but the saved profile is still only a draft until you review it.
 
 ## 2. Review And Edit
 
-Review the parsed profile before using it. Edit contact details, links, summary, skills, experience, education, certifications, work authorization, sponsorship, desired titles, desired salary, and start date. Save the profile locally.
+Review the parsed profile before using it. Edit contact details, links, summary, skills, experience, education, certifications, work authorization, sponsorship, desired titles, desired salary, and start date. Inferred experience entries should be corrected before they are used for applications. Save the profile locally.
 
 ## 3. Analyze Job
 

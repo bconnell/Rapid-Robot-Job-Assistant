@@ -23,6 +23,7 @@
 - Import is validation-preview only in Batch 2.
 - AI provider network calls are scaffolded but intentionally not executed.
 - Resume parsing is improved but still review-first. Users should verify every parsed field.
+- Experience fallback parsing is conservative. Inferred entries should be checked and corrected.
 - Chrome Web Store packaging and publishing are future work.
 
 ## Completed Workflow Wiring
@@ -78,11 +79,20 @@
 - Host-access injection failures point users to **Allow This Site** as a fallback.
 - Permission requests remain limited to the current origin.
 
+## Experience Parsing Reliability Completed
+
+- Experience aliases now include Additional Experience, Work History, Employment, Professional Background, Development Experience, Freelance Experience, and related headings.
+- `.docx` text normalization splits additional experience-style headings when they are glued to nearby sections.
+- Conservative fallback parsing can infer experience-like blocks when a clear experience section was not detected.
+- Parser warnings now distinguish inferred experience from truly missing experience.
+- Options shows a small review prompt near parsed experience entries.
+
 ## Possible Next Work
 
 - Add safe merge/replace import after another review pass.
 - Continue real browser QA fixes as they appear.
 - Add better application form fixtures.
+- Continue improving resume parsing for unusual layouts after real browser QA.
 - Add visible search-result extraction for controlled fake fixtures and current-page only.
 - Add richer application session history.
 - Add optional site permission management.
