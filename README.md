@@ -12,6 +12,14 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. Site Permission And Command Reliability Fixes
+
+- Added clearer page checks before job analysis, field analysis, and approved filling.
+- Added a current-site permission request flow instead of relying on broad default host access.
+- Improved messages for restricted browser pages, missing site permission, and injection failures.
+- Prevented failed analysis commands from saving empty job or application session records.
+- No change to local-first privacy, no auto-submit, or manual review rules.
+
 ### 2026-05-22. Browser QA Styling And Parser Fixes
 
 - Made shared styles load deterministically from the built Chrome extension output.

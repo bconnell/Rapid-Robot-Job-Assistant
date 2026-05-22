@@ -23,6 +23,7 @@ Batch 1 includes unit tests for:
 - Education parsing with degree, school, dates, and honors
 - Build output validation for shared stylesheet links in popup, side panel, and Options
 - Fake regression coverage for glued education text, school-first education text, and certification section boundaries
+- Active tab permission preflight, restricted URL detection, and current-origin permission patterns
 
 ## Fixtures
 
@@ -68,6 +69,24 @@ Manual checks should cover:
 19. Save notes.
 20. Clear local data.
 21. Confirm no private files appear in git status.
+
+## Site Permission QA
+
+1. Build extension.
+2. Load `dist` folder unpacked in Chrome.
+3. Open `chrome://extensions`.
+4. Click Analyze.
+5. Confirm the extension says Chrome blocks internal pages.
+6. Open a normal job page or test page.
+7. Click Analyze.
+8. If permission is needed, click **Allow This Site**.
+9. Retry Analyze Job Page.
+10. Retry Analyze Fields.
+11. Confirm no empty job or session is saved when permission fails.
+12. Confirm restricted pages do not produce generic command failed messages.
+13. Confirm the page remains styled.
+14. Confirm no submit buttons are clicked.
+15. Confirm no CAPTCHA or bot checks are bypassed.
 
 ## Options UI QA
 

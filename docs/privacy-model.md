@@ -35,6 +35,12 @@ AI is disabled by default. If a provider is configured later, the user must revi
 - API keys
 - Logs
 
+## Site Permissions
+
+Site permission lets the extension inspect the current page for job details, application fields, and approved fill targets when the user asks. The permission request is for the current site origin only, not all sites.
+
+Granting site permission does not submit applications, click CAPTCHA or bot checks, send data to AI, or upload profile data. Page analysis stays local unless the user later reviews and approves an AI request.
+
 ## Clear Data
 
 The options page includes a clear local data control. It clears extension settings and IndexedDB records. It does not touch browser settings, OS settings, downloads, or files outside the extension storage area.

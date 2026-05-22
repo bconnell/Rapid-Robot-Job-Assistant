@@ -61,6 +61,15 @@
 - Experience parsing has regression coverage for hyphen-separated fake roles.
 - Certification parsing has regression coverage to stop before later sections.
 
+## Site Permission And Command Reliability Completed
+
+- Analyze and fill commands preflight the active tab before trying to inject content scripts.
+- Restricted pages now show a clear blocked-page message instead of a generic command failure.
+- Popup and side panel can request current-site permission from a user action.
+- Permission requests use the current origin only, not broad default host access.
+- Failed permission or restricted-page commands do not save empty jobs or application sessions.
+- Injection and content-message failures return safer reload-and-retry guidance.
+
 ## Possible Next Work
 
 - Add safe merge/replace import after another review pass.
@@ -69,5 +78,6 @@
 - Add visible search-result extraction for controlled fake fixtures and current-page only.
 - Add richer application session history.
 - Add optional site permission management.
+- Add a small permissions view for reviewing and removing granted sites.
 - Add stronger manual QA pages for extension testing.
 - Add controlled browser QA fixtures.

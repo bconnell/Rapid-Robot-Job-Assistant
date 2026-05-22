@@ -47,6 +47,10 @@ npm run format
 
 If Chrome does not load the extension or a page appears unstyled, run `npm run build` again and reload `dist`. If a page command fails, make sure the active tab is an `http` or `https` page and run the action from a user gesture.
 
+Analyze and fill commands only run on normal `http` and `https` pages. Chrome blocks extensions from internal pages such as `chrome://extensions`, extension pages, browser settings pages, local files, and Chrome Web Store pages.
+
+When a normal site needs access, the popup and side panel show **Allow This Site**. That requests only the current origin, such as `https://example.com/*`. If permission is granted but analysis still fails, reload the page and try the command again.
+
 ## Local Workflow Check
 
 Use Options to import a fake pasted resume or `.docx`, save the profile, then use the side panel to analyze a job page and an application form. Fill only approved fields. The extension does not submit applications.

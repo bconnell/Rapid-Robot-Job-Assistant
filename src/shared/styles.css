@@ -48,6 +48,11 @@ button {
   font-weight: 700;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 button.secondary {
   color: var(--text);
   background: var(--panel-2);

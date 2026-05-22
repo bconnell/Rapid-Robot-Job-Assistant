@@ -3,6 +3,11 @@ import type { ApplicationSession } from '../shared/models/ApplicationSession';
 import type { FillPreviewItem, FillResult } from '../shared/models/FieldMapping';
 import type { JobPosting } from '../shared/models/JobPosting';
 import type { UserProfile } from '../shared/models/UserProfile';
+import type {
+  ExtensionCommandResult,
+  PermissionRequestResult
+} from '../shared/extension/ExtensionMessaging';
+import type { TabCapabilityResult } from '../shared/extension/TabPermissions';
 import { approveSafeHighConfidence, clearApprovals } from '../shared/fill/FillApprovalRules';
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
 import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
@@ -26,10 +31,21 @@ export function SidePanelApp() {
   const [verification, setVerification] = useState('No manual verification detected.');
   const [status, setStatus] = useState('Open a job or application page, then analyze when ready.');
   const [notes, setNotes] = useState('');
+  const [pageStatus, setPageStatus] = useState<TabCapabilityResult>();
 
   useEffect(() => {
     void loadActiveProfile();
+    void loadTabStatus();
   }, []);
+
+  async function loadTabStatus() {
+    const result = (await chrome.runtime.sendMessage({
+      command: 'GET_CURRENT_TAB_STATUS'
+    })) as ExtensionCommandResult<TabCapabilityResult>;
+    const nextStatus = result.data ?? result.response;
+    setPageStatus(nextStatus);
+    if (nextStatus && !nextStatus.ok) setStatus(nextStatus.userMessage);
+  }
 
   async function loadActiveProfile() {
     const id = await settingsRepo.getActiveProfileId();
@@ -39,8 +55,15 @@ export function SidePanelApp() {
   }
 
   async function analyzeJob() {
-    const result = await chrome.runtime.sendMessage({ command: 'ANALYZE_CURRENT_JOB_PAGE' });
-    const analyzed = result.response?.job as JobPosting | undefined;
+    const result = (await chrome.runtime.sendMessage({
+      command: 'ANALYZE_CURRENT_JOB_PAGE'
+    })) as ExtensionCommandResult<{ job?: JobPosting; verification?: { detected?: boolean } }>;
+    if (!result.ok) {
+      await handleCommandFailure(result);
+      return;
+    }
+    const response = result.data ?? result.response;
+    const analyzed = response?.job;
     if (!analyzed) {
       setStatus('No job data returned from the current page.');
       return;
@@ -48,7 +71,7 @@ export function SidePanelApp() {
     const saved = await jobRepo.saveOrUpdate({ ...analyzed, status: 'saved' });
     setJob(saved.job);
     setVerification(
-      result.response?.verification?.detected
+      response?.verification?.detected
         ? 'Manual verification required.'
         : 'No manual verification detected.'
     );
@@ -60,10 +83,24 @@ export function SidePanelApp() {
   }
 
   async function analyzeFields() {
-    const result = await chrome.runtime.sendMessage({ command: 'ANALYZE_APPLICATION_FIELDS' });
-    const response = result.response;
+    const result = (await chrome.runtime.sendMessage({
+      command: 'ANALYZE_APPLICATION_FIELDS'
+    })) as ExtensionCommandResult<{
+      pageUrl?: string;
+      mappings?: Parameters<typeof buildFillPreview>[0];
+      verification?: { detected?: boolean };
+    }>;
+    if (!result.ok) {
+      await handleCommandFailure(result);
+      return;
+    }
+    const response = result.data ?? result.response;
+    if (!response?.pageUrl) {
+      setStatus('No field data returned from the current page.');
+      return;
+    }
     const nextPreview = buildFillPreview(response?.mappings ?? [], profile);
-    const pageUrl = response?.pageUrl ?? job?.sourceUrl ?? 'unknown-page';
+    const pageUrl = response.pageUrl;
     const existing = await sessionRepo.findByPageUrl(pageUrl);
     const now = new Date().toISOString();
     const nextSession: ApplicationSession = {
@@ -98,17 +135,25 @@ export function SidePanelApp() {
       setStatus('Approve at least one safe field before filling.');
       return;
     }
-    const result = await chrome.runtime.sendMessage({
+    const result = (await chrome.runtime.sendMessage({
       command: 'FILL_APPROVED_FIELDS',
       payload: preview
-    });
-    if (result.response?.verification?.detected) {
+    })) as ExtensionCommandResult<{
+      verification?: { detected?: boolean };
+      results?: FillResult[];
+    }>;
+    if (!result.ok) {
+      await handleCommandFailure(result);
+      return;
+    }
+    const response = result.data ?? result.response;
+    if (response?.verification?.detected) {
       setVerification('Manual verification required. Filling paused.');
       setStatus('CAPTCHA or bot check detected. Finish it manually, then analyze fields again.');
       await saveSession({ manualVerificationRequired: true, status: 'manual-verification' });
       return;
     }
-    const results = (result.response?.results ?? []) as FillResult[];
+    const results = response?.results ?? [];
     const nextPreview = preview.map((item) => {
       const fillResult = results.find(
         (candidate) => candidate.selector === item.candidate.selector
@@ -121,6 +166,26 @@ export function SidePanelApp() {
     setFillResults(results);
     await saveSession({ fieldPreview: nextPreview, fillResults: results, status: 'filled' });
     setStatus('Fill finished. Review the page before submitting anything yourself.');
+  }
+
+  async function requestSitePermission() {
+    const result = (await chrome.runtime.sendMessage({
+      command: 'REQUEST_CURRENT_SITE_PERMISSION'
+    })) as ExtensionCommandResult<PermissionRequestResult>;
+    setStatus(
+      result.data?.userMessage ??
+        result.userMessage ??
+        'Permission was not granted. Analysis cannot run on this site until permission is allowed.'
+    );
+    await loadTabStatus();
+  }
+
+  async function handleCommandFailure(result: ExtensionCommandResult) {
+    setStatus(result.userMessage ?? result.error ?? 'The command could not run on this page.');
+    if (result.needsPermission) {
+      setVerification('Site permission required before analysis can run.');
+    }
+    await loadTabStatus();
   }
 
   async function saveNotes() {
@@ -165,6 +230,9 @@ export function SidePanelApp() {
     );
   }
 
+  const needsPermission = Boolean(pageStatus?.needsPermission && pageStatus.canRequestPermission);
+  const blockedPage = pageStatus ? !pageStatus.ok : false;
+
   return (
     <main className="app stack">
       <section className="hero">
@@ -175,9 +243,15 @@ export function SidePanelApp() {
             ? `Active profile: ${profile.contact.fullName ?? profile.contact.email ?? 'Saved profile'}`
             : 'No active profile selected.'}
         </p>
+        <p className={pageStatus?.ok ? 'ok' : needsPermission ? 'warn' : 'muted'}>
+          {pageStatus?.userMessage ?? 'Current page status will appear here.'}
+        </p>
         <div className="row">
-          <button onClick={analyzeJob}>Analyze Job Page</button>
-          <button className="secondary" onClick={analyzeFields}>
+          {needsPermission && <button onClick={requestSitePermission}>Allow This Site</button>}
+          <button disabled={blockedPage} onClick={analyzeJob}>
+            Analyze Job Page
+          </button>
+          <button className="secondary" disabled={blockedPage} onClick={analyzeFields}>
             Analyze Fields
           </button>
           <button
@@ -189,7 +263,9 @@ export function SidePanelApp() {
           <button className="secondary" onClick={() => setPreview(clearApprovals(preview))}>
             Clear Approvals
           </button>
-          <button onClick={fillApproved}>Fill Approved Fields</button>
+          <button disabled={blockedPage} onClick={fillApproved}>
+            Fill Approved Fields
+          </button>
         </div>
       </section>
 
