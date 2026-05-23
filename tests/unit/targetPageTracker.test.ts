@@ -28,7 +28,7 @@ describe('TargetPageTracker', () => {
     expect(isRememberableTab({ id: 4, url: 'https://careers.example.com/apply/123' })).toBe(true);
   });
 
-  it('builds no target for workspace tab fallback pages', () => {
+  it('builds no target for assistant tab fallback pages', () => {
     expect(
       buildTargetPage({ id: 5, url: 'chrome-extension://fake/sidepanel/sidepanel.html' })
     ).toBeUndefined();

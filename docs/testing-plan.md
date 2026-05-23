@@ -2,7 +2,7 @@
 
 ## Unit Tests
 
-Batch 1 includes unit tests for:
+Current unit and regression coverage includes:
 
 - Resume section parsing
 - Redaction
@@ -29,8 +29,11 @@ Batch 1 includes unit tests for:
 - Field mapping false-positive prevention, manual-only rules, sensitive direct-review rules, and page-level analysis summary counts
 - Approved-only filling for React-style text inputs, native selects, radio groups, checkbox groups, and unsafe/manual-only fields
 - Content script readiness checks, PING messaging, content-message failure classification, tab-change detection, and standalone content-script build validation
-- Guided workflow state, profile-ready labels, workspace fallback behavior, and target-page tracking guards
+- Guided workflow state, profile-ready labels, assistant fallback behavior, and target-page tracking guards
 - Assistant open fallback, target-page expiration, and compact workflow helper behavior
+- Browser compatibility detection for Chrome, Brave, Edge, Chromium, and unknown browsers
+- In-page assistant open, restore, minimize, close, safety copy, and no-duplicate behavior
+- Workflow simulation coverage for partial failure states
 
 ## Fixtures
 
@@ -170,6 +173,47 @@ Manual checks should cover:
 21. Confirm the final message says to review and submit manually.
 22. Confirm no submit, next, CAPTCHA, login, or apply buttons are clicked.
 23. Confirm no private files appear in git status.
+
+## In-Page Assistant QA
+
+1. Run `npm run build`.
+2. Reload the unpacked extension from `dist`.
+3. Close stale assistant tabs.
+4. Open a normal job page.
+5. Open the popup.
+6. Confirm the primary action says **Open Assistant On This Page**.
+7. Click **Open Assistant On This Page**.
+8. Confirm the floating in-page assistant appears on the job page.
+9. Confirm it has close and minimize controls.
+10. Confirm it does not cover the whole page.
+11. Confirm it does not show an irrelevant non-web-page warning.
+12. Analyze Job.
+13. Confirm the next step is clear.
+14. Open or scroll to the application form.
+15. Analyze Fields.
+16. Confirm field summary appears.
+17. Confirm profile missing only blocks fill-related steps.
+18. Import or review profile if needed.
+19. Approve safe fields.
+20. Fill approved fields.
+21. Confirm no submit, next, login, CAPTCHA, apply, or bot-check controls are clicked.
+22. Confirm no private files appear in git status.
+
+## Browser Compatibility QA
+
+1. Test Chrome as the primary target.
+2. If Brave is available, test with Shields in their normal state.
+3. Confirm Brave guidance appears only when fields, iframes, or form content are missing.
+4. Confirm the extension never suggests bypassing Shields, CAPTCHA, or bot checks.
+5. If Edge or another Chromium browser is available, confirm the in-page assistant works without relying on side panel support.
+6. Confirm the full assistant tab explains that live work is best from the job or application page.
+
+## Public Repo Wording QA
+
+1. Search current content for public-facing development-tool or transcript-style wording.
+2. Confirm current docs do not contain internal process wording.
+3. Confirm commit messages are professional and product-focused.
+4. Confirm AI is discussed only as an optional product feature.
 
 ## Guided Workflow Target QA
 

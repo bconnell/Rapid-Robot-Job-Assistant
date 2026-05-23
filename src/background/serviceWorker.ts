@@ -11,6 +11,14 @@ import type {
   ExtensionCommandResult,
   OpenAssistantResult
 } from '../shared/extension/ExtensionMessaging';
+import type { ApplicationSession } from '../shared/models/ApplicationSession';
+import type { JobPosting } from '../shared/models/JobPosting';
+import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
+import {
+  ApplicationSessionRepository,
+  JobPostingRepository,
+  ProfileRepository
+} from '../shared/storage/TypedRepositories';
 import {
   buildTargetPage,
   rememberCurrentAnalyzableTab,
@@ -26,6 +34,10 @@ import {
 import { Logger } from '../shared/utils/Logger';
 
 const logger = new Logger('service-worker');
+const settingsRepo = new ChromeStorageRepository();
+const profileRepo = new ProfileRepository();
+const jobRepo = new JobPostingRepository();
+const sessionRepo = new ApplicationSessionRepository();
 
 chrome.runtime.onInstalled.addListener(() => {
   logger.info('Installed with local-first defaults.');
@@ -57,6 +69,104 @@ async function handleMessage(
       response: result,
       userMessage: result.userMessage,
       reason: result.reason
+    };
+  }
+
+  if (message.command === 'OPEN_IN_PAGE_ASSISTANT') {
+    return sendToActiveContent('OPEN_IN_PAGE_ASSISTANT');
+  }
+
+  if (message.command === 'OPEN_OPTIONS') {
+    chrome.runtime.openOptionsPage();
+    return { ok: true, userMessage: 'Options opened.', reason: 'options-opened' };
+  }
+
+  if (message.command === 'GET_ACTIVE_PROFILE') {
+    const profileId = await settingsRepo.getActiveProfileId();
+    const profile = profileId ? await profileRepo.get(profileId) : undefined;
+    return {
+      ok: true,
+      data: profile,
+      response: profile,
+      userMessage: profile ? 'Active profile loaded.' : 'No active profile saved.',
+      reason: profile ? 'active-profile-loaded' : 'active-profile-missing'
+    };
+  }
+
+  if (message.command === 'SAVE_ANALYZED_JOB') {
+    const job = message.payload as JobPosting | undefined;
+    if (!job?.id) return { ok: false, userMessage: 'No job data was available to save.' };
+    const saved = await jobRepo.saveOrUpdate({ ...job, status: 'saved' });
+    return {
+      ok: true,
+      data: saved.job,
+      response: saved.job,
+      userMessage: saved.created ? 'Job saved locally.' : 'Saved job updated.',
+      reason: saved.created ? 'job-saved' : 'job-updated'
+    };
+  }
+
+  if (message.command === 'SAVE_APPLICATION_SESSION') {
+    const payload = message.payload as Partial<ApplicationSession> | undefined;
+    if (!payload?.pageUrl) {
+      return { ok: false, userMessage: 'No application page was available to save.' };
+    }
+    const existing = await sessionRepo.findByPageUrl(payload.pageUrl);
+    const now = new Date().toISOString();
+    const session: ApplicationSession = {
+      id: existing?.id ?? crypto.randomUUID(),
+      pageUrl: payload.pageUrl,
+      startedAt: existing?.startedAt ?? now,
+      updatedAt: now,
+      fieldPreview: payload.fieldPreview ?? existing?.fieldPreview ?? [],
+      fillResults: payload.fillResults ?? existing?.fillResults ?? [],
+      manualVerificationRequired:
+        payload.manualVerificationRequired ?? existing?.manualVerificationRequired ?? false,
+      notes: payload.notes ?? existing?.notes ?? '',
+      status: payload.status ?? existing?.status ?? 'draft',
+      submittedByUser: payload.submittedByUser ?? existing?.submittedByUser ?? false,
+      job: payload.job ?? existing?.job,
+      jobPostingId: payload.jobPostingId ?? existing?.jobPostingId
+    };
+    await sessionRepo.save(session);
+    return {
+      ok: true,
+      data: session,
+      response: session,
+      userMessage: 'Application session saved locally.',
+      reason: 'application-session-saved'
+    };
+  }
+
+  if (message.command === 'GET_RECENT_SESSION_FOR_PAGE') {
+    const pageUrl = (message.payload as { pageUrl?: string } | undefined)?.pageUrl;
+    const session = pageUrl ? await sessionRepo.findByPageUrl(pageUrl) : undefined;
+    return {
+      ok: true,
+      data: session,
+      response: session,
+      userMessage: session ? 'Application session loaded.' : 'No saved session for this page.',
+      reason: session ? 'application-session-loaded' : 'application-session-missing'
+    };
+  }
+
+  if (message.command === 'SAVE_APPLICATION_NOTES') {
+    const payload = message.payload as { pageUrl?: string; notes?: string } | undefined;
+    if (!payload?.pageUrl) return { ok: false, userMessage: 'No application page was selected.' };
+    const existing = await sessionRepo.findByPageUrl(payload.pageUrl);
+    if (!existing) return { ok: false, userMessage: 'No saved application session found.' };
+    const updated = {
+      ...existing,
+      notes: payload.notes ?? '',
+      updatedAt: new Date().toISOString()
+    };
+    await sessionRepo.save(updated);
+    return {
+      ok: true,
+      data: updated,
+      response: updated,
+      userMessage: 'Application notes saved locally.',
+      reason: 'application-notes-saved'
     };
   }
 
@@ -167,10 +277,13 @@ async function sendToActiveContent(
       ok: true,
       data: response,
       response,
-      userMessage: 'Command completed.',
+      userMessage:
+        command === 'OPEN_IN_PAGE_ASSISTANT'
+          ? 'Assistant opened on this page.'
+          : 'Command completed.',
       tabUrl: capability.url,
       originPattern: capability.originPattern,
-      reason: 'completed'
+      reason: command === 'OPEN_IN_PAGE_ASSISTANT' ? 'in-page-assistant-opened' : 'completed'
     };
   } catch (error) {
     const currentTab = await getActiveTab();
@@ -333,7 +446,7 @@ async function getTabCapability(): Promise<TabCapabilityResult> {
       tabId: tab.id,
       url: tab.url,
       reason: 'unsupported-url',
-      userMessage: 'The assistant tab needs a target job or application page.',
+      userMessage: 'Open a job or application page and start the assistant from there.',
       canAnalyzeWithActiveTab: false,
       canRequestPermission: false,
       hasPersistentPermission: false,

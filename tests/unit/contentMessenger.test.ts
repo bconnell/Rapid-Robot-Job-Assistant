@@ -8,6 +8,17 @@ describe('content messaging', () => {
     expect(command).toBe('PING_CONTENT_SCRIPT');
   });
 
+  it('includes user-triggered in-page assistant commands', () => {
+    const commands: ContentCommand[] = [
+      'OPEN_IN_PAGE_ASSISTANT',
+      'CLOSE_IN_PAGE_ASSISTANT',
+      'TOGGLE_IN_PAGE_ASSISTANT',
+      'IN_PAGE_ASSISTANT_STATUS'
+    ];
+
+    expect(commands).toContain('OPEN_IN_PAGE_ASSISTANT');
+  });
+
   it('responds to ping without page text or form values', () => {
     window.history.pushState({}, '', '/fake-application');
     document.body.innerHTML = `

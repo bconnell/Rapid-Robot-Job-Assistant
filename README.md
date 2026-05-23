@@ -12,10 +12,20 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. In-Page Assistant And Browser Compatibility
+
+- Added a user-triggered in-page assistant as the primary live workflow.
+- Kept the side panel and full assistant tab as optional or fallback surfaces.
+- Added browser compatibility detection for Chrome, Brave, Edge, and Chromium browsers.
+- Added Brave Shields-aware guidance without bypassing browser protections.
+- Added simulated workflow coverage for partial failure states.
+- Cleaned internal workflow wording from public docs.
+- No change to local-first privacy, no-auto-submit, CAPTCHA boundaries, or manual review rules.
+
 ### 2026-05-22. Usability Rescue And Local Data Clarity
 
 - Simplified popup actions around one **Open Assistant** path.
-- Replaced confusing workspace labels with assistant labels in the main UI.
+- Replaced confusing older labels with assistant labels in the main UI.
 - Made **Open Assistant** fall back to a full assistant tab when Chrome does not open the side panel.
 - Moved **Allow This Site** into the top action area when it is useful.
 - Reduced duplicate workflow controls and clarified local data persistence and deletion.
@@ -23,18 +33,18 @@ Newest changes are listed first.
 
 ### 2026-05-22. Guided Workflow Polish And Target Page Fixes
 
-- Fixed workspace tab target-page handling so the workspace does not analyze itself.
-- Made the workspace tab fallback clearer when no target page is selected.
-- Reduced duplicate guidance and made popup/workspace actions more compact.
+- Fixed assistant tab target-page handling so the assistant does not analyze itself.
+- Made the assistant tab fallback clearer when no target page is selected.
+- Reduced duplicate guidance and made popup/assistant actions more compact.
 - Clarified that a profile is needed before filling, not before job analysis.
 - No change to local-first privacy, no-auto-submit, CAPTCHA boundaries, or manual review rules.
 
 ### 2026-05-22. Guided Workflow And Workspace Reliability
 
 - Added a guided popup workflow with clearer current-page, profile-ready, and next-step indicators.
-- Reworked the side panel into a step-based workspace instead of one row of actions.
-- Added specific side panel failure handling and a workspace tab fallback.
-- Improved active page targeting so workspace commands do not analyze extension pages by accident.
+- Reworked the side panel into a step-based assistant instead of one row of actions.
+- Added specific side panel failure handling and a full assistant tab fallback.
+- Improved active page targeting so assistant commands do not analyze extension pages by accident.
 - De-emphasized profile import once a profile exists and changed the action to Review profile.
 - No change to local-first privacy, no-auto-submit, CAPTCHA boundaries, or manual review rules.
 

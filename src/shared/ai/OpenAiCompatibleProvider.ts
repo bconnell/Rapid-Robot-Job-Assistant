@@ -17,7 +17,7 @@ export class OpenAiCompatibleProvider implements AiProvider {
     }
     return {
       text: '',
-      warnings: ['Network AI calls are scaffolded for Batch 1 and intentionally not executed yet.']
+      warnings: ['Network AI calls are scaffolded and intentionally not executed yet.']
     };
   }
 }

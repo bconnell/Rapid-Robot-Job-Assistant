@@ -10,6 +10,12 @@ import type {
 import { requestCurrentSitePermissionFromUi } from '../shared/extension/PermissionRequestClient';
 import type { TabCapabilityResult } from '../shared/extension/TabPermissions';
 import { canOfferSitePermission, canRunPageCommand } from '../shared/extension/TabPermissions';
+import {
+  browserLabel,
+  detectBrowserCompatibility,
+  getBraveShieldsGuidance,
+  type BrowserCompatibility
+} from '../shared/extension/BrowserCompatibility';
 import { approveSafeHighConfidence, clearApprovals } from '../shared/fill/FillApprovalRules';
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
 import {
@@ -54,10 +60,12 @@ export function SidePanelApp() {
   const [pageStatus, setPageStatus] = useState<TabCapabilityResult>();
   const [fieldSummary, setFieldSummary] = useState<FieldAnalysisSummary>();
   const [pageWarnings, setPageWarnings] = useState<string[]>([]);
+  const [browser, setBrowser] = useState<BrowserCompatibility>();
 
   useEffect(() => {
     void loadActiveProfile();
     void loadTabStatus();
+    void detectBrowserCompatibility().then(setBrowser);
   }, []);
 
   async function loadTabStatus() {
@@ -128,6 +136,15 @@ export function SidePanelApp() {
     const nextWarnings = [...(response.warnings ?? []), ...(response.iframeWarnings ?? [])].filter(
       (warning, index, all) => all.indexOf(warning) === index
     );
+    const shieldsGuidance = getBraveShieldsGuidance({
+      browserName: browser?.browserName ?? 'unknown',
+      fieldCount: response.fieldCount ?? nextPreview.length,
+      iframeWarnings: response.iframeWarnings,
+      formDetectionFailed: (response.fieldCount ?? nextPreview.length) === 0
+    });
+    if (shieldsGuidance && !nextWarnings.includes(shieldsGuidance)) {
+      nextWarnings.push(shieldsGuidance);
+    }
     const nextSummary = {
       fieldCount: response.fieldCount ?? nextPreview.length,
       fillableCount: response.fillableCount ?? nextPreview.filter((item) => item.fillable).length,
@@ -350,6 +367,37 @@ export function SidePanelApp() {
         {pageWarnings.map((warning) => (
           <p className="warn" key={warning}>
             {warning}
+          </p>
+        ))}
+      </section>
+
+      {!pageStatus?.ok && pageStatus?.userMessage.includes('assistant tab') && (
+        <section className="card stack">
+          <h2>Live Page Work</h2>
+          <p>
+            Live page actions work best from the job or application page. Open that page, click the
+            extension, and choose <strong>Open Assistant On This Page</strong>.
+          </p>
+          <div className="row">
+            <button className="secondary" onClick={() => chrome.runtime.openOptionsPage()}>
+              Review Profile
+            </button>
+          </div>
+        </section>
+      )}
+
+      <section className="card stack">
+        <h2>Diagnostics</h2>
+        <div className="row">
+          <span className="pill">
+            Browser: {browser ? browserLabel(browser.browserName) : 'Detecting'}
+          </span>
+          <span className="pill">Main surface: In-page assistant</span>
+          <span className="pill">Side panel: {browser?.sidePanelReliability ?? 'optional'}</span>
+        </div>
+        {browser?.compatibilityNotes.map((note) => (
+          <p className="muted" key={note}>
+            {note}
           </p>
         ))}
       </section>

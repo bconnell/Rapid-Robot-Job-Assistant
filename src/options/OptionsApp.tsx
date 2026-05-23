@@ -22,6 +22,11 @@ import { createSavedSearch, markSavedSearchChecked } from '../shared/jobs/SavedS
 import { createLocalDataExport, validateLocalDataImport } from '../shared/data/LocalDataTransfer';
 import { clearTargetTab } from '../shared/extension/TargetPageTracker';
 import {
+  browserLabel,
+  detectBrowserCompatibility,
+  type BrowserCompatibility
+} from '../shared/extension/BrowserCompatibility';
+import {
   emptyUserProfile,
   type ProfileEducation,
   type ProfileExperience,
@@ -54,9 +59,11 @@ export function OptionsApp() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [parseSummary, setParseSummary] = useState<ResumeParseSummary | undefined>();
   const [importPreview, setImportPreview] = useState('');
+  const [browser, setBrowser] = useState<BrowserCompatibility>();
 
   useEffect(() => {
     void loadOptions();
+    void detectBrowserCompatibility().then(setBrowser);
   }, []);
 
   async function loadOptions() {
@@ -214,7 +221,7 @@ export function OptionsApp() {
       );
       setStatus(
         preview.valid
-          ? 'Import preview validated. Merge import is still manual in Batch 2.'
+          ? 'Import preview validated. Merge import still needs a separate review step.'
           : 'Import file did not validate.'
       );
     } catch {
@@ -323,10 +330,31 @@ export function OptionsApp() {
             onClearSavedProfiles={clearSavedProfiles}
             onClearLocalData={clearLocalData}
           />
+          <BrowserDiagnosticsPanel browser={browser} />
           <DocsPanel />
         </aside>
       </section>
     </main>
+  );
+}
+
+function BrowserDiagnosticsPanel({ browser }: { browser?: BrowserCompatibility }) {
+  return (
+    <section className="card stack options-card compact-card">
+      <h2>Browser Diagnostics</h2>
+      <div className="row">
+        <span className="pill">
+          Browser: {browser ? browserLabel(browser.browserName) : 'Detecting'}
+        </span>
+        <span className="pill">Main surface: In-page assistant</span>
+        <span className="pill">Side panel: {browser?.sidePanelReliability ?? 'optional'}</span>
+      </div>
+      {browser?.compatibilityNotes.map((note) => (
+        <p className="muted" key={note}>
+          {note}
+        </p>
+      ))}
+    </section>
   );
 }
 
@@ -773,6 +801,11 @@ function DocsPanel() {
       'Profile import through reviewed field fill.'
     ],
     ['Privacy model', '../docs/privacy-model.md', 'What stays local and what export contains.'],
+    [
+      'Browser compatibility',
+      '../docs/browser-compatibility.md',
+      'Chrome, Brave, Edge, and Chromium notes.'
+    ],
     ['Local development', '../docs/local-development.md', 'Build, test, and load the extension.']
   ];
   return (

@@ -22,7 +22,7 @@
 - Field filling avoids file uploads and navigation.
 - Custom widgets are detected but manual-only. The extension does not click custom dropdowns.
 - Cross-origin iframe forms are not inspected. Users may need to open the frame directly or fill it manually.
-- Import is validation-preview only in Batch 2.
+- Import is validation-preview only. Merge/replace import still needs another review pass.
 - AI provider network calls are scaffolded but intentionally not executed.
 - Resume parsing is improved but still review-first. Users should verify every parsed field.
 - Experience fallback parsing is conservative. Inferred entries should be checked and corrected.
@@ -87,7 +87,7 @@
 - `.docx` text normalization splits additional experience-style headings when they are glued to nearby sections.
 - Conservative fallback parsing can infer experience-like blocks when a clear experience section was not detected.
 - Parser warnings now distinguish inferred experience from truly missing experience.
-- Options shows a small review prompt near parsed experience entries.
+- Options shows a small review note near parsed experience entries.
 
 ## Application Form Detection And Fill Reliability Completed
 
@@ -111,14 +111,14 @@
 - Popup now shows page readiness, profile readiness, a recommended next step, and a compact workflow list.
 - Profile import is no longer presented as the main task once a profile exists.
 - Side panel actions are grouped into workflow steps instead of one crowded action row.
-- Side panel open failures return specific messages and the workspace can open as a normal extension tab.
-- Target page tracking helps workspace commands avoid analyzing extension pages by accident.
+- Side panel open failures return specific messages and the assistant can open as a normal extension tab.
+- Target page tracking helps assistant commands avoid analyzing extension pages by accident.
 
 ## Guided Workflow Polish And Target Page Fixes Completed
 
-- Workspace tab opening now remembers the current normal job or application page before opening the extension tab.
-- Workspace target status now distinguishes a missing target page from a blocked current tab.
-- Popup and workspace copy now says a profile is needed before filling, not before job analysis.
+- Assistant tab opening now remembers the current normal job or application page before opening the extension tab.
+- Assistant target status now distinguishes a missing target page from a blocked current tab.
+- Popup and assistant copy now says a profile is needed before filling, not before job analysis.
 - Workflow rows are more compact so the recommended action stays near the top.
 - Duplicate profile guidance was removed from the popup.
 
@@ -129,6 +129,14 @@
 - **Allow This Site** appears in the top action area when it may help.
 - Assistant controls show the current task instead of repeating every workflow action at once.
 - Options documents local persistence and adds focused cleanup controls for target page, searches, jobs/sessions, profiles, and all local data.
+
+## In-Page Assistant And Browser Compatibility Completed
+
+- The primary live workflow now opens a user-triggered in-page assistant on the job or application page.
+- Side panel and full assistant tab remain optional surfaces for saved data, diagnostics, and fallback guidance.
+- Browser compatibility detection covers Chrome, Brave, Edge, Chromium, and unknown browsers.
+- Brave Shields-aware guidance appears only when form analysis suggests blocked or missing page content.
+- Workflow simulation tests cover partial failure states and keep next actions specific.
 
 ## Possible Next Work
 

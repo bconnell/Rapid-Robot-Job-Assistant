@@ -5,6 +5,12 @@ import { detectApplicationIframeWarnings, detectFormFields } from './formDetecto
 import { mapFieldCandidates } from './fieldMapper';
 import { fillApprovedFields } from './formFiller';
 import type { ContentMessage, ContentPingResponse } from './contentMessenger';
+import {
+  closeInPageAssistant,
+  getInPageAssistantStatus,
+  openInPageAssistant,
+  toggleInPageAssistant
+} from './inPageAssistant/InPageAssistantController';
 
 declare global {
   // Repeated executeScript calls should not register duplicate listeners.
@@ -63,6 +69,22 @@ if (globalThis.chrome?.runtime?.onMessage && !globalThis.__rapidRobotJobAssistan
     (message: ContentMessage<FillPreviewItem[]>, _sender, sendResponse) => {
       if (message.command === 'PING_CONTENT_SCRIPT') {
         sendResponse(pingContentScript());
+        return true;
+      }
+      if (message.command === 'OPEN_IN_PAGE_ASSISTANT') {
+        void openInPageAssistant().then(sendResponse);
+        return true;
+      }
+      if (message.command === 'CLOSE_IN_PAGE_ASSISTANT') {
+        sendResponse(closeInPageAssistant());
+        return true;
+      }
+      if (message.command === 'TOGGLE_IN_PAGE_ASSISTANT') {
+        void toggleInPageAssistant().then(sendResponse);
+        return true;
+      }
+      if (message.command === 'IN_PAGE_ASSISTANT_STATUS') {
+        sendResponse(getInPageAssistantStatus());
         return true;
       }
       if (message.command === 'ANALYZE_JOB_PAGE') {

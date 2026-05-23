@@ -34,6 +34,8 @@ Saved profiles, resume-derived profile fields, saved jobs, application sessions,
 
 AI is disabled by default. If a provider is configured later, the user must review what would be sent before any request leaves the browser. Redaction is applied where possible, but review is still required.
 
+No resume data, job page text, application answers, field values, or provider requests are uploaded to AI providers by default. There are no background AI calls.
+
 ## Never Sent Automatically
 
 - Resume text
@@ -53,6 +55,12 @@ The extension uses `activeTab` for one-off analysis from user-triggered buttons 
 Optional persistent site permission is a fallback for pages where Chrome blocks one-off script injection, or a convenience for smoother access. The permission request is for the current site origin only, not all sites.
 
 Granting site permission does not submit applications, click CAPTCHA or bot checks, send data to AI, or upload profile data. Page analysis remains user-triggered and stays local unless the user later reviews and approves an AI request.
+
+## In-Page Assistant
+
+The in-page assistant is user-triggered. It does not run automatically on page load. It creates only its own branded extension UI on the current page and can be closed or minimized.
+
+The in-page assistant does not send data externally, does not store raw page HTML, does not store uploaded `.docx` blobs, and does not bypass browser protections. Brave Shields and other browser privacy features are not changed by the extension.
 
 ## Target Page Tracking
 
@@ -82,7 +90,7 @@ Resume parsing is local and review-first. The parser normalizes text, detects se
 
 Export creates `rapid-robot-job-assistant-export.json`. It can contain private profile, resume-derived, job, saved search, and application session data. Do not commit exported files.
 
-Import validates JSON shape and shows preview counts in Batch 2. It does not merge records yet. API endpoints and keys are not imported or exported.
+Import validates JSON shape and shows preview counts. It does not merge records yet. API endpoints and keys are not imported or exported.
 
 ## Public Repo Rule
 

@@ -11,7 +11,9 @@ export class OllamaProvider implements AiProvider {
     assertUserApproved('Ollama request', request.approvedByUser);
     return {
       text: '',
-      warnings: [`Ollama endpoint ${this.endpoint || 'not configured'} is scaffolded for Batch 1.`]
+      warnings: [
+        `Ollama endpoint ${this.endpoint || 'not configured'} is scaffolded and not active by default.`
+      ]
     };
   }
 }

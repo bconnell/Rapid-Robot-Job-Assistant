@@ -83,4 +83,12 @@ When **Open Assistant** is clicked from a normal job or application page, the ex
 
 ## Local Workflow Check
 
-Use Options to import a fake pasted resume or `.docx`, save the profile, then use the side panel to analyze a job page and an application form. Fill only approved fields. The extension does not submit applications.
+Use Options to import a fake pasted resume or `.docx`, save the profile, then open a normal job page and choose **Open Assistant On This Page** from the popup. Analyze the job, analyze the form, review values, and fill only approved fields. The extension does not submit applications.
+
+When testing UI changes, close stale assistant tabs, run `npm run build`, reload the unpacked extension from `dist`, and reload the target web page.
+
+## Browser Checks
+
+Chrome is the primary target for this build. If Brave is available, test with Shields in their normal state and confirm the extension only shows guidance when forms or iframes are missing. If Edge or another Chromium browser is available, confirm the in-page assistant works without relying on side panel support.
+
+The build must keep `dist/content/pageAnalyzer.js` standalone. `npm run build` runs the validator that catches top-level imports or asset chunk references in the injected content script.

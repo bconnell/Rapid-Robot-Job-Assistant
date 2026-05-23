@@ -13,7 +13,7 @@ The extension detects common manual verification patterns and pauses.
 - Bot detection
 - Security check
 - MFA
-- One-time passcode prompts
+- One-time passcode requests
 - SMS or email verification
 - Login challenges
 

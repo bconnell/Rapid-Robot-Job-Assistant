@@ -13,7 +13,6 @@ import type { UserProfile } from '../shared/models/UserProfile';
 import {
   buildWorkflowState,
   compactWorkflowSteps,
-  postActionMessage,
   profileActionLabel,
   profileHelperText,
   profileStatusLabel,
@@ -24,8 +23,6 @@ export function PopupApp() {
   const [status, setStatus] = useState<TabCapabilityResult>();
   const [message, setMessage] = useState('Ready. Nothing is submitted automatically.');
   const [profile, setProfile] = useState<UserProfile>();
-  const [jobAnalyzed, setJobAnalyzed] = useState(false);
-  const [fieldsAnalyzed, setFieldsAnalyzed] = useState(false);
 
   useEffect(() => {
     void loadTabStatus();
@@ -46,44 +43,20 @@ export function PopupApp() {
     setProfile(active);
   }
 
-  async function runAnalyzeJob() {
-    const result = (await chrome.runtime.sendMessage({
-      command: 'ANALYZE_CURRENT_JOB_PAGE'
-    })) as ExtensionCommandResult<{ job?: unknown }>;
-    const response = result.data ?? result.response;
-    if (result.ok && response?.job) {
-      setJobAnalyzed(true);
-      setMessage(postActionMessage('job-analyzed', Boolean(profile)));
-    } else if (result.ok) {
-      setMessage('No job data returned from the current page.');
-    } else {
-      setMessage(result.userMessage ?? result.error ?? 'Job analysis could not run.');
-      await loadTabStatus();
-    }
-  }
-
-  async function runAnalyzeFields() {
-    const result = (await chrome.runtime.sendMessage({
-      command: 'ANALYZE_APPLICATION_FIELDS'
-    })) as ExtensionCommandResult<{ pageUrl?: string; mappings?: unknown[] }>;
-    const response = result.data ?? result.response;
-    if (result.ok && (response?.pageUrl || response?.mappings?.length)) {
-      setFieldsAnalyzed(true);
-      setMessage(postActionMessage('fields-analyzed'));
-    } else if (result.ok) {
-      setMessage('No field data returned from the current page.');
-    } else {
-      setMessage(result.userMessage ?? result.error ?? 'Field analysis could not run.');
-      await loadTabStatus();
-    }
-  }
-
   async function openAssistant() {
+    const result = (await chrome.runtime.sendMessage({
+      command: 'OPEN_IN_PAGE_ASSISTANT'
+    })) as ExtensionCommandResult<OpenAssistantResult>;
+    const response = result.data ?? result.response;
+    setMessage(result.userMessage ?? response?.userMessage ?? 'Assistant opened on this page.');
+  }
+
+  async function openFullAssistant() {
     const result = (await chrome.runtime.sendMessage({
       command: 'OPEN_ASSISTANT'
     })) as ExtensionCommandResult<OpenAssistantResult>;
     const response = result.data ?? result.response;
-    setMessage(result.userMessage ?? response?.userMessage ?? 'Assistant opened.');
+    setMessage(result.userMessage ?? response?.userMessage ?? 'Full assistant opened.');
   }
 
   async function requestSitePermission() {
@@ -105,9 +78,7 @@ export function PopupApp() {
   const canOfferPermission = canOfferSitePermission(status);
   const workflow = buildWorkflowState({
     pageStatus: status,
-    profile,
-    job: jobAnalyzed ? ({ id: 'popup-job' } as never) : undefined,
-    preview: fieldsAnalyzed ? ([{ approved: false }] as never) : []
+    profile
   });
   const primaryAction = getPrimaryAction(workflow.currentStepId, canAnalyze);
   const profileHelper = profileHelperText({
@@ -159,8 +130,8 @@ export function PopupApp() {
           {primaryAction.label}
         </button>
         <div className="row">
-          <button className="secondary" onClick={openAssistant}>
-            Open Assistant
+          <button className="secondary" onClick={openFullAssistant}>
+            Open Full Assistant
           </button>
           <button className="secondary" onClick={openProfile}>
             {profileActionLabel(Boolean(profile))}
@@ -197,20 +168,8 @@ export function PopupApp() {
   );
 
   function getPrimaryAction(stepId: string, canRunAnalysis: boolean) {
-    if (stepId === 'analyze-job') {
-      return { label: 'Analyze Job', enabled: canRunAnalysis, run: runAnalyzeJob };
-    }
-    if (stepId === 'profile') {
-      return { label: profileActionLabel(Boolean(profile)), enabled: true, run: openProfile };
-    }
-    if (stepId === 'analyze-fields') {
-      return {
-        label: 'Analyze Fields',
-        enabled: canRunAnalysis,
-        run: runAnalyzeFields
-      };
-    }
-    return { label: 'Open Assistant', enabled: true, run: openAssistant };
+    void stepId;
+    return { label: 'Open Assistant On This Page', enabled: canRunAnalysis, run: openAssistant };
   }
 }
 
