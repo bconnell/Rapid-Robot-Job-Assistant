@@ -98,6 +98,14 @@
 - Approved-only filling handles React-style text inputs, native selects, radio groups, and checkbox groups more safely.
 - Field analysis returns summary counts and iframe warnings for the side panel.
 
+## Content Script Reliability Completed
+
+- `content/pageAnalyzer.js` is built as a standalone injected script instead of depending on shared asset chunks.
+- The service worker pings the content script before analysis and injects it only when needed.
+- A short readiness retry checks that the listener registered before commands are sent.
+- Tab-change, host-access, and content-startup failures now return distinct user-facing messages.
+- Build validation fails if the injected content script regresses to top-level imports or asset chunk references.
+
 ## Possible Next Work
 
 - Add safe merge/replace import after another review pass.

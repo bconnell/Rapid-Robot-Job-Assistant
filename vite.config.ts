@@ -69,7 +69,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         'background/serviceWorker': resolve(__dirname, 'src/background/serviceWorker.ts'),
-        'content/pageAnalyzer': resolve(__dirname, 'src/content/pageAnalyzer.ts'),
         'popup/main': resolve(__dirname, 'src/popup/main.tsx'),
         'sidepanel/main': resolve(__dirname, 'src/sidepanel/main.tsx'),
         'options/main': resolve(__dirname, 'src/options/main.tsx')

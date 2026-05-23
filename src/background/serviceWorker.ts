@@ -1,4 +1,11 @@
 import type { ContentCommand } from '../content/contentMessenger';
+import type { ContentPingResponse } from '../content/contentMessenger';
+import {
+  classifyContentMessageFailure,
+  contentNotReadyMessage,
+  didTabChange,
+  waitForContentReadiness
+} from '../shared/extension/ContentScriptReadiness';
 import type {
   BackgroundMessage,
   ExtensionCommandResult
@@ -89,23 +96,9 @@ async function sendToActiveContent(
     return commandFailureFromCapability(capability);
   }
 
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: capability.tabId },
-      files: ['content/pageAnalyzer.js']
-    });
-  } catch (error) {
-    const classified = classifyInjectionFailure(error);
-    return {
-      ok: false,
-      error: classified.userMessage,
-      userMessage: classified.userMessage,
-      needsPermission: classified.needsPersistentPermission,
-      tabUrl: capability.url,
-      originPattern: capability.originPattern,
-      reason: classified.reason
-    };
-  }
+  const initialTab = { id: capability.tabId, url: capability.url };
+  const ready = await ensureContentScriptReady(capability);
+  if (!ready.ok) return ready;
 
   try {
     const response = await chrome.tabs.sendMessage(capability.tabId, { command, payload });
@@ -118,15 +111,84 @@ async function sendToActiveContent(
       originPattern: capability.originPattern,
       reason: 'completed'
     };
-  } catch {
+  } catch (error) {
+    const currentTab = await getActiveTab();
+    const classified = classifyContentMessageFailure(error, didTabChange(initialTab, currentTab));
     return {
       ok: false,
-      error: 'The page may have changed during analysis. Reload and try again.',
-      userMessage: 'The page may have changed during analysis. Reload and try again.',
+      error: classified.userMessage,
+      userMessage: classified.userMessage,
       tabUrl: capability.url,
       originPattern: capability.originPattern,
-      reason: 'content-message-failed'
+      reason: classified.reason
     };
+  }
+}
+
+async function ensureContentScriptReady(
+  capability: TabCapabilityResult
+): Promise<ExtensionCommandResult> {
+  if (!capability.tabId) return commandFailureFromCapability(capability);
+  const tabId = capability.tabId;
+
+  const initialTab = { id: tabId, url: capability.url };
+  const existingPing = await pingContentScript(tabId);
+  if (existingPing?.ok) return { ok: true, data: existingPing };
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content/pageAnalyzer.js']
+    });
+  } catch (error) {
+    const classified = classifyInjectionFailure(error);
+    return {
+      ok: false,
+      error: classified.userMessage,
+      userMessage:
+        classified.reason === 'host-access-denied'
+          ? 'Chrome blocked page access. Click Allow This Site, reload the page, then retry analysis.'
+          : classified.userMessage,
+      needsPermission: classified.needsPersistentPermission,
+      tabUrl: capability.url,
+      originPattern: capability.originPattern,
+      reason: classified.reason
+    };
+  }
+
+  const currentTab = await getActiveTab();
+  if (didTabChange(initialTab, currentTab)) {
+    return {
+      ok: false,
+      error: 'The active page changed before analysis finished. Open the page and try again.',
+      userMessage: 'The active page changed before analysis finished. Open the page and try again.',
+      tabUrl: capability.url,
+      originPattern: capability.originPattern,
+      reason: 'tab-changed'
+    };
+  }
+
+  const readyPing = await waitForContentReadiness(() => pingContentScript(tabId), 5, 75);
+  if (readyPing?.ok) return { ok: true, data: readyPing };
+
+  return {
+    ok: false,
+    error: contentNotReadyMessage,
+    userMessage: contentNotReadyMessage,
+    tabUrl: capability.url,
+    originPattern: capability.originPattern,
+    reason: 'content-not-ready'
+  };
+}
+
+async function pingContentScript(tabId: number): Promise<ContentPingResponse | undefined> {
+  try {
+    const response = (await chrome.tabs.sendMessage(tabId, {
+      command: 'PING_CONTENT_SCRIPT'
+    })) as ContentPingResponse;
+    return response?.ok && response.ready ? response : undefined;
+  } catch {
+    return undefined;
   }
 }
 

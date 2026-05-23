@@ -12,6 +12,15 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. Content Script Reliability Fix
+
+- Made the injected content script build as a self-contained file for `chrome.scripting.executeScript`.
+- Added content-script readiness checks before job analysis, field analysis, and approved filling.
+- Made analysis command failures more specific when the content script cannot start, the tab changes, or Chrome blocks page access.
+- Added build validation for the injected content script so asset-chunk imports fail the build.
+- Improved stale build and extension reload guidance.
+- No change to local-first privacy, no-auto-submit, CAPTCHA boundaries, or manual review rules.
+
 ### 2026-05-22. Application Form Detection And Fill Reliability
 
 - Improved native form detection for labels, ARIA references, fieldsets, grouped radio/checkbox questions, disabled fields, read-only fields, and select options.

@@ -28,6 +28,7 @@ Batch 1 includes unit tests for:
 - Application form detection for native labels, ARIA references, fieldset legends, grouped radio/checkbox controls, select options, disabled fields, read-only fields, hidden fields, custom widgets, and iframe warnings
 - Field mapping false-positive prevention, manual-only rules, sensitive direct-review rules, and page-level analysis summary counts
 - Approved-only filling for React-style text inputs, native selects, radio groups, checkbox groups, and unsafe/manual-only fields
+- Content script readiness checks, PING messaging, content-message failure classification, tab-change detection, and standalone content-script build validation
 
 ## Fixtures
 
@@ -120,6 +121,27 @@ Manual checks should cover:
 19. Confirm iframe warnings appear when fields may be inside an iframe.
 20. Confirm no empty session is saved on failed analysis.
 21. Confirm no private files appear in git status.
+
+## Content Script Runtime QA
+
+1. Run `npm run build`.
+2. Confirm `dist/content/pageAnalyzer.js` exists.
+3. Confirm `dist/content/pageAnalyzer.js` does not contain top-level import statements.
+4. Confirm `dist/content/pageAnalyzer.js` does not reference `../assets`.
+5. Reload the unpacked extension from `dist`.
+6. Open a normal public job page.
+7. Click **Analyze Current Job Page** from the popup.
+8. Confirm job analysis completes or returns a specific non-generic error.
+9. Click **Analyze Application Fields** from the popup on an application page.
+10. Confirm field analysis completes or returns a specific non-generic error.
+11. Open the side panel.
+12. Repeat **Analyze Job Page**.
+13. Repeat **Analyze Fields**.
+14. Confirm restricted pages still show a blocked-page message.
+15. Confirm no empty job or application session is saved after failed content startup.
+16. Confirm no submit button is clicked.
+17. Confirm no CAPTCHA or bot-check is bypassed.
+18. Confirm no private files appear in git status.
 
 ## Options UI QA
 

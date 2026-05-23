@@ -4,7 +4,12 @@ import { extractJobPostingFromDocument } from './jobPageExtractor';
 import { detectApplicationIframeWarnings, detectFormFields } from './formDetector';
 import { mapFieldCandidates } from './fieldMapper';
 import { fillApprovedFields } from './formFiller';
-import type { ContentMessage } from './contentMessenger';
+import type { ContentMessage, ContentPingResponse } from './contentMessenger';
+
+declare global {
+  // Repeated executeScript calls should not register duplicate listeners.
+  var __rapidRobotJobAssistantContentReady: boolean | undefined;
+}
 
 export function analyzeJobPage() {
   return {
@@ -43,9 +48,23 @@ export function analyzeApplicationFields() {
   };
 }
 
-if (globalThis.chrome?.runtime?.onMessage) {
+export function pingContentScript(): ContentPingResponse {
+  return {
+    ok: true,
+    name: 'Rapid Robot Job Assistant content script',
+    ready: true,
+    url: document.location.href
+  };
+}
+
+if (globalThis.chrome?.runtime?.onMessage && !globalThis.__rapidRobotJobAssistantContentReady) {
+  globalThis.__rapidRobotJobAssistantContentReady = true;
   chrome.runtime.onMessage.addListener(
     (message: ContentMessage<FillPreviewItem[]>, _sender, sendResponse) => {
+      if (message.command === 'PING_CONTENT_SCRIPT') {
+        sendResponse(pingContentScript());
+        return true;
+      }
       if (message.command === 'ANALYZE_JOB_PAGE') {
         sendResponse(analyzeJobPage());
         return true;

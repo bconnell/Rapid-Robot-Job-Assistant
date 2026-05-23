@@ -16,6 +16,8 @@ Open a job page and use the side panel to analyze it. On normal web pages, try *
 
 The job is saved locally only after analysis succeeds. If the same job is analyzed again, the saved record is updated instead of duplicated.
 
+If analysis fails right after a code change, rebuild with `npm run build`, reload the unpacked extension from `dist`, reload the page, and try again. Chrome can keep an old content script build loaded until the extension and page are refreshed.
+
 ## 4. Analyze Fields
 
 Open an application page and analyze fields. If permission is denied, one-off analysis may still work from the button, but some pages may require allowing the current site. The extension creates or updates a local application session only after field analysis succeeds. Restricted pages and failed commands do not create empty sessions.
