@@ -9,7 +9,7 @@ import {
 import type {
   BackgroundMessage,
   ExtensionCommandResult,
-  OpenWorkspaceResult
+  OpenAssistantResult
 } from '../shared/extension/ExtensionMessaging';
 import {
   buildTargetPage,
@@ -49,8 +49,19 @@ async function handleMessage(
   message: BackgroundMessage,
   sender: chrome.runtime.MessageSender
 ): Promise<ExtensionCommandResult> {
+  if (message.command === 'OPEN_ASSISTANT') {
+    const result = await openAssistant();
+    return {
+      ok: result.opened,
+      data: result,
+      response: result,
+      userMessage: result.userMessage,
+      reason: result.reason
+    };
+  }
+
   if (message.command === 'OPEN_SIDE_PANEL') {
-    const result = await openSidePanelWorkspace();
+    const result = await openAssistant();
     return {
       ok: result.opened,
       data: result,
@@ -61,7 +72,7 @@ async function handleMessage(
   }
 
   if (message.command === 'OPEN_WORKSPACE_TAB') {
-    const result = await openWorkspaceTab();
+    const result = await openAssistantTab();
     return {
       ok: result.opened,
       data: result,
@@ -101,8 +112,8 @@ async function handleMessage(
         return {
           ok: false,
           userMessage:
-            'The workspace tab needs a target job or application page. Go back to that page, open the assistant, then choose Use Current Page.',
-          reason: 'workspace-tab-not-targetable'
+            'The assistant tab needs a target job or application page. Go back to that page, open the assistant, then choose Use This Page.',
+          reason: 'assistant-tab-not-targetable'
         };
       }
       return {
@@ -175,81 +186,64 @@ async function sendToActiveContent(
   }
 }
 
-async function openSidePanelWorkspace(): Promise<OpenWorkspaceResult> {
+async function openAssistant(): Promise<OpenAssistantResult> {
   const tab = await getActiveTab();
+  const targetRemembered = Boolean(tab && (await rememberCurrentAnalyzableTab(tab)));
   if (!tab) {
-    return {
-      opened: false,
-      openedAs: 'none',
-      userMessage: 'No active tab was found. Try opening the assistant workspace in a tab.',
-      reason: 'no-active-tab'
-    };
+    return openAssistantTab(targetRemembered, 'no-active-tab');
   }
-  if (buildTargetPage(tab)) await rememberCurrentAnalyzableTab(tab);
   if (!tab.id) {
-    return {
-      opened: false,
-      openedAs: 'none',
-      userMessage: 'No active tab was found. Try opening the assistant workspace in a tab.',
-      reason: 'no-active-tab'
-    };
+    return openAssistantTab(targetRemembered, 'no-active-tab');
   }
   if (tab.url && isRestrictedUrl(tab.url)) {
-    return {
-      opened: false,
-      openedAs: 'none',
-      userMessage:
-        'Side panel could not open on this page. Try opening the assistant workspace in a tab instead.',
-      reason: 'restricted-page'
-    };
+    return openAssistantTab(targetRemembered, 'restricted-page');
   }
   if (!chrome.sidePanel?.open) {
-    return {
-      opened: false,
-      openedAs: 'none',
-      userMessage:
-        'Side panel could not open in this Chrome window. Try opening the assistant workspace in a tab instead.',
-      reason: 'side-panel-api-unavailable'
-    };
+    return openAssistantTab(targetRemembered, 'side-panel-api-unavailable');
   }
   try {
     await chrome.sidePanel.open({ tabId: tab.id });
     return {
       opened: true,
-      openedAs: 'side-panel',
-      userMessage: 'Assistant workspace opened in the side panel.',
-      reason: 'side-panel-opened'
+      openedAs: 'assistant-panel',
+      userMessage: 'Assistant panel opened.',
+      reason: 'assistant-panel-opened',
+      targetRemembered
+    };
+  } catch {
+    return openAssistantTab(targetRemembered, 'side-panel-open-failed');
+  }
+}
+
+async function openAssistantTab(
+  targetRemembered = false,
+  fallbackReason = 'assistant-tab-requested'
+): Promise<OpenAssistantResult> {
+  try {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel/sidepanel.html') });
+    return {
+      opened: true,
+      openedAs: 'assistant-tab',
+      userMessage:
+        fallbackReason === 'assistant-tab-requested'
+          ? targetRemembered
+            ? 'Full assistant opened with this page selected for analysis.'
+            : 'Full assistant opened. Open the job or application page, then choose Use This Page.'
+          : 'Opened the full assistant because Chrome did not open the side panel.',
+      reason:
+        fallbackReason === 'assistant-tab-requested'
+          ? 'assistant-tab-opened'
+          : `assistant-tab-fallback-${fallbackReason}`,
+      targetRemembered
     };
   } catch {
     return {
       opened: false,
       openedAs: 'none',
       userMessage:
-        'Side panel could not open in this Chrome window. Try opening the assistant workspace in a tab instead.',
-      reason: 'side-panel-open-failed'
-    };
-  }
-}
-
-async function openWorkspaceTab(): Promise<OpenWorkspaceResult> {
-  try {
-    const tab = await getActiveTab();
-    const remembered = tab ? await rememberCurrentAnalyzableTab(tab) : undefined;
-    await chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel/sidepanel.html') });
-    return {
-      opened: true,
-      openedAs: 'tab',
-      userMessage: remembered
-        ? 'Assistant workspace opened in a tab with this page selected for analysis.'
-        : 'Assistant workspace opened in a tab. Open the job or application page, then choose Use Current Page.',
-      reason: remembered ? 'workspace-tab-opened-with-target' : 'workspace-tab-opened-no-target'
-    };
-  } catch {
-    return {
-      opened: false,
-      openedAs: 'none',
-      userMessage: 'Workspace tab could not open. Reload the extension from dist, then try again.',
-      reason: 'workspace-tab-open-failed'
+        'Assistant could not open. Rebuild, reload the extension from dist, and try again.',
+      reason: 'assistant-open-failed',
+      targetRemembered
     };
   }
 }
@@ -339,7 +333,7 @@ async function getTabCapability(): Promise<TabCapabilityResult> {
       tabId: tab.id,
       url: tab.url,
       reason: 'unsupported-url',
-      userMessage: 'The workspace tab needs a target job or application page.',
+      userMessage: 'The assistant tab needs a target job or application page.',
       canAnalyzeWithActiveTab: false,
       canRequestPermission: false,
       hasPersistentPermission: false,

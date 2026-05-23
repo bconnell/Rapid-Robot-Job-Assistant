@@ -8,6 +8,7 @@ import {
 } from './TabPermissions';
 
 const targetPageKey = 'rapidRobotJobAssistant.targetPage';
+const targetPageTtlMs = 24 * 60 * 60 * 1000;
 
 export interface TargetPage {
   tabId: number;
@@ -40,6 +41,14 @@ export function buildTargetPage(tab: TabLike): TargetPage | undefined {
   };
 }
 
+export function isTargetExpired(
+  target: Pick<TargetPage, 'rememberedAt'>,
+  now = Date.now()
+): boolean {
+  const remembered = Date.parse(target.rememberedAt);
+  return Number.isNaN(remembered) || now - remembered > targetPageTtlMs;
+}
+
 export async function rememberCurrentAnalyzableTab(
   tab: chrome.tabs.Tab
 ): Promise<TargetPage | undefined> {
@@ -66,6 +75,10 @@ export async function validateTargetTab(
 ): Promise<TabCapabilityResult | undefined> {
   const target = await getRememberedTargetTab();
   if (!target) return undefined;
+  if (isTargetExpired(target)) {
+    await clearTargetTab();
+    return undefined;
+  }
   try {
     const tab = await chrome.tabs.get(target.tabId);
     const url = tab.url ?? target.url;

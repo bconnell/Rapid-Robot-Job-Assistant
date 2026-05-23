@@ -30,6 +30,7 @@ Batch 1 includes unit tests for:
 - Approved-only filling for React-style text inputs, native selects, radio groups, checkbox groups, and unsafe/manual-only fields
 - Content script readiness checks, PING messaging, content-message failure classification, tab-change detection, and standalone content-script build validation
 - Guided workflow state, profile-ready labels, workspace fallback behavior, and target-page tracking guards
+- Assistant open fallback, target-page expiration, and compact workflow helper behavior
 
 ## Fixtures
 
@@ -150,38 +151,45 @@ Manual checks should cover:
 2. Reload the unpacked extension from `dist`.
 3. Open a normal job page.
 4. Open the popup.
-5. Confirm the popup shows a recommended next step above the fold.
+5. Confirm only one **Open Assistant** action is visible.
 6. Confirm the profile chip says **Profile Needed Before Fill** if no profile exists.
 7. Confirm the profile helper text is not duplicated.
-8. Confirm profile ready is shown as done if a profile exists.
-9. Confirm the profile button says **Review profile** when a profile exists.
-10. Confirm **Analyze Job Page** can be the first main action.
-11. Confirm workflow rows are compact and do not push the main action below the fold.
-12. Click **Open Workspace**.
-13. If the side panel opens, confirm it targets the job page.
-14. If the side panel fails, click **Open Workspace In Tab**.
-15. Confirm the workspace tab opens and remembers the original job page.
-16. Confirm the workspace tab does not say only "current tab is not a normal web page."
-17. Confirm **Use Current Page** is visible if no target page exists.
-18. Analyze a job.
-19. Confirm the next message says profile is needed before filling but fields can still be analyzed.
-20. Analyze fields.
-21. Confirm the next step tells the user to review values or import a profile if no profile exists.
-22. Approve safe fields.
-23. Fill approved fields.
-24. Confirm the final message says to review and submit manually.
-25. Confirm no submit, next, CAPTCHA, login, or apply buttons are clicked.
-26. Confirm no private files appear in git status.
+8. Confirm **Allow This Site** is visible near the top when available.
+9. Confirm the primary action is visible without scrolling.
+10. Confirm the popup explains the flow in one compact line.
+11. Click **Open Assistant**.
+12. If the side panel fails, confirm the full assistant tab opens automatically.
+13. Confirm the assistant remembers the original job page.
+14. Confirm the assistant does not analyze itself.
+15. Analyze a job.
+16. Confirm the next message says profile is needed before filling but fields can still be analyzed.
+17. Analyze fields.
+18. Confirm the next step tells the user to review values or import a profile if no profile exists.
+19. Approve safe fields.
+20. Fill approved fields.
+21. Confirm the final message says to review and submit manually.
+22. Confirm no submit, next, CAPTCHA, login, or apply buttons are clicked.
+23. Confirm no private files appear in git status.
 
 ## Guided Workflow Target QA
 
 1. Open the popup on `https://jobs.example.com/open-jobs/software-engineer` or another safe test page.
-2. Click **Open Workspace In Tab**.
-3. Confirm the workspace target chip shows the original job page host.
-4. Open the workspace tab directly without a target.
-5. Confirm it says **No target page selected** and shows **Use Current Page** near the top.
+2. Click **Open Assistant**.
+3. Confirm the assistant target chip shows the original job page host.
+4. Open the assistant tab directly without a target.
+5. Confirm it says **No target page selected** and shows **Use This Page** near the top.
 6. Confirm extension pages cannot become target pages.
 7. Confirm stale UI copy disappears after `npm run build` and reloading `dist`.
+8. Confirm target-page tracking expires or clears when the original tab is gone.
+
+## Local Data QA
+
+1. Open Options.
+2. Confirm the Privacy Controls section explains what stays local.
+3. Confirm **Clear Target Page** is available.
+4. Confirm saved searches, jobs/sessions, profiles, and all local data have separate cleanup controls.
+5. Confirm destructive delete controls require confirmation.
+6. Confirm Clear Local Data is a normal danger button, not a large red panel.
 
 ## Options UI QA
 

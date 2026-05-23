@@ -1,4 +1,5 @@
 export type BackgroundCommand =
+  | 'OPEN_ASSISTANT'
   | 'OPEN_SIDE_PANEL'
   | 'OPEN_WORKSPACE_TAB'
   | 'ANALYZE_CURRENT_JOB_PAGE'
@@ -31,9 +32,12 @@ export interface PermissionRequestResult {
   userMessage: string;
 }
 
-export interface OpenWorkspaceResult {
+export interface OpenAssistantResult {
   opened: boolean;
-  openedAs: 'side-panel' | 'tab' | 'none';
+  openedAs: 'assistant-panel' | 'assistant-tab' | 'none';
   userMessage: string;
   reason?: string;
+  targetRemembered?: boolean;
 }
+
+export type OpenWorkspaceResult = OpenAssistantResult;

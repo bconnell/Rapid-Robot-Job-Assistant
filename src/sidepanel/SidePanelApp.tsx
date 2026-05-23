@@ -219,7 +219,7 @@ export function SidePanelApp() {
       result.ok
         ? 'This page is now the target for analysis.'
         : (result.userMessage ??
-            'Go back to the job or application page tab, open the assistant, then choose Use Current Page.')
+            'Go back to the job or application page tab, open the assistant, then choose Use This Page.')
     );
     await loadTabStatus();
   }
@@ -305,7 +305,7 @@ export function SidePanelApp() {
   return (
     <main className="app stack">
       <section className="hero stack">
-        <span className="pill">Review-first workflow</span>
+        <span className="pill">Assistant panel</span>
         <h1>Rapid Robot Job Assistant</h1>
         <div className="row">
           <span className={`status-chip ${targetStatus.tone}`}>{targetStatus.label}</span>
@@ -321,9 +321,14 @@ export function SidePanelApp() {
           <button disabled={!primaryAction.enabled} onClick={primaryAction.run}>
             {primaryAction.label}
           </button>
-          {(!pageStatus?.ok || pageStatus.userMessage.includes('workspace tab')) && (
+          {(!pageStatus?.ok || pageStatus.userMessage.includes('assistant tab')) && (
             <button className="secondary" onClick={useCurrentPage}>
-              Use Current Page
+              Use This Page
+            </button>
+          )}
+          {canOfferPermission && (
+            <button className="secondary" onClick={requestSitePermission}>
+              Allow This Site
             </button>
           )}
           {workflow.currentStepId === 'profile' && !blockedPage && !workflow.fieldsReady && (
@@ -336,6 +341,7 @@ export function SidePanelApp() {
           </button>
         </div>
         <p className={targetStatus.tone === 'blocked' ? 'warn' : 'muted'}>{targetStatus.helper}</p>
+        {canOfferPermission && <p className="muted">Allow this site if Chrome blocks analysis.</p>}
       </section>
 
       <section className="status-banner card">
@@ -376,66 +382,25 @@ export function SidePanelApp() {
       </section>
 
       <section className="card stack">
-        <h2>Step Actions</h2>
-        <WorkflowStepCard step={workflow.steps[0]}>
-          <button disabled={blockedPage} onClick={analyzeJob}>
-            Analyze Job Page
-          </button>
-          <button className="secondary" onClick={useCurrentPage}>
-            Use Current Page
-          </button>
-          {canOfferPermission && (
-            <button className="secondary" onClick={requestSitePermission}>
-              Allow This Site
-            </button>
-          )}
-        </WorkflowStepCard>
-        <WorkflowStepCard step={workflow.steps[1]}>
-          <button className="secondary" onClick={() => chrome.runtime.openOptionsPage()}>
-            {profileActionLabel(Boolean(profile))}
-          </button>
-        </WorkflowStepCard>
-        <WorkflowStepCard step={workflow.steps[2]}>
-          <button disabled={blockedPage} onClick={analyzeFields}>
-            Analyze Fields
-          </button>
-        </WorkflowStepCard>
-        <WorkflowStepCard step={workflow.steps[3]}>
-          <button
-            className="secondary"
-            disabled={preview.length === 0}
-            onClick={() => {
-              setPreview(approveSafeHighConfidence(preview));
-              setStatus(postActionMessage('safe-approved'));
-            }}
-          >
-            Approve Safe High-Confidence
-          </button>
-          <button
-            className="secondary"
-            disabled={preview.length === 0}
-            onClick={() => setPreview(clearApprovals(preview))}
-          >
-            Clear Approvals
-          </button>
-        </WorkflowStepCard>
-        <WorkflowStepCard step={workflow.steps[4]}>
-          <button
-            disabled={blockedPage || !preview.some((item) => item.approved)}
-            onClick={fillApproved}
-          >
-            Fill Approved Fields
-          </button>
-        </WorkflowStepCard>
-        <WorkflowStepCard step={workflow.steps[5]}>
-          <button className="secondary" onClick={() => markStatus('submitted-by-user')}>
-            Submitted Myself
-          </button>
-          <button className="secondary" onClick={() => markStatus('skipped')}>
-            Skipped
-          </button>
-        </WorkflowStepCard>
+        <h2>Current Task</h2>
+        <p className="muted">
+          {workflow.steps.find((step) => step.id === workflow.currentStepId)?.helperText}
+        </p>
+        <div className="row">{renderCurrentTaskControls()}</div>
       </section>
+
+      <details className="card stack">
+        <summary>How this works</summary>
+        <ol className="compact-list">
+          <li>Analyze the job page.</li>
+          <li>Import or review your profile before filling.</li>
+          <li>Analyze the application form.</li>
+          <li>Review suggested values.</li>
+          <li>Approve only safe fields.</li>
+          <li>Fill approved fields.</li>
+          <li>Submit manually yourself.</li>
+        </ol>
+      </details>
 
       <section className="grid two">
         <Card title="Job Summary">
@@ -568,7 +533,7 @@ export function SidePanelApp() {
 
   function getPrimaryAction(stepId: string, pageBlocked: boolean) {
     if (stepId === 'analyze-job') {
-      return { label: 'Analyze Job Page', enabled: !pageBlocked, run: analyzeJob };
+      return { label: 'Analyze Job', enabled: !pageBlocked, run: analyzeJob };
     }
     if (stepId === 'profile') {
       return {
@@ -592,12 +557,90 @@ export function SidePanelApp() {
     }
     if (stepId === 'fill') {
       return {
-        label: 'Fill Approved Fields',
+        label: 'Fill Approved',
         enabled: !pageBlocked && preview.some((item) => item.approved),
         run: fillApproved
       };
     }
     return { label: 'Review and Submit Manually', enabled: false, run: () => undefined };
+  }
+
+  function renderCurrentTaskControls() {
+    if (workflow.currentStepId === 'analyze-job') {
+      return (
+        <>
+          <button disabled={blockedPage} onClick={analyzeJob}>
+            Analyze Job
+          </button>
+          <button className="secondary" onClick={useCurrentPage}>
+            Use This Page
+          </button>
+        </>
+      );
+    }
+    if (workflow.currentStepId === 'profile') {
+      return (
+        <>
+          <button onClick={() => chrome.runtime.openOptionsPage()}>
+            {profileActionLabel(Boolean(profile))}
+          </button>
+          {!workflow.fieldsReady && (
+            <button className="secondary" disabled={blockedPage} onClick={analyzeFields}>
+              Analyze Fields
+            </button>
+          )}
+        </>
+      );
+    }
+    if (workflow.currentStepId === 'analyze-fields') {
+      return (
+        <button disabled={blockedPage} onClick={analyzeFields}>
+          Analyze Fields
+        </button>
+      );
+    }
+    if (workflow.currentStepId === 'review') {
+      return (
+        <>
+          <button
+            disabled={preview.length === 0}
+            onClick={() => {
+              setPreview(approveSafeHighConfidence(preview));
+              setStatus(postActionMessage('safe-approved'));
+            }}
+          >
+            Approve Safe Fields
+          </button>
+          <button
+            className="secondary"
+            disabled={preview.length === 0}
+            onClick={() => setPreview(clearApprovals(preview))}
+          >
+            Clear Approvals
+          </button>
+        </>
+      );
+    }
+    if (workflow.currentStepId === 'fill') {
+      return (
+        <button
+          disabled={blockedPage || !preview.some((item) => item.approved)}
+          onClick={fillApproved}
+        >
+          Fill Approved
+        </button>
+      );
+    }
+    return (
+      <>
+        <button className="secondary" onClick={() => markStatus('submitted-by-user')}>
+          Mark Submitted
+        </button>
+        <button className="secondary" onClick={() => markStatus('skipped')}>
+          Mark Skipped
+        </button>
+      </>
+    );
   }
 }
 
@@ -607,19 +650,6 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       <h2>{title}</h2>
       {children}
     </section>
-  );
-}
-
-function WorkflowStepCard({ step, children }: { step: WorkflowStep; children: React.ReactNode }) {
-  return (
-    <div className={`workflow-step ${step.status}`}>
-      <span className={`status-chip ${statusClass(step.status)}`}>{step.status}</span>
-      <div className="stack">
-        <strong>{step.label}</strong>
-        <p className="muted">{step.helperText}</p>
-        <div className="row">{children}</div>
-      </div>
-    </div>
   );
 }
 
@@ -637,12 +667,6 @@ function confidenceLabel(confidence: number): string {
   if (confidence >= 0.9) return 'High confidence';
   if (confidence >= 0.7) return 'Review needed';
   return 'Low confidence';
-}
-
-function statusClass(status: string): string {
-  if (status === 'done' || status === 'ready') return 'done';
-  if (status === 'blocked') return 'blocked';
-  return 'warning';
 }
 
 function buildTargetStatus(status: TabCapabilityResult | undefined): {
@@ -664,10 +688,10 @@ function buildTargetStatus(status: TabCapabilityResult | undefined): {
       tone: 'done'
     };
   }
-  if (status.userMessage.includes('workspace tab')) {
+  if (status.userMessage.includes('assistant tab')) {
     return {
       label: 'No target page selected',
-      helper: 'The workspace is open in a tab. It needs a saved target page before analysis.',
+      helper: 'The assistant tab needs a saved target page before analysis.',
       tone: 'warning'
     };
   }

@@ -19,6 +19,17 @@ Rapid Robot Job Assistant is local-first.
 
 Settings are stored in `chrome.storage.local`. Larger structured records are stored in IndexedDB.
 
+Saved profiles, resume-derived profile fields, saved jobs, application sessions, field preview decisions, fill results, notes, saved searches, and settings remain local until the user deletes them, clears extension data, or uninstalls the extension.
+
+## Not Stored
+
+- Original uploaded `.docx` file blobs
+- Raw full page HTML from real job sites
+- Raw real application form snapshots
+- CAPTCHA, login, MFA, or bot-check details
+- Console logs with private values
+- API keys, unless a reviewed optional provider setup is added later
+
 ## AI Requests
 
 AI is disabled by default. If a provider is configured later, the user must review what would be sent before any request leaves the browser. Redaction is applied where possible, but review is still required.
@@ -45,9 +56,9 @@ Granting site permission does not submit applications, click CAPTCHA or bot chec
 
 ## Target Page Tracking
 
-When the popup or workspace sees a normal analyzable page, the extension stores a small local target-page record so workspace commands do not accidentally analyze an extension page. The workspace tab fallback also tries to remember the normal page before opening the tab. The record contains only the tab id, URL, origin pattern, and timestamp.
+When the popup or assistant sees a normal analyzable page, the extension stores a small local target-page record so assistant commands do not accidentally analyze an extension page. The assistant tab fallback also tries to remember the normal page before opening the tab. The record contains only the tab id, URL, origin pattern, and timestamp.
 
-Target page tracking is local-only. It does not store page text, form values, resume data, or application answers, and it does not send anything outside the browser.
+Target page tracking is local-only, expires after about 24 hours, and is cleared if the tab is gone or the URL changes. It does not store page text, form values, resume data, or application answers, and it does not send anything outside the browser.
 
 ## Form Analysis
 
@@ -58,6 +69,8 @@ Sensitive fields are marked for direct review and are not bulk-approved. File up
 ## Clear Data
 
 The options page includes a clear local data control. It clears extension settings and IndexedDB records. It does not touch browser settings, OS settings, downloads, or files outside the extension storage area.
+
+Options also includes smaller cleanup controls for the target page, saved searches, saved jobs and sessions, and saved profiles.
 
 ## Resume Import
 

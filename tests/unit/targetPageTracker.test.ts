@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildTargetPage, isRememberableTab } from '../../src/shared/extension/TargetPageTracker';
+import {
+  buildTargetPage,
+  isRememberableTab,
+  isTargetExpired
+} from '../../src/shared/extension/TargetPageTracker';
 
 describe('TargetPageTracker', () => {
   it('stores only normal analyzable web pages', () => {
@@ -28,5 +32,13 @@ describe('TargetPageTracker', () => {
     expect(
       buildTargetPage({ id: 5, url: 'chrome-extension://fake/sidepanel/sidepanel.html' })
     ).toBeUndefined();
+  });
+
+  it('expires target page tracking after one day', () => {
+    const now = Date.parse('2026-05-22T12:00:00.000Z');
+
+    expect(isTargetExpired({ rememberedAt: '2026-05-22T00:30:00.000Z' }, now)).toBe(false);
+    expect(isTargetExpired({ rememberedAt: '2026-05-21T11:00:00.000Z' }, now)).toBe(true);
+    expect(isTargetExpired({ rememberedAt: 'not-a-date' }, now)).toBe(true);
   });
 });

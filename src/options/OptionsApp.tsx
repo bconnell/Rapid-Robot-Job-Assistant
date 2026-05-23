@@ -20,6 +20,7 @@ import {
 } from '../shared/parsing/ResumeSectionParser';
 import { createSavedSearch, markSavedSearchChecked } from '../shared/jobs/SavedSearchService';
 import { createLocalDataExport, validateLocalDataImport } from '../shared/data/LocalDataTransfer';
+import { clearTargetTab } from '../shared/extension/TargetPageTracker';
 import {
   emptyUserProfile,
   type ProfileEducation,
@@ -239,6 +240,48 @@ export function OptionsApp() {
     setStatus('Local extension data cleared.');
   }
 
+  async function clearTargetPage() {
+    await clearTargetTab();
+    setStatus('Saved target page cleared.');
+  }
+
+  async function clearSavedSearches() {
+    if (!window.confirm('Delete all saved searches from local extension storage?')) return;
+    await Promise.all((await searchRepo.list()).map((search) => searchRepo.delete(search.id)));
+    setSavedSearches([]);
+    setStatus('Saved searches cleared locally.');
+  }
+
+  async function clearSavedJobsAndSessions() {
+    if (!window.confirm('Delete saved jobs and application sessions from local extension storage?'))
+      return;
+    await Promise.all([
+      ...(await jobRepo.list()).map((job) => jobRepo.delete(job.id)),
+      ...(await sessionRepo.list()).map((session) => sessionRepo.delete(session.id))
+    ]);
+    setStatus('Saved jobs and application sessions cleared locally.');
+  }
+
+  async function clearSavedProfiles() {
+    if (
+      !window.confirm(
+        'Delete saved profiles and resume-derived records from local extension storage?'
+      )
+    )
+      return;
+    await Promise.all([
+      ...(await profileRepo.list()).map((savedProfile) => profileRepo.delete(savedProfile.id)),
+      ...(await resumeRepo.list()).map((resume) => resumeRepo.delete(resume.id))
+    ]);
+    await settingsRepo.clearSettings();
+    setProfile(emptyUserProfile());
+    setActiveProfileId(undefined);
+    setResumeText('');
+    setWarnings([]);
+    setParseSummary(undefined);
+    setStatus('Saved profiles and resume-derived records cleared locally.');
+  }
+
   return (
     <main className="app options-page">
       <StatusBanner status={status} />
@@ -274,6 +317,10 @@ export function OptionsApp() {
             importPreview={importPreview}
             onExport={exportLocalData}
             onPreviewImport={previewImport}
+            onClearTargetPage={clearTargetPage}
+            onClearSavedSearches={clearSavedSearches}
+            onClearSavedJobsAndSessions={clearSavedJobsAndSessions}
+            onClearSavedProfiles={clearSavedProfiles}
             onClearLocalData={clearLocalData}
           />
           <DocsPanel />
@@ -658,16 +705,28 @@ function PrivacyControlsPanel({
   importPreview,
   onExport,
   onPreviewImport,
+  onClearTargetPage,
+  onClearSavedSearches,
+  onClearSavedJobsAndSessions,
+  onClearSavedProfiles,
   onClearLocalData
 }: {
   importPreview: string;
   onExport: () => void;
   onPreviewImport: (file?: File) => void;
+  onClearTargetPage: () => void;
+  onClearSavedSearches: () => void;
+  onClearSavedJobsAndSessions: () => void;
+  onClearSavedProfiles: () => void;
   onClearLocalData: () => void;
 }) {
   return (
     <section className="card stack options-card compact-card">
       <h2>Privacy Controls</h2>
+      <p className="muted">
+        Saved profiles, jobs, application sessions, notes, saved searches, and settings stay local
+        until you delete them, clear extension data, or uninstall the extension.
+      </p>
       <button className="secondary" onClick={onExport}>
         Export Local Data
       </button>
@@ -680,10 +739,28 @@ function PrivacyControlsPanel({
         />
       </label>
       {importPreview && <p className="muted">{importPreview}</p>}
+      <div className="stack mini-card">
+        <h3>Local Data Cleanup</h3>
+        <button className="secondary" onClick={onClearTargetPage}>
+          Clear Target Page
+        </button>
+        <button className="secondary" onClick={onClearSavedSearches}>
+          Clear Saved Searches
+        </button>
+        <button className="secondary" onClick={onClearSavedJobsAndSessions}>
+          Clear Saved Jobs and Sessions
+        </button>
+        <button className="secondary" onClick={onClearSavedProfiles}>
+          Clear Saved Profiles
+        </button>
+      </div>
       <button className="danger danger-inline" onClick={onClearLocalData}>
         Clear Local Data
       </button>
-      <p className="muted">Exports may contain private data. Import is preview-only in Batch 2.</p>
+      <p className="muted">
+        Exports may contain private data. Original `.docx` file blobs and raw real page HTML are not
+        stored.
+      </p>
     </section>
   );
 }

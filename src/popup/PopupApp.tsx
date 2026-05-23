@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type {
   ExtensionCommandResult,
-  OpenWorkspaceResult,
+  OpenAssistantResult,
   PermissionRequestResult
 } from '../shared/extension/ExtensionMessaging';
 import { requestCurrentSitePermissionFromUi } from '../shared/extension/PermissionRequestClient';
@@ -78,26 +78,12 @@ export function PopupApp() {
     }
   }
 
-  async function openSidePanel() {
+  async function openAssistant() {
     const result = (await chrome.runtime.sendMessage({
-      command: 'OPEN_SIDE_PANEL'
-    })) as ExtensionCommandResult<OpenWorkspaceResult>;
+      command: 'OPEN_ASSISTANT'
+    })) as ExtensionCommandResult<OpenAssistantResult>;
     const response = result.data ?? result.response;
-    setMessage(
-      result.ok
-        ? (response?.userMessage ?? 'Assistant workspace opened.')
-        : (result.userMessage ??
-            response?.userMessage ??
-            'Side panel could not open. You can open the assistant workspace in a tab.')
-    );
-  }
-
-  async function openWorkspaceTab() {
-    const result = (await chrome.runtime.sendMessage({
-      command: 'OPEN_WORKSPACE_TAB'
-    })) as ExtensionCommandResult<OpenWorkspaceResult>;
-    const response = result.data ?? result.response;
-    setMessage(result.userMessage ?? response?.userMessage ?? 'Workspace tab opened.');
+    setMessage(result.userMessage ?? response?.userMessage ?? 'Assistant opened.');
   }
 
   async function requestSitePermission() {
@@ -130,16 +116,16 @@ export function PopupApp() {
     fieldsReady: workflow.fieldsReady
   });
   const compactSteps = compactWorkflowSteps(workflow.steps, workflow.currentStepId);
+  const pageHost = status?.url ? safeHost(status.url) : undefined;
 
   return (
     <main className="app stack">
-      <section className="hero stack">
-        <span className="pill ok">Local-first</span>
+      <section className="hero stack popup-hero">
+        <div className="row">
+          <span className="pill ok">Local-first</span>
+          <span className="pill">No auto-submit</span>
+        </div>
         <h1>Rapid Robot Job Assistant</h1>
-        <p className="muted">Analyze, review, approve, then fill. No auto-submit.</p>
-      </section>
-
-      <section className="card stack">
         <div className="row">
           <StatusChip
             label={status?.ok ? 'Page ready' : 'Page blocked'}
@@ -150,6 +136,20 @@ export function PopupApp() {
             tone={profile ? 'done' : 'warning'}
           />
         </div>
+        <p className="muted">
+          {pageHost ? `Current page: ${pageHost}` : 'Open a job page to begin.'}
+        </p>
+        {canOfferPermission && (
+          <div className="mini-card stack">
+            <p className="muted">Allow this site if Chrome blocks analysis.</p>
+            <button className="secondary" onClick={requestSitePermission}>
+              Allow This Site
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="card stack">
         <h2>Recommended Next Step</h2>
         <p>{workflow.recommendedAction}</p>
         {!profile && profileHelper !== workflow.recommendedAction && (
@@ -159,8 +159,8 @@ export function PopupApp() {
           {primaryAction.label}
         </button>
         <div className="row">
-          <button className="secondary" onClick={openSidePanel}>
-            Open Workspace
+          <button className="secondary" onClick={openAssistant}>
+            Open Assistant
           </button>
           <button className="secondary" onClick={openProfile}>
             {profileActionLabel(Boolean(profile))}
@@ -169,7 +169,15 @@ export function PopupApp() {
       </section>
 
       <section className="card stack compact-workflow">
-        <h2>Workflow</h2>
+        <h2>How It Works</h2>
+        <div className="flow-guide" aria-label="Application flow">
+          <span>Job</span>
+          <span>Profile</span>
+          <span>Fields</span>
+          <span>Review</span>
+          <span>Fill</span>
+          <span>Submit manually</span>
+        </div>
         {compactSteps.map((step) => (
           <div className={`workflow-step ${step.status}`} key={step.id}>
             <span className={`status-chip ${statusTone(step.status)}`}>{step.status}</span>
@@ -181,34 +189,6 @@ export function PopupApp() {
         ))}
       </section>
 
-      <section className="card stack">
-        <h2>Current Page</h2>
-        <p className={status?.ok ? 'ok' : 'danger-text'}>
-          {status?.userMessage ?? 'Open a normal web page before analyzing.'}
-        </p>
-        <p className="muted">{status?.url ?? 'Open a job page or application page to begin.'}</p>
-        {canOfferPermission && <button onClick={requestSitePermission}>Allow This Site</button>}
-      </section>
-
-      <section className="card stack">
-        <h2>Actions</h2>
-        <button className="secondary" onClick={openSidePanel}>
-          Open Workspace
-        </button>
-        <button className="secondary" onClick={openWorkspaceTab}>
-          Open Workspace In Tab
-        </button>
-        <button className="secondary" onClick={openProfile}>
-          {profileActionLabel(Boolean(profile))}
-        </button>
-        <button className="secondary" disabled={!canAnalyze} onClick={runAnalyzeJob}>
-          Analyze Job
-        </button>
-        <button className="secondary" disabled={!canAnalyze} onClick={runAnalyzeFields}>
-          Analyze Fields
-        </button>
-      </section>
-
       <section className="card">
         <p className="ok">Privacy status: local-only mode is the default.</p>
         <p className="muted">{message}</p>
@@ -218,22 +198,30 @@ export function PopupApp() {
 
   function getPrimaryAction(stepId: string, canRunAnalysis: boolean) {
     if (stepId === 'analyze-job') {
-      return { label: 'Analyze Job Page', enabled: canRunAnalysis, run: runAnalyzeJob };
+      return { label: 'Analyze Job', enabled: canRunAnalysis, run: runAnalyzeJob };
     }
     if (stepId === 'profile') {
       return { label: profileActionLabel(Boolean(profile)), enabled: true, run: openProfile };
     }
     if (stepId === 'analyze-fields') {
       return {
-        label: 'Analyze Application Fields',
+        label: 'Analyze Fields',
         enabled: canRunAnalysis,
         run: runAnalyzeFields
       };
     }
-    return { label: 'Open Workspace', enabled: true, run: openSidePanel };
+    return { label: 'Open Assistant', enabled: true, run: openAssistant };
   }
 }
 
 function StatusChip({ label, tone }: { label: string; tone: 'done' | 'warning' | 'blocked' }) {
   return <span className={`status-chip ${tone}`}>{label}</span>;
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return 'saved page';
+  }
 }

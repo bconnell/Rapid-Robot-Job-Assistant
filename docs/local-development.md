@@ -73,13 +73,13 @@ Chrome internal pages, extension pages, local files, and Chrome Web Store pages 
 
 If the active page changed before analysis finished, open the target page again and retry. The extension only reports this when the tab id or URL changed during the command.
 
-### Side Panel Did Not Open
+### Assistant Did Not Open
 
-If Chrome cannot open the side panel, use **Open Workspace In Tab** from the popup. The fallback opens `sidepanel/sidepanel.html` as a normal extension tab.
+Use **Open Assistant** from the popup. The extension tries the side panel first. If Chrome does not open it, the extension automatically opens `sidepanel/sidepanel.html` as a full assistant tab.
 
-The workspace tab does not need a normal web page just to open. To run analysis from the workspace tab, first open the job or application page, open the assistant from that page, and choose **Use Current Page** so the extension targets the right tab.
+The assistant tab does not need a normal web page just to open. To run analysis from the assistant tab, first open the job or application page, open the assistant from that page, and choose **Use This Page** so the extension targets the right tab.
 
-When **Open Workspace In Tab** is clicked from a normal job or application page, the extension remembers that page before opening the workspace tab. If the workspace says no target page is selected, go back to the job page, open the assistant, and choose **Use Current Page**. Rebuild and reload `dist` if the UI still shows old target-page or profile wording.
+When **Open Assistant** is clicked from a normal job or application page, the extension remembers that page before opening the assistant tab. If the assistant says no target page is selected, go back to the job page, open the assistant, and choose **Use This Page**. Close stale assistant tabs when testing UI changes. Rebuild and reload `dist` if the UI still shows old wording.
 
 ## Local Workflow Check
 

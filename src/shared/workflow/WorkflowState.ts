@@ -203,7 +203,7 @@ export function postActionMessage(
   }
   if (action === 'filled')
     return 'Approved fields filled. Review the page manually before submitting.';
-  return 'Side panel could not open. You can open the assistant workspace in a tab.';
+  return 'Assistant panel could not open. The full assistant can open in a tab.';
 }
 
 function buildRecommendedAction(input: WorkflowStateInput, currentStep: WorkflowStep): string {

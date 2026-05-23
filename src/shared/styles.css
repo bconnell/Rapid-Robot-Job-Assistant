@@ -245,6 +245,32 @@ textarea {
   padding-bottom: 0.1rem;
 }
 
+.flow-guide {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.flow-guide span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.22rem 0.45rem;
+  color: var(--muted);
+  background: rgba(8, 22, 37, 0.72);
+  font-size: 0.78rem;
+}
+
+.compact-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+}
+
+.popup-hero {
+  gap: 0.55rem;
+}
+
 .workflow-step.done {
   border-color: rgba(114, 230, 172, 0.45);
 }

@@ -1,49 +1,43 @@
 # Application Workflow
 
-The extension is meant to guide a reviewed workflow, not force one exact order. You can analyze a job before creating a profile. A saved profile is only required when you want useful fill-preview values.
+The popup is the launcher. The assistant panel or assistant tab is the working area.
 
-## 1. Check The Current Page
+The normal order is simple:
 
-Open the popup on a normal `http` or `https` job or application page. The popup shows whether the page is ready, blocked, or needs site permission. Chrome internal pages and extension pages cannot be analyzed.
+1. Open a job page.
+2. Click **Analyze Job**.
+3. Import or review your profile before filling.
+4. Open the application form.
+5. Click **Analyze Fields**.
+6. Review suggested values.
+7. Approve safe fields.
+8. Click **Fill Approved**.
+9. Submit manually yourself.
 
-If the workspace is open in a normal tab, it uses the saved target page instead of the workspace page. If no target is saved, it shows **No target page selected**. Go back to the job or application page, open the assistant from there, and choose **Use Current Page** before running analysis.
+## Popup
 
-## 2. Analyze The Job
+The popup should show the current page status, profile status, recommended next action, and the main button without making the user scroll. It also shows the short flow:
 
-Use **Analyze Job Page** from the popup or workspace. The job is saved locally only after analysis succeeds. If the same job is analyzed again, the saved record is updated instead of duplicated.
+Job -> Profile -> Fields -> Review -> Fill -> Submit manually
 
-After job analysis, the next step is to confirm your profile before filling. You can still analyze application fields before the profile is ready.
+Use **Open Assistant** when you want the larger working area. If Chrome cannot open the side panel, the extension opens the full assistant tab automatically.
 
-## 3. Confirm Or Import A Profile
+## Profile Timing
 
-If no active profile exists, the popup shows **Profile Needed Before Fill** and offers **Import or create profile**. This is not a blocker for job analysis.
+A profile is not required to analyze a job page. A profile is needed before fill preview and filling because the extension needs saved values to suggest field answers.
 
-If a profile exists, the popup shows **Profile ready** and changes the action to **Review profile**. Profile data stays local. Review it before using it to fill applications.
+If no profile exists, the UI says **Profile Needed Before Fill**. That is an attention state, not an error.
 
-## 4. Analyze Application Fields
+## Assistant
 
-Open the application form and use **Analyze Fields**. The side panel shows a compact summary: fields found, safe fill candidates, manual-only fields, sensitive fields, and fields that need review.
+The assistant shows the target page, profile status, recommended next action, and the current task controls at the top. It should not show every action button at once.
 
-If the page appears to use an iframe for the application form, the extension warns that missing fields may need to be opened directly or filled manually.
+Use **Use This Page** from a normal job or application page when the assistant does not have a target page selected. Extension pages, Chrome internal pages, and local files cannot become targets.
 
-## 5. Review Suggested Values
+## Site Permission
 
-Each detected field shows its label, mapped profile value, confidence, warning, mapping explanation, and editable fill value. Approve safe fields one by one or use the safe bulk-approve action. Sensitive fields, file uploads, custom dropdowns, hidden fields, disabled fields, read-only fields, unknown fields, unstable selectors, and missing values are not bulk-approved.
+Most normal pages can be analyzed from a user click through `activeTab`. If Chrome blocks access, use **Allow This Site**. It requests the current origin only, such as `https://example.com/*`.
 
-## 6. Fill Approved Fields
+## Manual Finish
 
-Click **Fill Approved Fields**. The extension fills approved fields only and shows per-field results. Text inputs, textareas, native selects, radio groups, and checkbox groups are filled only when the match is safe.
-
-The extension does not click submit, apply, next, CAPTCHA, MFA, verification controls, custom dropdowns, or file upload controls.
-
-## 7. Finish Manually
-
-Handle login, CAPTCHA, MFA, final review, and submission yourself. You can save notes, mark the application submitted yourself, or mark it skipped.
-
-## Workspace Fallback
-
-If Chrome cannot open the side panel, use **Open Workspace In Tab**. The tab uses the same workspace UI and tries to remember the job or application page that opened it. If the workspace tab does not have a saved target page, it explains that directly instead of reporting the workspace as a bad web page.
-
-Use **Use Current Page** from a normal job or application page to reset the target. Extension pages, Chrome internal pages, and file pages cannot become targets.
-
-If analysis fails right after a code change, rebuild with `npm run build`, reload the unpacked extension from `dist`, reload the page, and try again.
+The extension does not click submit, apply, next, login, CAPTCHA, MFA, or bot-check controls. The user reviews the page and submits manually.

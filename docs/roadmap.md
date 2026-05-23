@@ -122,8 +122,18 @@
 - Workflow rows are more compact so the recommended action stays near the top.
 - Duplicate profile guidance was removed from the popup.
 
+## Usability Rescue And Local Data Clarity Completed
+
+- Popup actions now center on one **Open Assistant** path instead of separate side panel and tab choices.
+- If Chrome does not open the assistant panel, the extension opens the full assistant tab automatically.
+- **Allow This Site** appears in the top action area when it may help.
+- Assistant controls show the current task instead of repeating every workflow action at once.
+- Options documents local persistence and adds focused cleanup controls for target page, searches, jobs/sessions, profiles, and all local data.
+
 ## Possible Next Work
 
+- Add a Chrome Web Store readiness checklist.
+- Add a dedicated privacy policy page.
 - Add safe merge/replace import after another review pass.
 - Continue real browser QA fixes as they appear.
 - Add more application form fixture coverage.

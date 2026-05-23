@@ -12,6 +12,15 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. Usability Rescue And Local Data Clarity
+
+- Simplified popup actions around one **Open Assistant** path.
+- Replaced confusing workspace labels with assistant labels in the main UI.
+- Made **Open Assistant** fall back to a full assistant tab when Chrome does not open the side panel.
+- Moved **Allow This Site** into the top action area when it is useful.
+- Reduced duplicate workflow controls and clarified local data persistence and deletion.
+- No change to local-first privacy, no-auto-submit, CAPTCHA boundaries, or manual review rules.
+
 ### 2026-05-22. Guided Workflow Polish And Target Page Fixes
 
 - Fixed workspace tab target-page handling so the workspace does not analyze itself.
