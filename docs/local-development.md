@@ -79,6 +79,8 @@ If Chrome cannot open the side panel, use **Open Workspace In Tab** from the pop
 
 The workspace tab does not need a normal web page just to open. To run analysis from the workspace tab, first open the job or application page, open the assistant from that page, and choose **Use Current Page** so the extension targets the right tab.
 
+When **Open Workspace In Tab** is clicked from a normal job or application page, the extension remembers that page before opening the workspace tab. If the workspace says no target page is selected, go back to the job page, open the assistant, and choose **Use Current Page**. Rebuild and reload `dist` if the UI still shows old target-page or profile wording.
+
 ## Local Workflow Check
 
 Use Options to import a fake pasted resume or `.docx`, save the profile, then use the side panel to analyze a job page and an application form. Fill only approved fields. The extension does not submit applications.

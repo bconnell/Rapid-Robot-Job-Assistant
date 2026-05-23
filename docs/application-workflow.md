@@ -6,17 +6,17 @@ The extension is meant to guide a reviewed workflow, not force one exact order. 
 
 Open the popup on a normal `http` or `https` job or application page. The popup shows whether the page is ready, blocked, or needs site permission. Chrome internal pages and extension pages cannot be analyzed.
 
-If the workspace is open in a normal tab and it cannot find the target page, go back to the job or application page, open the assistant from there, and choose **Use Current Page** before running analysis. This prevents the extension from analyzing its own workspace page.
+If the workspace is open in a normal tab, it uses the saved target page instead of the workspace page. If no target is saved, it shows **No target page selected**. Go back to the job or application page, open the assistant from there, and choose **Use Current Page** before running analysis.
 
 ## 2. Analyze The Job
 
 Use **Analyze Job Page** from the popup or workspace. The job is saved locally only after analysis succeeds. If the same job is analyzed again, the saved record is updated instead of duplicated.
 
-After job analysis, the next step is to confirm your profile if needed, then analyze application fields.
+After job analysis, the next step is to confirm your profile before filling. You can still analyze application fields before the profile is ready.
 
 ## 3. Confirm Or Import A Profile
 
-If no active profile exists, the popup shows **Profile not ready** and offers **Import or create profile**. This is not a blocker for job analysis.
+If no active profile exists, the popup shows **Profile Needed Before Fill** and offers **Import or create profile**. This is not a blocker for job analysis.
 
 If a profile exists, the popup shows **Profile ready** and changes the action to **Review profile**. Profile data stays local. Review it before using it to fill applications.
 
@@ -42,6 +42,8 @@ Handle login, CAPTCHA, MFA, final review, and submission yourself. You can save 
 
 ## Workspace Fallback
 
-If Chrome cannot open the side panel, use **Open Workspace In Tab**. The tab uses the same workspace UI. If analysis cannot determine the target page, go back to the job or application page and choose **Use Current Page**.
+If Chrome cannot open the side panel, use **Open Workspace In Tab**. The tab uses the same workspace UI and tries to remember the job or application page that opened it. If the workspace tab does not have a saved target page, it explains that directly instead of reporting the workspace as a bad web page.
+
+Use **Use Current Page** from a normal job or application page to reset the target. Extension pages, Chrome internal pages, and file pages cannot become targets.
 
 If analysis fails right after a code change, rebuild with `npm run build`, reload the unpacked extension from `dist`, reload the page, and try again.

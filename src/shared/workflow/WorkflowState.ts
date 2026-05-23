@@ -35,6 +35,8 @@ export interface WorkflowState {
   fillReady: boolean;
 }
 
+export type StatusTone = 'done' | 'warning' | 'blocked';
+
 export function buildWorkflowState(input: WorkflowStateInput): WorkflowState {
   const profileReady = Boolean(input.profile);
   const jobReady = Boolean(input.job);
@@ -66,7 +68,7 @@ export function buildWorkflowState(input: WorkflowStateInput): WorkflowState {
       status: profileReady ? 'done' : 'needs-review',
       helperText: profileReady
         ? 'Profile ready. Review it any time before filling.'
-        : 'You can analyze a job first. A saved profile is needed before filling applications.',
+        : 'Needed before fill preview and filling.',
       actionLabel: profileReady ? 'Review profile' : 'Import or create profile'
     },
     {
@@ -121,7 +123,9 @@ export function buildWorkflowState(input: WorkflowStateInput): WorkflowState {
     : approvalsReady
       ? 'fill'
       : fieldsReady
-        ? 'review'
+        ? profileReady
+          ? 'review'
+          : 'profile'
         : !jobReady
           ? 'analyze-job'
           : !profileReady
@@ -145,6 +149,36 @@ export function profileActionLabel(profileReady: boolean): string {
   return profileReady ? 'Review profile' : 'Import or create profile';
 }
 
+export function profileStatusLabel(profileReady: boolean): string {
+  return profileReady ? 'Profile Ready' : 'Profile Needed Before Fill';
+}
+
+export function profileHelperText(input: {
+  profileReady: boolean;
+  jobReady: boolean;
+  fieldsReady: boolean;
+}): string {
+  if (input.profileReady) return 'Profile ready. Review it before filling if anything changed.';
+  if (input.fieldsReady) return 'Import or create a profile to populate suggested values.';
+  if (input.jobReady)
+    return 'Profile needed before fill preview. You can still analyze fields now.';
+  return 'A saved profile is only needed before filling applications.';
+}
+
+export function compactWorkflowSteps(steps: WorkflowStep[], currentStepId: string): WorkflowStep[] {
+  const currentIndex = Math.max(
+    0,
+    steps.findIndex((step) => step.id === currentStepId)
+  );
+  return steps.slice(currentIndex, currentIndex + 3);
+}
+
+export function statusTone(status: WorkflowStepStatus): StatusTone {
+  if (status === 'done' || status === 'ready') return 'done';
+  if (status === 'blocked') return 'blocked';
+  return 'warning';
+}
+
 export function postActionMessage(
   action:
     | 'job-analyzed'
@@ -158,7 +192,7 @@ export function postActionMessage(
   if (action === 'job-analyzed') {
     return profileReady
       ? 'Job analyzed and saved. Next: analyze the application fields.'
-      : 'Job analyzed and saved. Next: import or create a profile before filling applications.';
+      : 'Job analyzed and saved. Profile is needed before filling. You can still analyze fields now.';
   }
   if (action === 'profile-ready') return 'Profile ready. Next: analyze the application fields.';
   if (action === 'fields-analyzed') {
@@ -177,5 +211,15 @@ function buildRecommendedAction(input: WorkflowStateInput, currentStep: Workflow
     return 'Manual verification is required. Finish it yourself before continuing.';
   }
   if (input.pageStatus && !input.pageStatus.ok) return input.pageStatus.userMessage;
+  const profileReady = Boolean(input.profile);
+  const jobReady = Boolean(input.job);
+  const fieldsReady = Boolean((input.preview ?? []).length);
+  if (fieldsReady && !profileReady) {
+    return 'Import or create a profile to populate suggested values.';
+  }
+  if (!jobReady) return 'Start by analyzing this job page.';
+  if (jobReady && !profileReady && !fieldsReady) {
+    return 'Job saved. Profile is needed before filling. You can still analyze fields now.';
+  }
   return currentStep.helperText;
 }

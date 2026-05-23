@@ -12,8 +12,12 @@ import { ProfileRepository } from '../shared/storage/TypedRepositories';
 import type { UserProfile } from '../shared/models/UserProfile';
 import {
   buildWorkflowState,
+  compactWorkflowSteps,
   postActionMessage,
-  profileActionLabel
+  profileActionLabel,
+  profileHelperText,
+  profileStatusLabel,
+  statusTone
 } from '../shared/workflow/WorkflowState';
 
 export function PopupApp() {
@@ -45,10 +49,13 @@ export function PopupApp() {
   async function runAnalyzeJob() {
     const result = (await chrome.runtime.sendMessage({
       command: 'ANALYZE_CURRENT_JOB_PAGE'
-    })) as ExtensionCommandResult;
-    if (result.ok) {
+    })) as ExtensionCommandResult<{ job?: unknown }>;
+    const response = result.data ?? result.response;
+    if (result.ok && response?.job) {
       setJobAnalyzed(true);
       setMessage(postActionMessage('job-analyzed', Boolean(profile)));
+    } else if (result.ok) {
+      setMessage('No job data returned from the current page.');
     } else {
       setMessage(result.userMessage ?? result.error ?? 'Job analysis could not run.');
       await loadTabStatus();
@@ -58,10 +65,13 @@ export function PopupApp() {
   async function runAnalyzeFields() {
     const result = (await chrome.runtime.sendMessage({
       command: 'ANALYZE_APPLICATION_FIELDS'
-    })) as ExtensionCommandResult;
-    if (result.ok) {
+    })) as ExtensionCommandResult<{ pageUrl?: string; mappings?: unknown[] }>;
+    const response = result.data ?? result.response;
+    if (result.ok && (response?.pageUrl || response?.mappings?.length)) {
       setFieldsAnalyzed(true);
       setMessage(postActionMessage('fields-analyzed'));
+    } else if (result.ok) {
+      setMessage('No field data returned from the current page.');
     } else {
       setMessage(result.userMessage ?? result.error ?? 'Field analysis could not run.');
       await loadTabStatus();
@@ -114,6 +124,12 @@ export function PopupApp() {
     preview: fieldsAnalyzed ? ([{ approved: false }] as never) : []
   });
   const primaryAction = getPrimaryAction(workflow.currentStepId, canAnalyze);
+  const profileHelper = profileHelperText({
+    profileReady: Boolean(profile),
+    jobReady: workflow.jobReady,
+    fieldsReady: workflow.fieldsReady
+  });
+  const compactSteps = compactWorkflowSteps(workflow.steps, workflow.currentStepId);
 
   return (
     <main className="app stack">
@@ -130,27 +146,33 @@ export function PopupApp() {
             tone={status?.ok ? 'done' : 'blocked'}
           />
           <StatusChip
-            label={profile ? 'Profile ready' : 'Profile not ready'}
+            label={profileStatusLabel(Boolean(profile))}
             tone={profile ? 'done' : 'warning'}
           />
         </div>
         <h2>Recommended Next Step</h2>
         <p>{workflow.recommendedAction}</p>
-        {!profile && (
-          <p className="muted">
-            You can analyze a job page first. A saved profile is needed before filling applications.
-          </p>
+        {!profile && profileHelper !== workflow.recommendedAction && (
+          <p className="muted">{profileHelper}</p>
         )}
         <button disabled={!primaryAction.enabled} onClick={primaryAction.run}>
           {primaryAction.label}
         </button>
+        <div className="row">
+          <button className="secondary" onClick={openSidePanel}>
+            Open Workspace
+          </button>
+          <button className="secondary" onClick={openProfile}>
+            {profileActionLabel(Boolean(profile))}
+          </button>
+        </div>
       </section>
 
-      <section className="card stack">
+      <section className="card stack compact-workflow">
         <h2>Workflow</h2>
-        {workflow.steps.map((step) => (
+        {compactSteps.map((step) => (
           <div className={`workflow-step ${step.status}`} key={step.id}>
-            <span className={`status-chip ${statusClass(step.status)}`}>{step.status}</span>
+            <span className={`status-chip ${statusTone(step.status)}`}>{step.status}</span>
             <div>
               <strong>{step.label}</strong>
               <p className="muted">{step.helperText}</p>
@@ -214,10 +236,4 @@ export function PopupApp() {
 
 function StatusChip({ label, tone }: { label: string; tone: 'done' | 'warning' | 'blocked' }) {
   return <span className={`status-chip ${tone}`}>{label}</span>;
-}
-
-function statusClass(status: string): string {
-  if (status === 'done' || status === 'ready') return 'done';
-  if (status === 'blocked') return 'blocked';
-  return 'warning';
 }

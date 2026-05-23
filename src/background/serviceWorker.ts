@@ -97,6 +97,14 @@ async function handleMessage(
     const tab = await getActiveTab();
     const target = tab ? await rememberCurrentAnalyzableTab(tab) : undefined;
     if (!target) {
+      if (tab?.url?.startsWith(chrome.runtime.getURL(''))) {
+        return {
+          ok: false,
+          userMessage:
+            'The workspace tab needs a target job or application page. Go back to that page, open the assistant, then choose Use Current Page.',
+          reason: 'workspace-tab-not-targetable'
+        };
+      }
       return {
         ok: false,
         userMessage: 'Open a normal job or application page before using it as the target page.',
@@ -225,12 +233,16 @@ async function openSidePanelWorkspace(): Promise<OpenWorkspaceResult> {
 
 async function openWorkspaceTab(): Promise<OpenWorkspaceResult> {
   try {
+    const tab = await getActiveTab();
+    const remembered = tab ? await rememberCurrentAnalyzableTab(tab) : undefined;
     await chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel/sidepanel.html') });
     return {
       opened: true,
       openedAs: 'tab',
-      userMessage: 'Assistant workspace opened in a tab.',
-      reason: 'workspace-tab-opened'
+      userMessage: remembered
+        ? 'Assistant workspace opened in a tab with this page selected for analysis.'
+        : 'Assistant workspace opened in a tab. Open the job or application page, then choose Use Current Page.',
+      reason: remembered ? 'workspace-tab-opened-with-target' : 'workspace-tab-opened-no-target'
     };
   } catch {
     return {
@@ -322,6 +334,18 @@ async function getTabCapability(): Promise<TabCapabilityResult> {
   if (tab?.url?.startsWith(chrome.runtime.getURL(''))) {
     const remembered = await getRememberedCapability();
     if (remembered) return remembered;
+    return {
+      ok: false,
+      tabId: tab.id,
+      url: tab.url,
+      reason: 'unsupported-url',
+      userMessage: 'The workspace tab needs a target job or application page.',
+      canAnalyzeWithActiveTab: false,
+      canRequestPermission: false,
+      hasPersistentPermission: false,
+      needsPersistentPermission: false,
+      isRestricted: false
+    };
   }
   const originPattern = tab?.url ? buildOriginPattern(tab.url) : undefined;
   const hasPermission = originPattern

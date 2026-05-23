@@ -14,8 +14,12 @@ import { approveSafeHighConfidence, clearApprovals } from '../shared/fill/FillAp
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
 import {
   buildWorkflowState,
+  compactWorkflowSteps,
   postActionMessage,
   profileActionLabel,
+  profileHelperText,
+  profileStatusLabel,
+  statusTone,
   type WorkflowStep
 } from '../shared/workflow/WorkflowState';
 import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
@@ -69,7 +73,7 @@ export function SidePanelApp() {
     const id = await settingsRepo.getActiveProfileId();
     const active = id ? await profileRepo.get(id) : undefined;
     setProfile(active);
-    if (!active) setStatus('No active profile selected. Open Options and save a profile first.');
+    if (!active) setStatus('Profile needed before filling. You can analyze a job first.');
   }
 
   async function analyzeJob() {
@@ -289,21 +293,49 @@ export function SidePanelApp() {
     manualVerificationRequired: verification.includes('required'),
     sessionStatus: session?.status
   });
+  const profileHelper = profileHelperText({
+    profileReady: Boolean(profile),
+    jobReady: workflow.jobReady,
+    fieldsReady: workflow.fieldsReady
+  });
+  const compactSteps = compactWorkflowSteps(workflow.steps, workflow.currentStepId);
+  const primaryAction = getPrimaryAction(workflow.currentStepId, blockedPage);
+  const targetStatus = buildTargetStatus(pageStatus);
 
   return (
     <main className="app stack">
-      <section className="hero">
+      <section className="hero stack">
         <span className="pill">Review-first workflow</span>
         <h1>Rapid Robot Job Assistant</h1>
-        <p className={profile ? 'ok' : 'warn'}>
-          {profile
-            ? `Active profile: ${profile.contact.fullName ?? profile.contact.email ?? 'Saved profile'}`
-            : 'No active profile selected.'}
-        </p>
-        <p className={pageStatus?.ok ? 'ok' : 'muted'}>
-          {pageStatus?.userMessage ?? 'Current page status will appear here.'}
-        </p>
+        <div className="row">
+          <span className={`status-chip ${targetStatus.tone}`}>{targetStatus.label}</span>
+          <span className={`status-chip ${profile ? 'done' : 'warning'}`}>
+            {profileStatusLabel(Boolean(profile))}
+          </span>
+        </div>
         <p>{workflow.recommendedAction}</p>
+        {!profile && profileHelper !== workflow.recommendedAction && (
+          <p className="muted">{profileHelper}</p>
+        )}
+        <div className="row">
+          <button disabled={!primaryAction.enabled} onClick={primaryAction.run}>
+            {primaryAction.label}
+          </button>
+          {(!pageStatus?.ok || pageStatus.userMessage.includes('workspace tab')) && (
+            <button className="secondary" onClick={useCurrentPage}>
+              Use Current Page
+            </button>
+          )}
+          {workflow.currentStepId === 'profile' && !blockedPage && !workflow.fieldsReady && (
+            <button className="secondary" onClick={analyzeFields}>
+              Analyze Fields
+            </button>
+          )}
+          <button className="secondary" onClick={() => chrome.runtime.openOptionsPage()}>
+            {profileActionLabel(Boolean(profile))}
+          </button>
+        </div>
+        <p className={targetStatus.tone === 'blocked' ? 'warn' : 'muted'}>{targetStatus.helper}</p>
       </section>
 
       <section className="status-banner card">
@@ -329,8 +361,22 @@ export function SidePanelApp() {
         </section>
       )}
 
-      <section className="card stack">
+      <section className="card stack compact-workflow">
         <h2>Workflow</h2>
+        <div className="workflow-rail">
+          {workflow.steps.map((step) => (
+            <span className={`status-chip ${statusTone(step.status)}`} key={step.id}>
+              {step.label}
+            </span>
+          ))}
+        </div>
+        {compactSteps.map((step) => (
+          <WorkflowStepRow key={step.id} step={step} />
+        ))}
+      </section>
+
+      <section className="card stack">
+        <h2>Step Actions</h2>
         <WorkflowStepCard step={workflow.steps[0]}>
           <button disabled={blockedPage} onClick={analyzeJob}>
             Analyze Job Page
@@ -519,6 +565,40 @@ export function SidePanelApp() {
       </section>
     </main>
   );
+
+  function getPrimaryAction(stepId: string, pageBlocked: boolean) {
+    if (stepId === 'analyze-job') {
+      return { label: 'Analyze Job Page', enabled: !pageBlocked, run: analyzeJob };
+    }
+    if (stepId === 'profile') {
+      return {
+        label: profileActionLabel(Boolean(profile)),
+        enabled: true,
+        run: () => chrome.runtime.openOptionsPage()
+      };
+    }
+    if (stepId === 'analyze-fields') {
+      return { label: 'Analyze Fields', enabled: !pageBlocked, run: analyzeFields };
+    }
+    if (stepId === 'review') {
+      return {
+        label: 'Approve Safe Fields',
+        enabled: preview.length > 0,
+        run: () => {
+          setPreview(approveSafeHighConfidence(preview));
+          setStatus(postActionMessage('safe-approved'));
+        }
+      };
+    }
+    if (stepId === 'fill') {
+      return {
+        label: 'Fill Approved Fields',
+        enabled: !pageBlocked && preview.some((item) => item.approved),
+        run: fillApproved
+      };
+    }
+    return { label: 'Review and Submit Manually', enabled: false, run: () => undefined };
+  }
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
@@ -543,6 +623,16 @@ function WorkflowStepCard({ step, children }: { step: WorkflowStep; children: Re
   );
 }
 
+function WorkflowStepRow({ step }: { step: WorkflowStep }) {
+  return (
+    <div className={`workflow-step compact ${step.status}`}>
+      <span className={`status-chip ${statusTone(step.status)}`}>{step.status}</span>
+      <strong>{step.label}</strong>
+      <span className="muted">{step.helperText}</span>
+    </div>
+  );
+}
+
 function confidenceLabel(confidence: number): string {
   if (confidence >= 0.9) return 'High confidence';
   if (confidence >= 0.7) return 'Review needed';
@@ -553,4 +643,45 @@ function statusClass(status: string): string {
   if (status === 'done' || status === 'ready') return 'done';
   if (status === 'blocked') return 'blocked';
   return 'warning';
+}
+
+function buildTargetStatus(status: TabCapabilityResult | undefined): {
+  label: string;
+  helper: string;
+  tone: 'done' | 'warning' | 'blocked';
+} {
+  if (!status) {
+    return {
+      label: 'Target page loading',
+      helper: 'Current target page status will appear here.',
+      tone: 'warning'
+    };
+  }
+  if (status.ok && status.url) {
+    return {
+      label: `Target page: ${safeHost(status.url)}`,
+      helper: status.userMessage,
+      tone: 'done'
+    };
+  }
+  if (status.userMessage.includes('workspace tab')) {
+    return {
+      label: 'No target page selected',
+      helper: 'The workspace is open in a tab. It needs a saved target page before analysis.',
+      tone: 'warning'
+    };
+  }
+  return {
+    label: 'Target page unavailable',
+    helper: status.userMessage,
+    tone: status.isRestricted ? 'blocked' : 'warning'
+  };
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return 'saved page';
+  }
 }

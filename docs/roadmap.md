@@ -114,6 +114,14 @@
 - Side panel open failures return specific messages and the workspace can open as a normal extension tab.
 - Target page tracking helps workspace commands avoid analyzing extension pages by accident.
 
+## Guided Workflow Polish And Target Page Fixes Completed
+
+- Workspace tab opening now remembers the current normal job or application page before opening the extension tab.
+- Workspace target status now distinguishes a missing target page from a blocked current tab.
+- Popup and workspace copy now says a profile is needed before filling, not before job analysis.
+- Workflow rows are more compact so the recommended action stays near the top.
+- Duplicate profile guidance was removed from the popup.
+
 ## Possible Next Work
 
 - Add safe merge/replace import after another review pass.

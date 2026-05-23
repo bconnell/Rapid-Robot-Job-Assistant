@@ -224,6 +224,27 @@ textarea {
   padding: 0.75rem;
 }
 
+.workflow-step.compact {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 0.55rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.compact-workflow {
+  gap: 0.45rem;
+}
+
+.compact-workflow .workflow-step p {
+  margin-bottom: 0;
+}
+
+.workflow-rail {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
+}
+
 .workflow-step.done {
   border-color: rgba(114, 230, 172, 0.45);
 }

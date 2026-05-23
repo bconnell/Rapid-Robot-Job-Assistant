@@ -150,24 +150,38 @@ Manual checks should cover:
 2. Reload the unpacked extension from `dist`.
 3. Open a normal job page.
 4. Open the popup.
-5. Confirm the popup shows a recommended next step.
-6. Confirm profile ready is shown as done if a profile exists.
-7. Confirm the profile button says **Review profile** when a profile exists.
-8. Confirm **Analyze Job Page** can be the first main action.
-9. Click **Open Workspace**.
-10. If the side panel opens, confirm the step-based workspace appears.
-11. If the side panel fails, click **Open Workspace In Tab**.
-12. Confirm the workspace tab opens.
-13. Confirm the workspace does not analyze the extension page by accident.
-14. Analyze a job.
-15. Confirm the next step tells the user to confirm profile or analyze fields.
-16. Analyze fields.
-17. Confirm the next step tells the user to review and approve values.
-18. Approve safe fields.
-19. Fill approved fields.
-20. Confirm the final message says to review and submit manually.
-21. Confirm no submit, next, CAPTCHA, login, or apply buttons are clicked.
-22. Confirm no private files appear in git status.
+5. Confirm the popup shows a recommended next step above the fold.
+6. Confirm the profile chip says **Profile Needed Before Fill** if no profile exists.
+7. Confirm the profile helper text is not duplicated.
+8. Confirm profile ready is shown as done if a profile exists.
+9. Confirm the profile button says **Review profile** when a profile exists.
+10. Confirm **Analyze Job Page** can be the first main action.
+11. Confirm workflow rows are compact and do not push the main action below the fold.
+12. Click **Open Workspace**.
+13. If the side panel opens, confirm it targets the job page.
+14. If the side panel fails, click **Open Workspace In Tab**.
+15. Confirm the workspace tab opens and remembers the original job page.
+16. Confirm the workspace tab does not say only "current tab is not a normal web page."
+17. Confirm **Use Current Page** is visible if no target page exists.
+18. Analyze a job.
+19. Confirm the next message says profile is needed before filling but fields can still be analyzed.
+20. Analyze fields.
+21. Confirm the next step tells the user to review values or import a profile if no profile exists.
+22. Approve safe fields.
+23. Fill approved fields.
+24. Confirm the final message says to review and submit manually.
+25. Confirm no submit, next, CAPTCHA, login, or apply buttons are clicked.
+26. Confirm no private files appear in git status.
+
+## Guided Workflow Target QA
+
+1. Open the popup on `https://jobs.example.com/open-jobs/software-engineer` or another safe test page.
+2. Click **Open Workspace In Tab**.
+3. Confirm the workspace target chip shows the original job page host.
+4. Open the workspace tab directly without a target.
+5. Confirm it says **No target page selected** and shows **Use Current Page** near the top.
+6. Confirm extension pages cannot become target pages.
+7. Confirm stale UI copy disappears after `npm run build` and reloading `dist`.
 
 ## Options UI QA
 

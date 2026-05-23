@@ -45,7 +45,7 @@ Granting site permission does not submit applications, click CAPTCHA or bot chec
 
 ## Target Page Tracking
 
-When the popup or workspace sees a normal analyzable page, the extension stores a small local target-page record so workspace commands do not accidentally analyze an extension page. The record contains the tab id, URL, origin pattern, and timestamp.
+When the popup or workspace sees a normal analyzable page, the extension stores a small local target-page record so workspace commands do not accidentally analyze an extension page. The workspace tab fallback also tries to remember the normal page before opening the tab. The record contains only the tab id, URL, origin pattern, and timestamp.
 
 Target page tracking is local-only. It does not store page text, form values, resume data, or application answers, and it does not send anything outside the browser.
 

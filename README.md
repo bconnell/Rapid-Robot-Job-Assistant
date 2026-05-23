@@ -12,6 +12,14 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. Guided Workflow Polish And Target Page Fixes
+
+- Fixed workspace tab target-page handling so the workspace does not analyze itself.
+- Made the workspace tab fallback clearer when no target page is selected.
+- Reduced duplicate guidance and made popup/workspace actions more compact.
+- Clarified that a profile is needed before filling, not before job analysis.
+- No change to local-first privacy, no-auto-submit, CAPTCHA boundaries, or manual review rules.
+
 ### 2026-05-22. Guided Workflow And Workspace Reliability
 
 - Added a guided popup workflow with clearer current-page, profile-ready, and next-step indicators.
