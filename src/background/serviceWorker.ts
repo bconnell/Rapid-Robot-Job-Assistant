@@ -8,11 +8,18 @@ import {
 } from '../shared/extension/ContentScriptReadiness';
 import type {
   BackgroundMessage,
-  ExtensionCommandResult
+  ExtensionCommandResult,
+  OpenWorkspaceResult
 } from '../shared/extension/ExtensionMessaging';
+import {
+  buildTargetPage,
+  rememberCurrentAnalyzableTab,
+  validateTargetTab
+} from '../shared/extension/TargetPageTracker';
 import {
   buildOriginPattern,
   classifyInjectionFailure,
+  isRestrictedUrl,
   preflightTab,
   type TabCapabilityResult
 } from '../shared/extension/TabPermissions';
@@ -43,11 +50,25 @@ async function handleMessage(
   sender: chrome.runtime.MessageSender
 ): Promise<ExtensionCommandResult> {
   if (message.command === 'OPEN_SIDE_PANEL') {
-    const tab = await getActiveTab();
-    if (tab?.id && chrome.sidePanel?.open) {
-      await chrome.sidePanel.open({ tabId: tab.id });
-    }
-    return { ok: true };
+    const result = await openSidePanelWorkspace();
+    return {
+      ok: result.opened,
+      data: result,
+      response: result,
+      userMessage: result.userMessage,
+      reason: result.reason
+    };
+  }
+
+  if (message.command === 'OPEN_WORKSPACE_TAB') {
+    const result = await openWorkspaceTab();
+    return {
+      ok: result.opened,
+      data: result,
+      response: result,
+      userMessage: result.userMessage,
+      reason: result.reason
+    };
   }
 
   if (message.command === 'GET_CURRENT_TAB_STATUS') {
@@ -69,6 +90,27 @@ async function handleMessage(
       ok: false,
       userMessage: 'Use the Allow This Site button in the popup or side panel.',
       reason: 'permission-request-must-start-in-ui'
+    };
+  }
+
+  if (message.command === 'USE_CURRENT_PAGE') {
+    const tab = await getActiveTab();
+    const target = tab ? await rememberCurrentAnalyzableTab(tab) : undefined;
+    if (!target) {
+      return {
+        ok: false,
+        userMessage: 'Open a normal job or application page before using it as the target page.',
+        reason: 'target-page-not-ready'
+      };
+    }
+    return {
+      ok: true,
+      data: target,
+      response: target,
+      userMessage: 'This page is now the target for analysis.',
+      tabUrl: target.url,
+      originPattern: target.originPattern,
+      reason: 'target-page-set'
     };
   }
 
@@ -121,6 +163,81 @@ async function sendToActiveContent(
       tabUrl: capability.url,
       originPattern: capability.originPattern,
       reason: classified.reason
+    };
+  }
+}
+
+async function openSidePanelWorkspace(): Promise<OpenWorkspaceResult> {
+  const tab = await getActiveTab();
+  if (!tab) {
+    return {
+      opened: false,
+      openedAs: 'none',
+      userMessage: 'No active tab was found. Try opening the assistant workspace in a tab.',
+      reason: 'no-active-tab'
+    };
+  }
+  if (buildTargetPage(tab)) await rememberCurrentAnalyzableTab(tab);
+  if (!tab.id) {
+    return {
+      opened: false,
+      openedAs: 'none',
+      userMessage: 'No active tab was found. Try opening the assistant workspace in a tab.',
+      reason: 'no-active-tab'
+    };
+  }
+  if (tab.url && isRestrictedUrl(tab.url)) {
+    return {
+      opened: false,
+      openedAs: 'none',
+      userMessage:
+        'Side panel could not open on this page. Try opening the assistant workspace in a tab instead.',
+      reason: 'restricted-page'
+    };
+  }
+  if (!chrome.sidePanel?.open) {
+    return {
+      opened: false,
+      openedAs: 'none',
+      userMessage:
+        'Side panel could not open in this Chrome window. Try opening the assistant workspace in a tab instead.',
+      reason: 'side-panel-api-unavailable'
+    };
+  }
+  try {
+    await chrome.sidePanel.open({ tabId: tab.id });
+    return {
+      opened: true,
+      openedAs: 'side-panel',
+      userMessage: 'Assistant workspace opened in the side panel.',
+      reason: 'side-panel-opened'
+    };
+  } catch {
+    return {
+      opened: false,
+      openedAs: 'none',
+      userMessage:
+        'Side panel could not open in this Chrome window. Try opening the assistant workspace in a tab instead.',
+      reason: 'side-panel-open-failed'
+    };
+  }
+}
+
+async function openWorkspaceTab(): Promise<OpenWorkspaceResult> {
+  try {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel/sidepanel.html') });
+    return {
+      opened: true,
+      openedAs: 'tab',
+      userMessage: 'Assistant workspace opened in a tab.',
+      reason: 'workspace-tab-opened'
+    };
+  } catch {
+    return {
+      opened: false,
+      openedAs: 'none',
+      userMessage: 'Workspace tab could not open. Reload the extension from dist, then try again.',
+      reason: 'workspace-tab-open-failed'
     };
   }
 }
@@ -199,11 +316,26 @@ async function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
 
 async function getTabCapability(): Promise<TabCapabilityResult> {
   const tab = await getActiveTab();
+  if (tab && buildTargetPage(tab)) {
+    await rememberCurrentAnalyzableTab(tab);
+  }
+  if (tab?.url?.startsWith(chrome.runtime.getURL(''))) {
+    const remembered = await getRememberedCapability();
+    if (remembered) return remembered;
+  }
   const originPattern = tab?.url ? buildOriginPattern(tab.url) : undefined;
   const hasPermission = originPattern
     ? await chrome.permissions.contains({ origins: [originPattern] })
     : false;
   return preflightTab(tab, hasPermission);
+}
+
+async function getRememberedCapability(): Promise<TabCapabilityResult | undefined> {
+  const target = await validateTargetTab(false);
+  const originPattern = target?.originPattern;
+  if (!target || !originPattern) return target;
+  const hasPermission = await chrome.permissions.contains({ origins: [originPattern] });
+  return validateTargetTab(hasPermission);
 }
 
 function commandFailureFromCapability(capability: TabCapabilityResult): ExtensionCommandResult {

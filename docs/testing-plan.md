@@ -29,6 +29,7 @@ Batch 1 includes unit tests for:
 - Field mapping false-positive prevention, manual-only rules, sensitive direct-review rules, and page-level analysis summary counts
 - Approved-only filling for React-style text inputs, native selects, radio groups, checkbox groups, and unsafe/manual-only fields
 - Content script readiness checks, PING messaging, content-message failure classification, tab-change detection, and standalone content-script build validation
+- Guided workflow state, profile-ready labels, workspace fallback behavior, and target-page tracking guards
 
 ## Fixtures
 
@@ -142,6 +143,31 @@ Manual checks should cover:
 16. Confirm no submit button is clicked.
 17. Confirm no CAPTCHA or bot-check is bypassed.
 18. Confirm no private files appear in git status.
+
+## Guided Workflow QA
+
+1. Run `npm run build`.
+2. Reload the unpacked extension from `dist`.
+3. Open a normal job page.
+4. Open the popup.
+5. Confirm the popup shows a recommended next step.
+6. Confirm profile ready is shown as done if a profile exists.
+7. Confirm the profile button says **Review profile** when a profile exists.
+8. Confirm **Analyze Job Page** can be the first main action.
+9. Click **Open Workspace**.
+10. If the side panel opens, confirm the step-based workspace appears.
+11. If the side panel fails, click **Open Workspace In Tab**.
+12. Confirm the workspace tab opens.
+13. Confirm the workspace does not analyze the extension page by accident.
+14. Analyze a job.
+15. Confirm the next step tells the user to confirm profile or analyze fields.
+16. Analyze fields.
+17. Confirm the next step tells the user to review and approve values.
+18. Approve safe fields.
+19. Fill approved fields.
+20. Confirm the final message says to review and submit manually.
+21. Confirm no submit, next, CAPTCHA, login, or apply buttons are clicked.
+22. Confirm no private files appear in git status.
 
 ## Options UI QA
 

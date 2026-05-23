@@ -43,6 +43,12 @@ Optional persistent site permission is a fallback for pages where Chrome blocks 
 
 Granting site permission does not submit applications, click CAPTCHA or bot checks, send data to AI, or upload profile data. Page analysis remains user-triggered and stays local unless the user later reviews and approves an AI request.
 
+## Target Page Tracking
+
+When the popup or workspace sees a normal analyzable page, the extension stores a small local target-page record so workspace commands do not accidentally analyze an extension page. The record contains the tab id, URL, origin pattern, and timestamp.
+
+Target page tracking is local-only. It does not store page text, form values, resume data, or application answers, and it does not send anything outside the browser.
+
 ## Form Analysis
 
 Application form analysis runs locally after the user asks for it. The extension collects field metadata such as labels, input type, required status, options, visibility, and mapping confidence. That metadata may be stored only as part of local application sessions.

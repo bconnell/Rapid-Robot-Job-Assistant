@@ -106,6 +106,14 @@
 - Tab-change, host-access, and content-startup failures now return distinct user-facing messages.
 - Build validation fails if the injected content script regresses to top-level imports or asset chunk references.
 
+## Guided Workflow And Workspace Reliability Completed
+
+- Popup now shows page readiness, profile readiness, a recommended next step, and a compact workflow list.
+- Profile import is no longer presented as the main task once a profile exists.
+- Side panel actions are grouped into workflow steps instead of one crowded action row.
+- Side panel open failures return specific messages and the workspace can open as a normal extension tab.
+- Target page tracking helps workspace commands avoid analyzing extension pages by accident.
+
 ## Possible Next Work
 
 - Add safe merge/replace import after another review pass.
@@ -116,5 +124,6 @@
 - Add richer application session history.
 - Add optional site permission management.
 - Add a small permissions view for reviewing and removing granted sites.
+- Add Chrome Web Store readiness checklist.
 - Add stronger manual QA pages for extension testing.
 - Add controlled browser QA fixtures.

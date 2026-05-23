@@ -12,6 +12,15 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-05-22. Guided Workflow And Workspace Reliability
+
+- Added a guided popup workflow with clearer current-page, profile-ready, and next-step indicators.
+- Reworked the side panel into a step-based workspace instead of one row of actions.
+- Added specific side panel failure handling and a workspace tab fallback.
+- Improved active page targeting so workspace commands do not analyze extension pages by accident.
+- De-emphasized profile import once a profile exists and changed the action to Review profile.
+- No change to local-first privacy, no-auto-submit, CAPTCHA boundaries, or manual review rules.
+
 ### 2026-05-22. Content Script Reliability Fix
 
 - Made the injected content script build as a self-contained file for `chrome.scripting.executeScript`.

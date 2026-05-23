@@ -12,6 +12,12 @@ import type { TabCapabilityResult } from '../shared/extension/TabPermissions';
 import { canOfferSitePermission, canRunPageCommand } from '../shared/extension/TabPermissions';
 import { approveSafeHighConfidence, clearApprovals } from '../shared/fill/FillApprovalRules';
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
+import {
+  buildWorkflowState,
+  postActionMessage,
+  profileActionLabel,
+  type WorkflowStep
+} from '../shared/workflow/WorkflowState';
 import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
 import {
   ApplicationSessionRepository,
@@ -87,11 +93,7 @@ export function SidePanelApp() {
         ? 'Manual verification required.'
         : 'No manual verification detected.'
     );
-    setStatus(
-      saved.created
-        ? 'Job analyzed and saved locally.'
-        : 'Job analyzed and existing saved job updated.'
-    );
+    setStatus(postActionMessage('job-analyzed', Boolean(profile)));
   }
 
   async function analyzeFields() {
@@ -163,7 +165,7 @@ export function SidePanelApp() {
         : 'No manual verification detected.'
     );
     setStatus(
-      `${nextSummary.fieldCount} fields found. ${nextSummary.fillableCount} safe fill candidates. Review values before filling.`
+      `${nextSummary.fieldCount} fields found. ${nextSummary.fillableCount} safe fill candidates. ${postActionMessage('fields-analyzed')}`
     );
   }
 
@@ -202,7 +204,20 @@ export function SidePanelApp() {
     setPreview(nextPreview);
     setFillResults(results);
     await saveSession({ fieldPreview: nextPreview, fillResults: results, status: 'filled' });
-    setStatus('Fill finished. Review the page before submitting anything yourself.');
+    setStatus(postActionMessage('filled'));
+  }
+
+  async function useCurrentPage() {
+    const result = (await chrome.runtime.sendMessage({
+      command: 'USE_CURRENT_PAGE'
+    })) as ExtensionCommandResult;
+    setStatus(
+      result.ok
+        ? 'This page is now the target for analysis.'
+        : (result.userMessage ??
+            'Go back to the job or application page tab, open the assistant, then choose Use Current Page.')
+    );
+    await loadTabStatus();
   }
 
   async function requestSitePermission() {
@@ -265,6 +280,15 @@ export function SidePanelApp() {
 
   const canOfferPermission = canOfferSitePermission(pageStatus);
   const blockedPage = !canRunPageCommand(pageStatus);
+  const workflow = buildWorkflowState({
+    pageStatus,
+    profile,
+    job,
+    preview,
+    fillResults,
+    manualVerificationRequired: verification.includes('required'),
+    sessionStatus: session?.status
+  });
 
   return (
     <main className="app stack">
@@ -279,27 +303,7 @@ export function SidePanelApp() {
         <p className={pageStatus?.ok ? 'ok' : 'muted'}>
           {pageStatus?.userMessage ?? 'Current page status will appear here.'}
         </p>
-        <div className="row">
-          {canOfferPermission && <button onClick={requestSitePermission}>Allow This Site</button>}
-          <button disabled={blockedPage} onClick={analyzeJob}>
-            Analyze Job Page
-          </button>
-          <button className="secondary" disabled={blockedPage} onClick={analyzeFields}>
-            Analyze Fields
-          </button>
-          <button
-            className="secondary"
-            onClick={() => setPreview(approveSafeHighConfidence(preview))}
-          >
-            Approve Safe High-Confidence
-          </button>
-          <button className="secondary" onClick={() => setPreview(clearApprovals(preview))}>
-            Clear Approvals
-          </button>
-          <button disabled={blockedPage} onClick={fillApproved}>
-            Fill Approved Fields
-          </button>
-        </div>
+        <p>{workflow.recommendedAction}</p>
       </section>
 
       <section className="status-banner card">
@@ -325,6 +329,68 @@ export function SidePanelApp() {
         </section>
       )}
 
+      <section className="card stack">
+        <h2>Workflow</h2>
+        <WorkflowStepCard step={workflow.steps[0]}>
+          <button disabled={blockedPage} onClick={analyzeJob}>
+            Analyze Job Page
+          </button>
+          <button className="secondary" onClick={useCurrentPage}>
+            Use Current Page
+          </button>
+          {canOfferPermission && (
+            <button className="secondary" onClick={requestSitePermission}>
+              Allow This Site
+            </button>
+          )}
+        </WorkflowStepCard>
+        <WorkflowStepCard step={workflow.steps[1]}>
+          <button className="secondary" onClick={() => chrome.runtime.openOptionsPage()}>
+            {profileActionLabel(Boolean(profile))}
+          </button>
+        </WorkflowStepCard>
+        <WorkflowStepCard step={workflow.steps[2]}>
+          <button disabled={blockedPage} onClick={analyzeFields}>
+            Analyze Fields
+          </button>
+        </WorkflowStepCard>
+        <WorkflowStepCard step={workflow.steps[3]}>
+          <button
+            className="secondary"
+            disabled={preview.length === 0}
+            onClick={() => {
+              setPreview(approveSafeHighConfidence(preview));
+              setStatus(postActionMessage('safe-approved'));
+            }}
+          >
+            Approve Safe High-Confidence
+          </button>
+          <button
+            className="secondary"
+            disabled={preview.length === 0}
+            onClick={() => setPreview(clearApprovals(preview))}
+          >
+            Clear Approvals
+          </button>
+        </WorkflowStepCard>
+        <WorkflowStepCard step={workflow.steps[4]}>
+          <button
+            disabled={blockedPage || !preview.some((item) => item.approved)}
+            onClick={fillApproved}
+          >
+            Fill Approved Fields
+          </button>
+        </WorkflowStepCard>
+        <WorkflowStepCard step={workflow.steps[5]}>
+          <button className="secondary" onClick={() => markStatus('submitted-by-user')}>
+            Submitted Myself
+          </button>
+          <button className="secondary" onClick={() => markStatus('skipped')}>
+            Skipped
+          </button>
+        </WorkflowStepCard>
+      </section>
+
       <section className="grid two">
         <Card title="Job Summary">
           <p>{job?.title ?? 'No job analyzed yet.'}</p>
@@ -339,14 +405,6 @@ export function SidePanelApp() {
           <p className="muted">
             {session ? `Status: ${session.status}` : 'Analyze fields to start one.'}
           </p>
-          <div className="row">
-            <button className="secondary" onClick={() => markStatus('submitted-by-user')}>
-              Submitted Myself
-            </button>
-            <button className="secondary" onClick={() => markStatus('skipped')}>
-              Skipped
-            </button>
-          </div>
         </Card>
       </section>
 
@@ -472,8 +530,27 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
+function WorkflowStepCard({ step, children }: { step: WorkflowStep; children: React.ReactNode }) {
+  return (
+    <div className={`workflow-step ${step.status}`}>
+      <span className={`status-chip ${statusClass(step.status)}`}>{step.status}</span>
+      <div className="stack">
+        <strong>{step.label}</strong>
+        <p className="muted">{step.helperText}</p>
+        <div className="row">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 function confidenceLabel(confidence: number): string {
   if (confidence >= 0.9) return 'High confidence';
   if (confidence >= 0.7) return 'Review needed';
   return 'Low confidence';
+}
+
+function statusClass(status: string): string {
+  if (status === 'done' || status === 'ready') return 'done';
+  if (status === 'blocked') return 'blocked';
+  return 'warning';
 }

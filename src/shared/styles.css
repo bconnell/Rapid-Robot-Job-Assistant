@@ -181,6 +181,65 @@ textarea {
   font-size: 0.82rem;
 }
 
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 0.25rem 0.55rem;
+  color: var(--muted);
+  background: #091827;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.status-chip.done {
+  border-color: rgba(114, 230, 172, 0.6);
+  color: var(--ok);
+  background: rgba(114, 230, 172, 0.1);
+}
+
+.status-chip.warning {
+  border-color: rgba(255, 209, 102, 0.6);
+  color: var(--warn);
+  background: rgba(255, 209, 102, 0.1);
+}
+
+.status-chip.blocked {
+  border-color: rgba(255, 107, 107, 0.65);
+  color: var(--danger);
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.workflow-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(8, 22, 37, 0.72);
+  padding: 0.75rem;
+}
+
+.workflow-step.done {
+  border-color: rgba(114, 230, 172, 0.45);
+}
+
+.workflow-step.ready {
+  border-color: rgba(61, 165, 255, 0.55);
+}
+
+.workflow-step.needs-review {
+  border-color: rgba(255, 209, 102, 0.55);
+}
+
+.workflow-step.blocked {
+  opacity: 0.85;
+}
+
 .ok {
   color: var(--ok);
 }

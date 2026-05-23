@@ -1,39 +1,47 @@
 # Application Workflow
 
-## 1. Import Profile
+The extension is meant to guide a reviewed workflow, not force one exact order. You can analyze a job before creating a profile. A saved profile is only required when you want useful fill-preview values.
 
-Open Options. Paste resume text or import a `.docx` file. The extension extracts text locally and does not store the original file blob.
+## 1. Check The Current Page
 
-After parsing, review the compact parser summary. It shows whether contact data and summary were found, plus counts for skills, experience, education, and certifications. Warnings point to fields that need manual review. The parser separates common degree, field, school, date, certification, and experience patterns, but the saved profile is still only a draft until you review it.
+Open the popup on a normal `http` or `https` job or application page. The popup shows whether the page is ready, blocked, or needs site permission. Chrome internal pages and extension pages cannot be analyzed.
 
-## 2. Review And Edit
+If the workspace is open in a normal tab and it cannot find the target page, go back to the job or application page, open the assistant from there, and choose **Use Current Page** before running analysis. This prevents the extension from analyzing its own workspace page.
 
-Review the parsed profile before using it. Edit contact details, links, summary, skills, experience, education, certifications, work authorization, sponsorship, desired titles, desired salary, and start date. Inferred experience entries should be corrected before they are used for applications. Save the profile locally.
+## 2. Analyze The Job
 
-## 3. Analyze Job
+Use **Analyze Job Page** from the popup or workspace. The job is saved locally only after analysis succeeds. If the same job is analyzed again, the saved record is updated instead of duplicated.
 
-Open a job page and use the side panel to analyze it. On normal web pages, try **Analyze Job Page** first. If Chrome blocks page access, click **Allow This Site** and retry analysis. Site permission is current-origin only and user-controlled. It is not always required.
+After job analysis, the next step is to confirm your profile if needed, then analyze application fields.
 
-The job is saved locally only after analysis succeeds. If the same job is analyzed again, the saved record is updated instead of duplicated.
+## 3. Confirm Or Import A Profile
 
-If analysis fails right after a code change, rebuild with `npm run build`, reload the unpacked extension from `dist`, reload the page, and try again. Chrome can keep an old content script build loaded until the extension and page are refreshed.
+If no active profile exists, the popup shows **Profile not ready** and offers **Import or create profile**. This is not a blocker for job analysis.
 
-## 4. Analyze Fields
+If a profile exists, the popup shows **Profile ready** and changes the action to **Review profile**. Profile data stays local. Review it before using it to fill applications.
 
-Open an application page and analyze fields. If permission is denied, one-off analysis may still work from the button, but some pages may require allowing the current site. The extension creates or updates a local application session only after field analysis succeeds. Restricted pages and failed commands do not create empty sessions.
+## 4. Analyze Application Fields
 
-The side panel shows a compact field summary after analysis: fields found, safe fill candidates, manual-only fields, sensitive fields, and fields that still need review. Page warnings appear near the status banner. If the page appears to use an iframe for the application form, the extension explains that missing fields may need to be opened directly or filled manually.
+Open the application form and use **Analyze Fields**. The side panel shows a compact summary: fields found, safe fill candidates, manual-only fields, sensitive fields, and fields that need review.
 
-## 5. Review Fill Preview
+If the page appears to use an iframe for the application form, the extension warns that missing fields may need to be opened directly or filled manually.
+
+## 5. Review Suggested Values
 
 Each detected field shows its label, mapped profile value, confidence, warning, mapping explanation, and editable fill value. Approve safe fields one by one or use the safe bulk-approve action. Sensitive fields, file uploads, custom dropdowns, hidden fields, disabled fields, read-only fields, unknown fields, unstable selectors, and missing values are not bulk-approved.
 
-Custom widgets and file uploads are manual-only in this version. The extension detects them so the preview is honest, but it does not click custom dropdowns or upload files.
-
 ## 6. Fill Approved Fields
 
-Click **Fill Approved Fields**. The extension fills approved fields only and shows per-field results. Text inputs, textareas, native selects, radio groups, and checkbox groups are filled only when the match is safe. It does not click submit, apply, next, CAPTCHA, MFA, verification controls, custom dropdowns, or file upload controls.
+Click **Fill Approved Fields**. The extension fills approved fields only and shows per-field results. Text inputs, textareas, native selects, radio groups, and checkbox groups are filled only when the match is safe.
+
+The extension does not click submit, apply, next, CAPTCHA, MFA, verification controls, custom dropdowns, or file upload controls.
 
 ## 7. Finish Manually
 
-Handle CAPTCHA, login, MFA, final review, and submission yourself. You can save notes, mark the application submitted yourself, or mark it skipped.
+Handle login, CAPTCHA, MFA, final review, and submission yourself. You can save notes, mark the application submitted yourself, or mark it skipped.
+
+## Workspace Fallback
+
+If Chrome cannot open the side panel, use **Open Workspace In Tab**. The tab uses the same workspace UI. If analysis cannot determine the target page, go back to the job or application page and choose **Use Current Page**.
+
+If analysis fails right after a code change, rebuild with `npm run build`, reload the unpacked extension from `dist`, reload the page, and try again.
