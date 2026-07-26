@@ -21,14 +21,14 @@ export class ChromeStorageRepository {
       return defaultSettings;
     }
     const result = await chrome.storage.local.get(STORAGE_KEYS.settings);
-    return { ...defaultSettings, ...(result[STORAGE_KEYS.settings] as Partial<ExtensionSettings>) };
+    return normalizeSettings(result[STORAGE_KEYS.settings]);
   }
 
   async saveSettings(settings: ExtensionSettings): Promise<void> {
     if (!globalThis.chrome?.storage?.local) {
       return;
     }
-    await chrome.storage.local.set({ [STORAGE_KEYS.settings]: settings });
+    await chrome.storage.local.set({ [STORAGE_KEYS.settings]: normalizeSettings(settings) });
   }
 
   async clearSettings(): Promise<void> {
@@ -59,4 +59,9 @@ export class ChromeStorageRepository {
     }
     await chrome.storage.local.set({ [STORAGE_KEYS.activeProfileId]: profileId });
   }
+}
+
+function normalizeSettings(value: unknown): ExtensionSettings {
+  void value;
+  return { ...defaultSettings };
 }

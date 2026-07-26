@@ -58,3 +58,9 @@ A session is marked filled only when every approved field reports success. Parti
 Field analysis records the current application URL. Fill requests include that URL, and both the service worker and content script compare it with the current target before any field changes occur.
 
 A fresh field analysis clears prior fill results and prior submission markers. Reopening a saved session clears approvals and requires a new analysis before filling. Session status becomes `filled` only when every currently approved selector has a successful result.
+
+## Session Restoration And Persistence
+
+Opening the assistant may show a local review copy of a prior session, but it does not rewrite or erase the stored fill evidence merely because the panel opened. Any restored approvals are invalidated locally until fields are analyzed again.
+
+Session writes are serialized. A failed local save is reported instead of being described as successful.

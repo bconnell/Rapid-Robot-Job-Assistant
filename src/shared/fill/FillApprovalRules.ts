@@ -45,11 +45,15 @@ export function invalidateApprovals(items: FillPreviewItem[]): FillPreviewItem[]
 }
 
 export function isCompleteApprovedFill(preview: FillPreviewItem[], results: FillResult[]): boolean {
-  const approved = preview.filter((item) => item.approved);
-  if (!approved.length || results.length !== approved.length) return false;
+  const approvedSelectors = preview
+    .filter((item) => item.approved)
+    .map((item) => item.candidate.selector);
+  if (!approvedSelectors.length || results.length !== approvedSelectors.length) return false;
 
-  const successful = new Map(
-    results.filter((result) => result.ok).map((result) => [result.selector, result])
-  );
-  return approved.every((item) => successful.has(item.candidate.selector));
+  const resultSelectors = results.map((result) => result.selector);
+  if (new Set(resultSelectors).size !== resultSelectors.length) return false;
+  if (results.some((result) => !result.ok)) return false;
+
+  const approved = new Set(approvedSelectors);
+  return resultSelectors.every((selector) => approved.has(selector));
 }

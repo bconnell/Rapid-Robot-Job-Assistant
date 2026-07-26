@@ -807,10 +807,11 @@ function DocsPanel() {
     <section className="card stack options-card compact-card docs-card">
       <h2>Docs</h2>
       {docs.map(([label, href, description]) => (
-        <a className="doc-link" href={href} key={href}>
+        <div className="doc-link" key={href}>
           <strong>{label}</strong>
           <span>{description}</span>
-        </a>
+          <span className="muted">Repository document: {href.replace('../', '')}</span>
+        </div>
       ))}
     </section>
   );

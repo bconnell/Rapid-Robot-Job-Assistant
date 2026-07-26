@@ -16,7 +16,7 @@ import type { FillPreviewItem, FillResult } from '../../shared/models/FieldMappi
 import type { JobPosting } from '../../shared/models/JobPosting';
 import type { UserProfile } from '../../shared/models/UserProfile';
 import { isMeaningfulJobPosting } from '../../shared/jobs/JobPostingValidation';
-import { isSamePageUrl } from '../../shared/extension/PageCommandIntegrity';
+import { isSamePageUrl, maxFillItems } from '../../shared/extension/PageCommandIntegrity';
 import { detectCaptchaAndBotCheck } from '../../shared/security/CaptchaAndBotCheckRules';
 import { fillApprovedFields } from '../formFiller';
 import { detectApplicationIframeWarnings, detectFormFields } from '../formDetector';
@@ -43,6 +43,7 @@ interface InPageAssistantState {
 
 let activeState: InPageAssistantState | undefined;
 let activeShadow: ShadowRoot | undefined;
+let sessionWriteChain: Promise<void> = Promise.resolve();
 
 export async function openInPageAssistant(): Promise<{
   opened: true;
@@ -87,7 +88,7 @@ export async function openInPageAssistant(): Promise<{
     job: recentSession?.job,
     pageUrl,
     preview: [],
-    fillResults: recentSession?.fillResults ?? [],
+    fillResults: [],
     status: recentSession
       ? 'A saved session exists for this page. Analyze fields again before filling.'
       : 'Assistant opened on this page.',
@@ -109,6 +110,7 @@ export function closeInPageAssistant(): { closed: boolean } {
   document.getElementById(rootId)?.remove();
   activeState = undefined;
   activeShadow = undefined;
+  sessionWriteChain = Promise.resolve();
   return { closed: true };
 }
 
@@ -221,9 +223,12 @@ function bindPanelEvents(
         state.status = response.verification.detected
           ? 'Manual verification detected. Complete it yourself before filling.'
           : `${response.fieldCount} fields found. Review every suggested value before filling.`;
-        await persistApplicationSession(state, {
+        const saved = await persistApplicationSession(state, {
           status: response.verification.detected ? 'manual-verification' : 'draft'
         });
+        if (!saved) {
+          state.status = 'Fields were analyzed, but the application session was not saved locally.';
+        }
       });
     });
 
@@ -232,15 +237,17 @@ function bindPanelEvents(
     ?.addEventListener('click', () => {
       void runBusy(shadow, state, async () => {
         state.preview = approveSafeHighConfidence(state.preview);
-        state.status = 'Safe high-confidence fields approved. Review every value before filling.';
-        await persistApplicationSession(state);
+        const saved = await persistApplicationSession(state);
+        state.status = saved
+          ? 'Safe high-confidence fields approved. Review every value before filling.'
+          : 'Fields were approved in this panel, but the session was not saved locally.';
       });
     });
 
   panel.querySelector<HTMLButtonElement>('[data-action="fill"]')?.addEventListener('click', () => {
     void runBusy(shadow, state, async () => {
       const currentUrl = document.location.href;
-      if (!state.fieldAnalysisPageUrl || currentUrl !== state.fieldAnalysisPageUrl) {
+      if (!state.fieldAnalysisPageUrl || !isSamePageUrl(currentUrl, state.fieldAnalysisPageUrl)) {
         invalidateApprovals(state);
         state.status =
           'The page changed after field analysis. Analyze fields again before filling anything.';
@@ -271,7 +278,12 @@ function bindPanelEvents(
       state.status = complete
         ? `All ${succeeded} approved fields were filled. Review the page manually before submitting.`
         : `${succeeded} approved fields filled and ${failed} failed. Review failures and analyze fields again before retrying.`;
-      await persistApplicationSession(state, { status: complete ? 'filled' : 'draft' });
+      const saved = await persistApplicationSession(state, {
+        status: complete ? 'filled' : 'draft'
+      });
+      if (!saved) {
+        state.status += ' The fill result was not saved locally.';
+      }
     });
   });
 
@@ -315,7 +327,11 @@ function bindPanelEvents(
           render(shadow, state);
           return;
         }
-        void persistApplicationSession(state);
+        void persistApplicationSession(state).then((saved) => {
+          if (!saved && activeShadow === shadow && activeState === state) {
+            render(shadow, state);
+          }
+        });
       });
     });
 
@@ -335,8 +351,10 @@ function bindPanelEvents(
           rejected: false,
           status: 'approved'
         };
-        state.status = 'Field approved. Review all values before filling.';
-        await persistApplicationSession(state);
+        const saved = await persistApplicationSession(state);
+        state.status = saved
+          ? 'Field approved. Review all values before filling.'
+          : 'Field approved in this panel, but the session was not saved locally.';
       });
     });
   });
@@ -353,8 +371,10 @@ function bindPanelEvents(
           rejected: true,
           status: 'rejected'
         };
-        state.status = 'Field skipped.';
-        await persistApplicationSession(state);
+        const saved = await persistApplicationSession(state);
+        state.status = saved
+          ? 'Field skipped.'
+          : 'Field skipped in this panel, but the session was not saved locally.';
       });
     });
   });
@@ -405,7 +425,8 @@ function analyzeCurrentJobPage() {
 
 function analyzeCurrentApplicationFields() {
   const verification = detectCaptchaAndBotCheck(document);
-  const fields = detectFormFields(document);
+  const detectedFields = detectFormFields(document);
+  const fields = detectedFields.slice(0, maxFillItems);
   const mappings = mapFieldCandidates(fields);
   const iframeWarnings = detectApplicationIframeWarnings(document);
   return {
@@ -413,7 +434,14 @@ function analyzeCurrentApplicationFields() {
     fields,
     mappings,
     verification,
-    iframeWarnings,
+    iframeWarnings: [
+      ...iframeWarnings,
+      ...(detectedFields.length > maxFillItems
+        ? [
+            `Only the first ${maxFillItems} detected fields are included. Review the remaining fields manually.`
+          ]
+        : [])
+    ],
     fieldCount: fields.length
   };
 }
@@ -586,18 +614,25 @@ async function persistApplicationSession(
 ): Promise<boolean> {
   if (!state.pageUrl || !state.preview.length) return false;
   try {
-    const result = (await chrome.runtime.sendMessage({
-      command: 'SAVE_APPLICATION_SESSION',
-      payload: {
-        pageUrl: state.pageUrl,
-        fieldPreview: state.preview,
-        fillResults: state.fillResults,
-        manualVerificationRequired: state.manualVerificationRequired,
-        status: patch.status ?? (state.fillResults.length ? 'draft' : 'draft'),
-        job: state.job,
-        jobPostingId: state.job?.id
-      }
-    })) as ExtensionCommandResult<ApplicationSession>;
+    const write = sessionWriteChain
+      .catch(() => undefined)
+      .then(
+        () =>
+          chrome.runtime.sendMessage({
+            command: 'SAVE_APPLICATION_SESSION',
+            payload: {
+              pageUrl: state.pageUrl,
+              fieldPreview: state.preview,
+              fillResults: state.fillResults,
+              manualVerificationRequired: state.manualVerificationRequired,
+              status: patch.status ?? 'draft',
+              job: state.job,
+              jobPostingId: state.job?.id
+            }
+          }) as Promise<ExtensionCommandResult<ApplicationSession>>
+      );
+    sessionWriteChain = write.then(() => undefined);
+    const result = await write;
 
     if (!result.ok) {
       state.warnings = [

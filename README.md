@@ -12,6 +12,17 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-07-26. Session Persistence And Boundary Hardening
+
+- Prevented session restoration from erasing previously recorded fill evidence.
+- Rejected malformed preview states, duplicate fill results, and mismatched completion records.
+- Serialized in-page session writes and surfaced local persistence failures.
+- Capped analyzed fields at the persisted fill boundary and warned when forms exceed it.
+- Normalized saved-search URLs, removed tracking fragments, and rejected embedded credentials.
+- Forced safe local-only settings when stale or malformed settings are found.
+- Removed broken in-extension links to repository Markdown files.
+- Added regression coverage for persistence, boundary validation, URL hygiene, and large forms.
+
 ### 2026-07-26. Target-Bound Filling And Local Data Validation
 
 - Bound every fill request to the exact application URL that was analyzed.

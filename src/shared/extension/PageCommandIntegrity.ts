@@ -1,14 +1,78 @@
-import type { FillPreviewItem, FillResult } from '../models/FieldMapping';
+import type { FieldMappingKind, FillPreviewItem, FillResult } from '../models/FieldMapping';
 
 export interface FillApprovedFieldsRequest {
   pageUrl: string;
   preview: FillPreviewItem[];
 }
 
-const maxFillItems = 500;
+export const maxFillItems = 500;
 const maxSelectorLength = 2000;
 const maxValueLength = 20000;
 const maxMessageLength = 4000;
+const maxMetadataLength = 4000;
+const maxOptionLength = 1000;
+const maxOptions = 500;
+
+const fieldMappingKinds = new Set<FieldMappingKind>([
+  'firstName',
+  'lastName',
+  'fullName',
+  'email',
+  'phone',
+  'address',
+  'city',
+  'state',
+  'zip',
+  'linkedInUrl',
+  'githubUrl',
+  'portfolioUrl',
+  'resumeUpload',
+  'coverLetterUpload',
+  'workAuthorization',
+  'sponsorship',
+  'desiredSalary',
+  'earliestStartDate',
+  'currentEmployer',
+  'education',
+  'workExperience',
+  'yearsExperience',
+  'highestDegree',
+  'availability',
+  'willingToRelocate',
+  'remotePreference',
+  'voluntaryDemographic',
+  'disability',
+  'veteranStatus',
+  'gender',
+  'race',
+  'ethnicity',
+  'pronouns',
+  'unknown'
+]);
+
+const previewStatuses = new Set([
+  'pending',
+  'approved',
+  'rejected',
+  'filled',
+  'failed',
+  'manual-only'
+]);
+
+const controlFamilies = new Set([
+  'native-input',
+  'native-textarea',
+  'native-select',
+  'native-multi-select',
+  'radio-group',
+  'checkbox-group',
+  'file-upload',
+  'aria-combobox',
+  'custom-select',
+  'unknown-widget'
+]);
+
+const candidateSources = new Set(['native-control', 'aria-widget', 'grouped-control']);
 
 export function normalizePageUrl(value: string): string | undefined {
   try {
@@ -51,13 +115,11 @@ export function isValidFillResultArray(value: unknown): value is FillResult[] {
     value.every(
       (item) =>
         isRecord(item) &&
-        typeof item.selector === 'string' &&
-        item.selector.length > 0 &&
-        item.selector.length <= maxSelectorLength &&
+        isBoundedString(item.selector, maxSelectorLength) &&
         typeof item.ok === 'boolean' &&
-        typeof item.message === 'string' &&
-        item.message.length <= maxMessageLength
-    )
+        isBoundedString(item.message, maxMessageLength, true)
+    ) &&
+    new Set(value.map((item) => item.selector)).size === value.length
   );
 }
 
@@ -65,20 +127,16 @@ function isValidFillPreviewItem(value: unknown): value is FillPreviewItem {
   if (!isRecord(value) || !isRecord(value.candidate)) return false;
   const candidate = value.candidate;
   return (
-    typeof candidate.selector === 'string' &&
-    candidate.selector.length > 0 &&
-    candidate.selector.length <= maxSelectorLength &&
-    typeof candidate.tagName === 'string' &&
-    candidate.tagName.length > 0 &&
-    candidate.tagName.length <= 40 &&
+    isBoundedString(candidate.selector, maxSelectorLength) &&
+    isBoundedString(candidate.tagName, 40) &&
     Array.isArray(candidate.options) &&
-    candidate.options.length <= 500 &&
-    candidate.options.every((option) => typeof option === 'string' && option.length <= 2000) &&
+    candidate.options.length <= maxOptions &&
+    candidate.options.every((option) => isBoundedString(option, maxOptionLength, true)) &&
     (candidate.optionValues === undefined ||
       (Array.isArray(candidate.optionValues) &&
-        candidate.optionValues.length <= 500 &&
-        candidate.optionValues.every(
-          (option) => typeof option === 'string' && option.length <= 2000
+        candidate.optionValues.length <= maxOptions &&
+        candidate.optionValues.every((option) =>
+          isBoundedString(option, maxOptionLength, true)
         ))) &&
     everyOptionalStringBounded(candidate, [
       'inputType',
@@ -97,13 +155,17 @@ function isValidFillPreviewItem(value: unknown): value is FillPreviewItem {
       'groupLabel',
       'fieldsetLegend',
       'role',
-      'controlFamily',
-      'candidateSource',
       'frameWarning'
     ]) &&
+    optionalEnum(candidate.controlFamily, controlFamilies) &&
+    optionalEnum(candidate.candidateSource, candidateSources) &&
     typeof candidate.required === 'boolean' &&
     typeof candidate.visible === 'boolean' &&
+    optionalBoolean(candidate.disabled) &&
+    optionalBoolean(candidate.readOnly) &&
+    optionalBoolean(candidate.stableSelector) &&
     typeof value.kind === 'string' &&
+    fieldMappingKinds.has(value.kind as FieldMappingKind) &&
     typeof value.confidence === 'number' &&
     Number.isFinite(value.confidence) &&
     value.confidence >= 0 &&
@@ -112,8 +174,12 @@ function isValidFillPreviewItem(value: unknown): value is FillPreviewItem {
     typeof value.fillable === 'boolean' &&
     typeof value.requiresDirectReview === 'boolean' &&
     typeof value.approved === 'boolean' &&
+    optionalBoolean(value.rejected) &&
+    (value.status === undefined || previewStatuses.has(String(value.status))) &&
     (value.value === undefined ||
-      (typeof value.value === 'string' && value.value.length <= maxValueLength))
+      (typeof value.value === 'string' && value.value.length <= maxValueLength)) &&
+    (value.warning === undefined || isBoundedString(value.warning, maxMessageLength, true)) &&
+    (value.explanation === undefined || isBoundedString(value.explanation, maxMessageLength, true))
   );
 }
 
@@ -121,7 +187,23 @@ function everyOptionalStringBounded(value: Record<string, any>, keys: string[]):
   return keys.every(
     (key) =>
       value[key] === undefined ||
-      (typeof value[key] === 'string' && value[key].length <= maxValueLength)
+      (typeof value[key] === 'string' && value[key].length <= maxMetadataLength)
+  );
+}
+
+function optionalBoolean(value: unknown): boolean {
+  return value === undefined || typeof value === 'boolean';
+}
+
+function optionalEnum(value: unknown, values: Set<string>): boolean {
+  return value === undefined || (typeof value === 'string' && values.has(value));
+}
+
+function isBoundedString(value: unknown, maxLength: number, allowEmpty = false): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= maxLength &&
+    (allowEmpty || value.trim().length > 0)
   );
 }
 

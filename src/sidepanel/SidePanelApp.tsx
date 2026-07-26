@@ -70,17 +70,27 @@ export function SidePanelApp() {
   const [pageWarnings, setPageWarnings] = useState<string[]>([]);
   const [browser, setBrowser] = useState<BrowserCompatibility>();
   const sessionWriteChain = useRef<Promise<void>>(Promise.resolve());
+  const loadSequence = useRef(0);
+  const previewRef = useRef<FillPreviewItem[]>([]);
+
+  useEffect(() => {
+    previewRef.current = preview;
+  }, [preview]);
 
   useEffect(() => {
     void loadActiveProfile();
     void loadTabStatus();
     void detectBrowserCompatibility().then(setBrowser);
+    // Mount-only initialization; later target refreshes are invoked explicitly after page actions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadTabStatus() {
+    const requestId = ++loadSequence.current;
     const result = (await chrome.runtime.sendMessage({
       command: 'GET_CURRENT_TAB_STATUS'
     })) as ExtensionCommandResult<TabCapabilityResult>;
+    if (requestId !== loadSequence.current) return;
     const nextStatus = result.data ?? result.response;
     setPageStatus(nextStatus);
 
@@ -95,9 +105,10 @@ export function SidePanelApp() {
     }
 
     const existing = await sessionRepo.findByPageUrl(nextStatus.url);
+    if (requestId !== loadSequence.current) return;
     if (!existing) {
       if (session && !isSamePageUrl(session.pageUrl, nextStatus.url)) {
-        clearSessionBoundState();
+        clearSessionBoundState(true);
       }
       return;
     }
@@ -116,10 +127,6 @@ export function SidePanelApp() {
       submittedByUser: existing.status === 'submitted-by-user',
       updatedAt: new Date().toISOString()
     };
-    if (!(await queueSessionWrite(restoredSession))) {
-      setStatus('The saved session could not be refreshed locally.');
-      return;
-    }
     setSession(restoredSession);
     setJob(restoredSession.job);
     setPreview(restoredPreview);
@@ -141,7 +148,6 @@ export function SidePanelApp() {
       await settingsRepo.clearActiveProfileId();
     }
     setProfile(active);
-    if (!active) setStatus('Profile needed before filling. You can analyze a job first.');
   }
 
   async function analyzeJob() {
@@ -196,7 +202,7 @@ export function SidePanelApp() {
       );
       return;
     }
-    const detectedCount = response.fieldCount ?? response.mappings?.length ?? 0;
+    const detectedCount = response.mappings?.length ?? 0;
     if (detectedCount === 0) {
       clearSessionBoundState();
       const shieldsGuidance = getBraveShieldsGuidance({
@@ -229,15 +235,11 @@ export function SidePanelApp() {
       nextWarnings.push(shieldsGuidance);
     }
     const nextSummary = {
-      fieldCount: response.fieldCount ?? nextPreview.length,
-      fillableCount: response.fillableCount ?? nextPreview.filter((item) => item.fillable).length,
-      manualOnlyCount:
-        response.manualOnlyCount ??
-        nextPreview.filter((item) => item.status === 'manual-only').length,
-      sensitiveCount:
-        response.sensitiveCount ?? nextPreview.filter((item) => item.sensitive).length,
-      unknownCount:
-        response.unknownCount ?? nextPreview.filter((item) => item.kind === 'unknown').length
+      fieldCount: nextPreview.length,
+      fillableCount: nextPreview.filter((item) => item.fillable).length,
+      manualOnlyCount: nextPreview.filter((item) => item.status === 'manual-only').length,
+      sensitiveCount: nextPreview.filter((item) => item.sensitive).length,
+      unknownCount: nextPreview.filter((item) => item.kind === 'unknown').length
     };
     const pageUrl = response.pageUrl;
     const existing = await sessionRepo.findByPageUrl(pageUrl);
@@ -325,11 +327,12 @@ export function SidePanelApp() {
     const complete = isCompleteApprovedFill(nextPreview, results);
     setPreview(nextPreview);
     setFillResults(results);
-    await saveSession({
+    const saved = await saveSession({
       fieldPreview: nextPreview,
       fillResults: results,
       status: complete ? 'filled' : 'draft'
     });
+    if (!saved) return;
     const successfulCount = results.filter((fillResult) => fillResult.ok).length;
     setStatus(
       complete
@@ -436,18 +439,20 @@ export function SidePanelApp() {
     }
   }
 
-  function clearSessionBoundState() {
+  function clearSessionBoundState(clearJob = false) {
     setSession(undefined);
+    previewRef.current = [];
     setPreview([]);
     setFillResults([]);
     setNotes('');
     setFieldSummary(undefined);
     setPageWarnings([]);
     setVerification('No manual verification detected.');
+    if (clearJob) setJob(undefined);
   }
 
   function updatePreview(selector: string, patch: Partial<FillPreviewItem>) {
-    const nextPreview = preview.map((item) => {
+    const nextPreview = previewRef.current.map((item) => {
       if (item.candidate.selector !== selector) return item;
       const valueChanged =
         Object.prototype.hasOwnProperty.call(patch, 'value') && patch.value !== item.value;
@@ -463,22 +468,27 @@ export function SidePanelApp() {
           : {})
       };
     });
+    previewRef.current = nextPreview;
     setPreview(nextPreview);
     void saveSession({ fieldPreview: nextPreview });
   }
 
   async function approveSafeFields() {
     const nextPreview = approveSafeHighConfidence(preview);
+    previewRef.current = nextPreview;
     setPreview(nextPreview);
-    await saveSession({ fieldPreview: nextPreview });
-    setStatus(postActionMessage('safe-approved'));
+    if (await saveSession({ fieldPreview: nextPreview })) {
+      setStatus(postActionMessage('safe-approved'));
+    }
   }
 
   async function clearApprovedFields() {
     const nextPreview = clearApprovals(preview);
+    previewRef.current = nextPreview;
     setPreview(nextPreview);
-    await saveSession({ fieldPreview: nextPreview });
-    setStatus('Field approvals cleared.');
+    if (await saveSession({ fieldPreview: nextPreview })) {
+      setStatus('Field approvals cleared.');
+    }
   }
 
   const canOfferPermission = canOfferSitePermission(pageStatus);

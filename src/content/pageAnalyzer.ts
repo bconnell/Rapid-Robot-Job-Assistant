@@ -1,6 +1,7 @@
 import { detectCaptchaAndBotCheck } from '../shared/security/CaptchaAndBotCheckRules';
 import {
   isSamePageUrl,
+  maxFillItems,
   readFillApprovedFieldsRequest
 } from '../shared/extension/PageCommandIntegrity';
 import { extractJobPostingFromDocument } from './jobPageExtractor';
@@ -33,9 +34,16 @@ export function analyzeJobPage() {
 
 export function analyzeApplicationFields() {
   const verification = detectCaptchaAndBotCheck(document);
-  const fields = detectFormFields(document);
+  const detectedFields = detectFormFields(document);
+  const fields = detectedFields.slice(0, maxFillItems);
   const mappings = mapFieldCandidates(fields);
   const iframeWarnings = detectApplicationIframeWarnings(document);
+  const limitWarnings =
+    detectedFields.length > maxFillItems
+      ? [
+          `Only the first ${maxFillItems} detected fields are included. Review the remaining fields manually.`
+        ]
+      : [];
   const manualOnlyCount = mappings.filter(
     (mapping) =>
       !mapping.fillable ||
@@ -52,7 +60,10 @@ export function analyzeApplicationFields() {
     fields,
     mappings,
     verification,
-    warnings: iframeWarnings.length && fields.length === 0 ? iframeWarnings : [],
+    warnings: [
+      ...(iframeWarnings.length && fields.length === 0 ? iframeWarnings : []),
+      ...limitWarnings
+    ],
     iframeWarnings,
     fieldCount: fields.length,
     fillableCount: mappings.filter((mapping) => mapping.fillable).length,

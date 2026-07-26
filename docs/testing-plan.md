@@ -297,3 +297,12 @@ Browser automation may be useful later for controlled extension QA. It should no
 8. Confirm oversized pasted resumes, `.docx` files, and JSON imports are rejected locally.
 9. Confirm malformed imported profiles, jobs, searches, and sessions do not receive a valid preview.
 10. Confirm target-bound page state is cleared when the target changes or becomes unavailable.
+
+## Persistence Boundary Regression Checks
+
+- Confirm opening a saved session does not erase its stored fill-result history.
+- Confirm malformed preview status values and duplicate result selectors are rejected.
+- Confirm forms above the supported field limit are capped with a visible warning.
+- Confirm rapid in-page edits are serialized and save failures remain visible.
+- Confirm saved-search URLs reject embedded credentials and remove fragments and common tracking parameters.
+- Confirm repository documentation names are displayed without broken extension links.

@@ -113,3 +113,9 @@ Fill requests carry the exact HTTP or HTTPS application URL used during field an
 Pasted resume text, `.docx` files, and JSON import previews have explicit size limits. Imported records are checked by collection, identifier, URL, field-preview shape, fill-result shape, and truthful session status before they can be presented as valid.
 
 Private log details are redacted regardless of whether a caller passes a string or an object.
+
+## Saved Search URL Hygiene
+
+Saved search URLs must use HTTP or HTTPS and cannot contain embedded usernames or passwords. URL fragments and common marketing parameters are removed before storage.
+
+Until network AI providers are implemented, stored settings are normalized back to local-only mode with manual review required.
