@@ -23,57 +23,95 @@ interface InPageAssistantState {
   browser?: BrowserCompatibility;
   profile?: UserProfile;
   job?: JobPosting;
+  pageUrl: string;
   preview: FillPreviewItem[];
   fillResults: FillResult[];
   status: string;
+  warnings: string[];
   minimized: boolean;
+  manualVerificationRequired: boolean;
 }
 
-export async function openInPageAssistant(): Promise<{ opened: true; restored: boolean }> {
+let activeState: InPageAssistantState | undefined;
+let activeShadow: ShadowRoot | undefined;
+
+export async function openInPageAssistant(): Promise<{
+  opened: true;
+  restored: boolean;
+  openedAs: 'in-page-assistant';
+  userMessage: string;
+}> {
   const existing = document.getElementById(rootId) as HTMLElement | null;
-  if (existing) {
+  if (existing && activeShadow && activeState) {
+    activeState.minimized = false;
     existing.dataset.minimized = 'false';
+    render(activeShadow, activeState);
     existing.scrollIntoView?.({ block: 'nearest' });
-    return { opened: true, restored: true };
+    return {
+      opened: true,
+      restored: true,
+      openedAs: 'in-page-assistant',
+      userMessage: 'Assistant restored on this page.'
+    };
   }
+
+  existing?.remove();
 
   const root = document.createElement('div');
   root.id = rootId;
+  root.dataset.minimized = 'false';
   const shadow = root.attachShadow({ mode: 'open' });
   document.documentElement.append(root);
-  const state: InPageAssistantState = {
+
+  activeShadow = shadow;
+  activeState = {
     browser: await detectBrowserCompatibility(),
     profile: await loadActiveProfile(),
+    pageUrl: document.location.href,
     preview: [],
     fillResults: [],
     status: 'Assistant opened on this page.',
-    minimized: false
+    warnings: [],
+    minimized: false,
+    manualVerificationRequired: false
   };
-  render(shadow, state);
-  return { opened: true, restored: false };
+  render(shadow, activeState);
+  return {
+    opened: true,
+    restored: false,
+    openedAs: 'in-page-assistant',
+    userMessage: 'Assistant opened on this page.'
+  };
 }
 
 export function closeInPageAssistant(): { closed: boolean } {
   document.getElementById(rootId)?.remove();
+  activeState = undefined;
+  activeShadow = undefined;
   return { closed: true };
 }
 
 export async function toggleInPageAssistant(): Promise<{ opened: boolean; minimized?: boolean }> {
   const root = document.getElementById(rootId);
-  if (!root) {
+  if (!root || !activeShadow || !activeState) {
     await openInPageAssistant();
     return { opened: true };
   }
-  root.dataset.minimized = root.dataset.minimized === 'true' ? 'false' : 'true';
-  return { opened: true, minimized: root.dataset.minimized === 'true' };
+  activeState.minimized = !activeState.minimized;
+  root.dataset.minimized = String(activeState.minimized);
+  render(activeShadow, activeState);
+  return { opened: true, minimized: activeState.minimized };
 }
 
 export function getInPageAssistantStatus(): { open: boolean; minimized: boolean } {
   const root = document.getElementById(rootId);
-  return { open: Boolean(root), minimized: root?.dataset.minimized === 'true' };
+  return {
+    open: Boolean(root),
+    minimized: activeState?.minimized ?? root?.dataset.minimized === 'true'
+  };
 }
 
-async function render(shadow: ShadowRoot, state: InPageAssistantState) {
+function render(shadow: ShadowRoot, state: InPageAssistantState) {
   shadow.innerHTML = '';
   const style = document.createElement('style');
   style.textContent = inPageAssistantStyles;
@@ -81,7 +119,14 @@ async function render(shadow: ShadowRoot, state: InPageAssistantState) {
   panel.className = `panel${state.minimized ? ' minimized' : ''}`;
   panel.innerHTML = buildMarkup(state);
   shadow.append(style, panel);
+  bindPanelEvents(panel, shadow, state);
+}
 
+function bindPanelEvents(
+  panel: HTMLElement,
+  shadow: ShadowRoot,
+  state: InPageAssistantState
+): void {
   panel.querySelector<HTMLButtonElement>('[data-action="close"]')?.addEventListener('click', () => {
     closeInPageAssistant();
   });
@@ -89,71 +134,139 @@ async function render(shadow: ShadowRoot, state: InPageAssistantState) {
     .querySelector<HTMLButtonElement>('[data-action="minimize"]')
     ?.addEventListener('click', () => {
       state.minimized = !state.minimized;
-      void render(shadow, state);
+      document.getElementById(rootId)?.setAttribute('data-minimized', String(state.minimized));
+      render(shadow, state);
     });
   panel
     .querySelector<HTMLButtonElement>('[data-action="analyze-job"]')
     ?.addEventListener('click', async () => {
       const response = analyzeCurrentJobPage();
+      state.manualVerificationRequired = Boolean(response.verification.detected);
+      if (!hasMeaningfulJobData(response.job)) {
+        state.job = undefined;
+        state.status =
+          'No clear job details were found on this page. Review the page or try another job page.';
+        state.warnings = ['No saved job was created from this weak page analysis.'];
+        render(shadow, state);
+        return;
+      }
+
       state.job = response.job;
-      state.status = response.job?.title
-        ? 'Job analyzed. Next: analyze fields or review your profile before filling.'
-        : 'No clear job details were found on this page.';
-      await chrome.runtime.sendMessage({ command: 'SAVE_ANALYZED_JOB', payload: response.job });
-      await render(shadow, state);
+      const saved = await saveAnalyzedJob(response.job);
+      state.status = saved.ok
+        ? 'Job analyzed and saved. Next: analyze fields or review your profile before filling.'
+        : (saved.userMessage ?? 'Job analyzed, but it was not saved locally.');
+      state.warnings = saved.ok ? [] : [state.status];
+      render(shadow, state);
     });
   panel
     .querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')
     ?.addEventListener('click', async () => {
       const response = analyzeCurrentApplicationFields();
       state.profile = state.profile ?? (await loadActiveProfile());
+      state.pageUrl = response.pageUrl;
       state.preview = buildFillPreview(response.mappings, state.profile);
+      state.fillResults = [];
+      state.manualVerificationRequired = Boolean(response.verification.detected);
+
       const shields = getBraveShieldsGuidance({
         browserName: state.browser?.browserName ?? 'unknown',
         fieldCount: response.fieldCount,
         iframeWarnings: response.iframeWarnings,
         formDetectionFailed: response.fieldCount === 0
       });
+      state.warnings = [...response.iframeWarnings, ...(shields ? [shields] : [])].filter(
+        uniqueOnly
+      );
       state.status =
         shields ??
         (response.fieldCount
           ? `${response.fieldCount} fields found. Review suggested values before filling.`
           : 'No fields found. This form may be embedded or not fully loaded.');
-      await chrome.runtime.sendMessage({
-        command: 'SAVE_APPLICATION_SESSION',
-        payload: {
-          pageUrl: response.pageUrl,
-          fieldPreview: state.preview,
-          manualVerificationRequired: Boolean(response.verification.detected)
-        }
-      });
-      await render(shadow, state);
+      await persistApplicationSession(state);
+      render(shadow, state);
     });
   panel
     .querySelector<HTMLButtonElement>('[data-action="approve-safe"]')
     ?.addEventListener('click', async () => {
       state.preview = approveSafeHighConfidence(state.preview);
       state.status = 'Safe high-confidence fields approved. Review values before filling.';
-      await render(shadow, state);
+      await persistApplicationSession(state);
+      render(shadow, state);
     });
   panel
     .querySelector<HTMLButtonElement>('[data-action="fill"]')
     ?.addEventListener('click', async () => {
       const verification = detectCaptchaAndBotCheck(document);
+      state.manualVerificationRequired = Boolean(verification.detected);
       if (verification.detected) {
         state.status = 'Manual verification detected. Complete it yourself before continuing.';
-        await render(shadow, state);
+        await persistApplicationSession(state, { status: 'manual-verification' });
+        render(shadow, state);
         return;
       }
       state.fillResults = fillApprovedFields(state.preview, document);
+      state.preview = updatePreviewStatusesFromResults(state.preview, state.fillResults);
       state.status = 'Approved fields filled. Review the page manually before submitting.';
-      await render(shadow, state);
+      await persistApplicationSession(state, { status: 'filled' });
+      render(shadow, state);
     });
   panel
     .querySelector<HTMLButtonElement>('[data-action="options"]')
     ?.addEventListener('click', () => {
       void chrome.runtime.sendMessage({ command: 'OPEN_OPTIONS' });
     });
+
+  panel.querySelectorAll<HTMLInputElement>('[data-field-value]').forEach((input) => {
+    input.addEventListener('input', () => {
+      const index = Number(input.dataset.index);
+      if (!Number.isInteger(index) || !state.preview[index]) return;
+      const value = input.value;
+      state.preview[index] = {
+        ...state.preview[index],
+        value,
+        rejected: value.trim() ? state.preview[index].rejected : true,
+        status:
+          state.preview[index].status === 'manual-only'
+            ? 'manual-only'
+            : value.trim()
+              ? 'pending'
+              : 'rejected'
+      };
+    });
+    input.addEventListener('change', () => {
+      void persistApplicationSession(state);
+    });
+  });
+
+  panel.querySelectorAll<HTMLButtonElement>('[data-action="approve-field"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const index = Number(button.dataset.index);
+      const item = state.preview[index];
+      if (!Number.isInteger(index) || !item) return;
+      if (!canIndividuallyApprove(item)) {
+        state.status = item.warning || 'This field needs manual review and was not approved.';
+        render(shadow, state);
+        return;
+      }
+      state.preview[index] = { ...item, approved: true, rejected: false, status: 'approved' };
+      state.status = 'Field approved. Review all values before filling.';
+      await persistApplicationSession(state);
+      render(shadow, state);
+    });
+  });
+
+  panel.querySelectorAll<HTMLButtonElement>('[data-action="skip-field"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const index = Number(button.dataset.index);
+      const item = state.preview[index];
+      if (!Number.isInteger(index) || !item) return;
+      state.preview[index] = { ...item, approved: false, rejected: true, status: 'rejected' };
+      state.status = 'Field skipped.';
+      await persistApplicationSession(state);
+      render(shadow, state);
+    });
+  });
 }
 
 function analyzeCurrentJobPage() {
@@ -216,6 +329,7 @@ function buildMarkup(state: InPageAssistantState): string {
       <div class="card">
         <h3>Status</h3>
         <p>${escapeHtml(state.status)}</p>
+        ${state.warnings.map((warning) => `<p class="warn">${escapeHtml(warning)}</p>`).join('')}
         <p>No auto-submit. You submit manually.</p>
       </div>
       ${
@@ -232,7 +346,10 @@ function buildMarkup(state: InPageAssistantState): string {
               <button class="secondary" data-action="approve-safe">Approve Safe Fields</button>
               <button data-action="fill" ${approvals ? '' : 'disabled'}>Fill Approved</button>
             </div>
-            ${state.preview.slice(0, 6).map(fieldMarkup).join('')}
+            ${state.preview
+              .slice(0, 12)
+              .map((item, index) => fieldMarkup(item, index))
+              .join('')}
           </div>`
           : ''
       }
@@ -248,17 +365,23 @@ function buildMarkup(state: InPageAssistantState): string {
     </div>`;
 }
 
-function fieldMarkup(item: FillPreviewItem): string {
+function fieldMarkup(item: FillPreviewItem, index: number): string {
   const label =
     item.candidate.labelText ||
     item.candidate.ariaLabel ||
     item.candidate.placeholder ||
     item.candidate.name ||
     item.kind;
+  const approveDisabled = canIndividuallyApprove(item) ? '' : 'disabled';
   return `<div class="field">
     <p><strong>${escapeHtml(label)}</strong> ${item.sensitive ? '<span class="chip warn">Sensitive</span>' : ''}</p>
-    <input type="text" value="${escapeAttribute(item.value ?? '')}" disabled />
+    <input type="text" value="${escapeAttribute(item.value ?? '')}" data-field-value data-index="${index}" />
     <p>${escapeHtml(item.warning ?? item.explanation ?? '')}</p>
+    <div class="row field-actions">
+      <button class="secondary" data-action="approve-field" data-index="${index}" ${approveDisabled}>Approve</button>
+      <button class="secondary" data-action="skip-field" data-index="${index}">Skip</button>
+      <span class="chip">${escapeHtml(item.status ?? 'pending')}</span>
+    </div>
   </div>`;
 }
 
@@ -272,11 +395,76 @@ function getRecommendedAction(state: InPageAssistantState): string {
   return 'Fill approved fields, then submit manually yourself.';
 }
 
+function hasMeaningfulJobData(job: JobPosting): boolean {
+  const title = job.title.trim().toLowerCase();
+  const hasSpecificTitle = Boolean(
+    title && title !== 'untitled job' && title !== 'jobs' && title !== 'careers'
+  );
+  const hasContext = Boolean(job.company || job.location || job.requirementsText || job.salaryText);
+  const hasUsefulDescription = job.descriptionText.trim().length >= 250;
+  return hasSpecificTitle || hasContext || hasUsefulDescription || job.detectedKeywords.length >= 2;
+}
+
+function canIndividuallyApprove(item: FillPreviewItem): boolean {
+  return Boolean(
+    item.value?.trim() &&
+    item.fillable &&
+    !item.sensitive &&
+    item.status !== 'manual-only' &&
+    item.candidate.visible &&
+    !item.candidate.disabled &&
+    !item.candidate.readOnly &&
+    item.candidate.stableSelector !== false
+  );
+}
+
+function updatePreviewStatusesFromResults(
+  preview: FillPreviewItem[],
+  results: FillResult[]
+): FillPreviewItem[] {
+  return preview.map((item) => {
+    const fillResult = results.find((candidate) => candidate.selector === item.candidate.selector);
+    return fillResult
+      ? { ...item, status: fillResult.ok ? ('filled' as const) : ('failed' as const) }
+      : item;
+  });
+}
+
 async function loadActiveProfile(): Promise<UserProfile | undefined> {
   const result = (await chrome.runtime.sendMessage({
     command: 'GET_ACTIVE_PROFILE'
   })) as ExtensionCommandResult<UserProfile | undefined>;
   return result.data ?? result.response;
+}
+
+async function saveAnalyzedJob(job: JobPosting): Promise<ExtensionCommandResult<JobPosting>> {
+  return (await chrome.runtime.sendMessage({
+    command: 'SAVE_ANALYZED_JOB',
+    payload: job
+  })) as ExtensionCommandResult<JobPosting>;
+}
+
+async function persistApplicationSession(
+  state: InPageAssistantState,
+  patch: { status?: string } = {}
+): Promise<void> {
+  if (!state.pageUrl) return;
+  await chrome.runtime.sendMessage({
+    command: 'SAVE_APPLICATION_SESSION',
+    payload: {
+      pageUrl: state.pageUrl,
+      fieldPreview: state.preview,
+      fillResults: state.fillResults,
+      manualVerificationRequired: state.manualVerificationRequired,
+      status: patch.status ?? (state.fillResults.length ? 'filled' : 'draft'),
+      job: state.job,
+      jobPostingId: state.job?.id
+    }
+  });
+}
+
+function uniqueOnly(value: string, index: number, values: string[]): boolean {
+  return Boolean(value) && values.indexOf(value) === index;
 }
 
 function escapeHtml(value: string): string {

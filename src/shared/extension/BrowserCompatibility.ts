@@ -33,8 +33,8 @@ export async function detectBrowserCompatibility(
     (typeof navigator !== 'undefined'
       ? (navigator as Navigator & { brave?: { isBrave?: () => boolean | Promise<boolean> } }).brave
       : undefined);
-  const isBrave = braveApi?.isBrave ? await braveApi.isBrave() : false;
-  const browserName = getBrowserName(userAgent, Boolean(isBrave), hasChromeRuntime);
+  const isBrave = await safelyDetectBrave(braveApi);
+  const browserName = getBrowserName(userAgent, isBrave, hasChromeRuntime);
 
   return {
     browserName,
@@ -46,6 +46,17 @@ export async function detectBrowserCompatibility(
       browserName === 'chrome' ? 'expected' : browserName === 'unknown' ? 'unknown' : 'optional',
     compatibilityNotes: buildCompatibilityNotes(browserName)
   };
+}
+
+async function safelyDetectBrave(braveApi?: {
+  isBrave?: () => boolean | Promise<boolean>;
+}): Promise<boolean> {
+  if (!braveApi?.isBrave) return false;
+  try {
+    return Boolean(await braveApi.isBrave());
+  } catch {
+    return false;
+  }
 }
 
 export function getBrowserName(

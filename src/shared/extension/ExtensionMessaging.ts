@@ -41,10 +41,11 @@ export interface PermissionRequestResult {
 
 export interface OpenAssistantResult {
   opened: boolean;
-  openedAs: 'assistant-panel' | 'assistant-tab' | 'none';
+  openedAs: 'in-page-assistant' | 'assistant-panel' | 'assistant-tab' | 'none';
   userMessage: string;
   reason?: string;
   targetRemembered?: boolean;
+  restored?: boolean;
 }
 
 export type OpenWorkspaceResult = OpenAssistantResult;

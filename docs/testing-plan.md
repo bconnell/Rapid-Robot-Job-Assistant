@@ -44,7 +44,7 @@ Fixtures are fake but realistic. They must not be copied from real resumes, real
 Manual checks should cover:
 
 - Loading `dist` as an unpacked extension.
-- Opening the popup and side panel.
+- Opening the popup and the in-page assistant.
 - Analyzing a fake or safe public job page.
 - Detecting fields on a test form.
 - Confirming CAPTCHA detection pauses filling.
@@ -88,11 +88,11 @@ Manual checks should cover:
 4. Click Analyze.
 5. Confirm the extension says Chrome blocks internal pages.
 6. Open a normal job page or test page.
-7. Without clicking **Allow This Site**, click Analyze Job Page from the popup.
+7. Without clicking **Allow This Site**, click **Open Assistant On This Page** from the popup.
 8. Confirm it either analyzes successfully or gives a specific host-access-denied message.
 9. If host-access-denied appears, click **Allow This Site**.
 10. Retry analysis.
-11. Open the side panel.
+11. Open the in-page assistant.
 12. Click Analyze Job Page from the side panel.
 13. Click Analyze Fields on a fake or real application page.
 14. Confirm failed commands do not create empty job or session records.
@@ -139,9 +139,9 @@ Manual checks should cover:
 8. Confirm job analysis completes or returns a specific non-generic error.
 9. Click **Analyze Application Fields** from the popup on an application page.
 10. Confirm field analysis completes or returns a specific non-generic error.
-11. Open the side panel.
-12. Repeat **Analyze Job Page**.
-13. Repeat **Analyze Fields**.
+11. Open the in-page assistant.
+12. Run **Analyze Job** from the in-page assistant.
+13. Run **Analyze Fields** from the in-page assistant.
 14. Confirm restricted pages still show a blocked-page message.
 15. Confirm no empty job or application session is saved after failed content startup.
 16. Confirm no submit button is clicked.
@@ -160,8 +160,8 @@ Manual checks should cover:
 8. Confirm **Allow This Site** is visible near the top when available.
 9. Confirm the primary action is visible without scrolling.
 10. Confirm the popup explains the flow in one compact line.
-11. Click **Open Assistant**.
-12. If the side panel fails, confirm the full assistant tab opens automatically.
+11. Click **Open Assistant On This Page**.
+12. Confirm the in-page assistant opens on the current page.
 13. Confirm the assistant remembers the original job page.
 14. Confirm the assistant does not analyze itself.
 15. Analyze a job.

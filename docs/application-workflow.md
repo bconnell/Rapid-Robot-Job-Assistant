@@ -40,3 +40,9 @@ Most normal pages can be analyzed from a user click through `activeTab`. If Chro
 ## Manual Finish
 
 The extension does not submit applications. The user handles login, CAPTCHA, MFA, final review, and submission.
+
+## Editable Values In The In-Page Assistant
+
+After field analysis, suggested values can be reviewed and corrected in the in-page assistant before approval. Safe fields can be approved individually or through the safe-field approval action. Sensitive fields, file uploads, hidden fields, disabled fields, read-only fields, and custom widgets remain manual-only.
+
+Weak job-page analysis is not saved as a real job. If no clear job details are found, review the page or try another job page.

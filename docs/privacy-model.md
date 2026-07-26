@@ -95,3 +95,19 @@ Import validates JSON shape and shows preview counts. It does not merge records 
 ## Public Repo Rule
 
 Do not commit real user data. Fixtures, examples, tests, screenshots, and docs must use fake data only.
+
+## In-Page Assistant Persistence
+
+Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA details, login details, MFA details, and bot-check details are not stored.
+
+## In-Page Assistant Persistence
+
+Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA details, login details, MFA details, and bot-check details are not stored.
+
+## In-Page Assistant Persistence
+
+Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA details, login details, MFA details, and bot-check details are not stored.
+
+## In-Page Assistant Persistence
+
+Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA details, login details, MFA details, and bot-check details are not stored.
