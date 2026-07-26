@@ -45,7 +45,11 @@ describe('form filler', () => {
         <option value="IL">Illinois</option>
       </select>`;
 
-    const [result] = fillApprovedFields([preview('#state', ' illinois ')], document);
+    const item = preview('#state', ' illinois ');
+    item.candidate.tagName = 'select';
+    item.candidate.inputType = undefined;
+    item.candidate.controlFamily = 'native-select';
+    const [result] = fillApprovedFields([item], document);
 
     expect(result.ok).toBe(true);
     expect(document.querySelector<HTMLSelectElement>('#state')?.value).toBe('IL');

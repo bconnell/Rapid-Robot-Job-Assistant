@@ -43,12 +43,18 @@ export function buildWorkflowState(input: WorkflowStateInput): WorkflowState {
   const preview = input.preview ?? [];
   const fillResults = input.fillResults ?? [];
   const fieldsReady = preview.length > 0;
-  const approvalsReady = preview.some((item) => item.approved);
-  const fillReady = fillResults.length > 0;
+  const approvedItems = preview.filter((item) => item.approved);
+  const approvalsReady = approvedItems.length > 0;
+  const fillAttempted = fillResults.length > 0;
+  const successfulSelectors = new Set(
+    fillResults.filter((result) => result.ok).map((result) => result.selector)
+  );
+  const fillReady =
+    approvalsReady &&
+    approvedItems.every((item) => successfulSelectors.has(item.candidate.selector));
   const pageReady = Boolean(input.pageStatus?.ok);
   const blockedPage = Boolean(input.pageStatus && !input.pageStatus.ok);
-  const finished =
-    input.sessionStatus === 'submitted-by-user' || input.sessionStatus === 'skipped' || fillReady;
+  const finished = input.sessionStatus === 'submitted-by-user' || input.sessionStatus === 'skipped';
 
   const steps: WorkflowStep[] = [
     {
@@ -85,57 +91,80 @@ export function buildWorkflowState(input: WorkflowStateInput): WorkflowState {
     {
       id: 'review',
       label: 'Review values',
-      status: fieldsReady ? (approvalsReady ? 'done' : 'needs-review') : 'blocked',
-      helperText: approvalsReady
-        ? 'Approved fields are ready for a final check.'
-        : fieldsReady
-          ? 'Review suggested values and approve only safe fields.'
-          : 'Analyze fields before reviewing fill values.',
+      status: fieldsReady
+        ? fillAttempted && !fillReady
+          ? 'needs-review'
+          : approvalsReady
+            ? 'done'
+            : 'needs-review'
+        : 'blocked',
+      helperText:
+        fillAttempted && !fillReady
+          ? 'One or more approved fields failed. Review and analyze again before retrying.'
+          : approvalsReady
+            ? 'Approved fields are ready for a final check.'
+            : fieldsReady
+              ? 'Review suggested values and approve only safe fields.'
+              : 'Analyze fields before reviewing fill values.',
       actionLabel: fieldsReady ? 'Review fill preview' : undefined
     },
     {
       id: 'fill',
       label: 'Fill approved',
-      status: fillReady ? 'done' : approvalsReady ? 'ready' : 'blocked',
+      status: fillReady
+        ? 'done'
+        : fillAttempted
+          ? 'needs-review'
+          : approvalsReady
+            ? 'ready'
+            : 'blocked',
       helperText: fillReady
-        ? 'Approved fields were filled. Review the page manually.'
-        : approvalsReady
-          ? 'Fill only the fields you approved.'
-          : 'Approve at least one safe field before filling.',
+        ? 'Every approved field was filled. Review the page manually.'
+        : fillAttempted
+          ? 'The fill attempt was incomplete. Review failures before trying again.'
+          : approvalsReady
+            ? 'Fill only the fields you approved.'
+            : 'Approve at least one safe field before filling.',
       actionLabel: fillReady ? undefined : 'Fill approved fields'
     },
     {
       id: 'finish',
       label: 'Finish manually',
-      status: finished ? 'done' : 'optional',
+      status: finished ? 'done' : fillReady ? 'needs-review' : 'optional',
       helperText:
         input.sessionStatus === 'submitted-by-user'
           ? 'Marked as submitted by you.'
           : input.sessionStatus === 'skipped'
             ? 'Marked as skipped.'
-            : 'You handle login, CAPTCHA, final review, and submission.',
+            : fillReady
+              ? 'Review the completed page and submit it manually.'
+              : 'You handle login, CAPTCHA, final review, and submission.',
       actionLabel: 'Mark submitted or skipped'
     }
   ];
 
-  const currentStepId = fillReady
+  const currentStepId = finished
     ? 'finish'
-    : approvalsReady
-      ? 'fill'
-      : fieldsReady
-        ? profileReady
-          ? 'review'
-          : 'profile'
-        : !jobReady
-          ? 'analyze-job'
-          : !profileReady
-            ? 'profile'
-            : 'analyze-fields';
+    : fillReady
+      ? 'finish'
+      : fillAttempted
+        ? 'review'
+        : approvalsReady
+          ? 'fill'
+          : fieldsReady
+            ? profileReady
+              ? 'review'
+              : 'profile'
+            : !jobReady
+              ? 'analyze-job'
+              : !profileReady
+                ? 'profile'
+                : 'analyze-fields';
   const currentStep = steps.find((step) => step.id === currentStepId) ?? steps[0];
 
   return {
     currentStepId,
-    recommendedAction: buildRecommendedAction(input, currentStep),
+    recommendedAction: buildRecommendedAction(input, currentStep, fillAttempted, fillReady),
     steps,
     profileReady,
     jobReady,
@@ -174,7 +203,7 @@ export function compactWorkflowSteps(steps: WorkflowStep[], currentStepId: strin
 }
 
 export function statusTone(status: WorkflowStepStatus): StatusTone {
-  if (status === 'done' || status === 'ready') return 'done';
+  if (status === 'done') return 'done';
   if (status === 'blocked') return 'blocked';
   return 'warning';
 }
@@ -202,15 +231,23 @@ export function postActionMessage(
     return 'Safe fields approved. Next: review the values, then fill approved fields.';
   }
   if (action === 'filled')
-    return 'Approved fields filled. Review the page manually before submitting.';
+    return 'Every approved field was filled. Review the page manually before submitting.';
   return 'Assistant panel could not open. The full assistant can open in a tab.';
 }
 
-function buildRecommendedAction(input: WorkflowStateInput, currentStep: WorkflowStep): string {
+function buildRecommendedAction(
+  input: WorkflowStateInput,
+  currentStep: WorkflowStep,
+  fillAttempted: boolean,
+  fillReady: boolean
+): string {
   if (input.manualVerificationRequired) {
     return 'Manual verification is required. Finish it yourself before continuing.';
   }
   if (input.pageStatus && !input.pageStatus.ok) return input.pageStatus.userMessage;
+  if (fillAttempted && !fillReady) {
+    return 'Review the failed or changed fields, analyze again, and approve a fresh preview.';
+  }
   const profileReady = Boolean(input.profile);
   const jobReady = Boolean(input.job);
   const fieldsReady = Boolean((input.preview ?? []).length);

@@ -12,6 +12,16 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-07-26. Recursive Workflow Integrity
+
+- Prevented hidden, stale, sensitive, disabled, and changed fields from being filled.
+- Made approval changes, partial fill results, and manual completion status truthful.
+- Prevented empty sessions and weak non-job pages from being saved as successful analysis.
+- Repaired remembered-target routing from the full assistant and restored safe session context.
+- Preserved unrelated settings when clearing profiles and cleared target-page data during full cleanup.
+- Classified additional Chromium browsers without relying on side-panel behavior.
+- Added regression coverage for page drift, field visibility, approval invalidation, and failed fills.
+
 ### 2026-05-22. In-Page Assistant And Browser Compatibility
 
 - Added a user-triggered in-page assistant as the primary live workflow.

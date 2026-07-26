@@ -38,6 +38,13 @@ export class ChromeStorageRepository {
     await chrome.storage.local.remove([STORAGE_KEYS.settings, STORAGE_KEYS.activeProfileId]);
   }
 
+  async clearActiveProfileId(): Promise<void> {
+    if (!globalThis.chrome?.storage?.local) {
+      return;
+    }
+    await chrome.storage.local.remove(STORAGE_KEYS.activeProfileId);
+  }
+
   async getActiveProfileId(): Promise<string | undefined> {
     if (!globalThis.chrome?.storage?.local) {
       return undefined;

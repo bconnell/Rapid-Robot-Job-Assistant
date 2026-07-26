@@ -66,6 +66,9 @@ export function getBrowserName(
 ): BrowserName {
   if (isBrave) return 'brave';
   if (/Edg\//.test(userAgent)) return 'edge';
+  if (/OPR\/|Opera\/|Vivaldi\/|YaBrowser\/|SamsungBrowser\/|DuckDuckGo\//i.test(userAgent)) {
+    return hasChromeRuntime ? 'chromium' : 'unknown';
+  }
   if (/Chrome\//.test(userAgent) && /Safari\//.test(userAgent)) return 'chrome';
   if (hasChromeRuntime && /Chrom/i.test(userAgent)) return 'chromium';
   return hasChromeRuntime ? 'chromium' : 'unknown';

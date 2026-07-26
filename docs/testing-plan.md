@@ -272,3 +272,15 @@ GitHub Actions runs `npm ci`, build, tests, typecheck, lint, and format. It does
 ## Future Browser Automation
 
 Browser automation may be useful later for controlled extension QA. It should not be used to automate real job applications or bypass site protections.
+
+## Recursive Integrity QA
+
+1. Analyze a form with more than twelve fields and confirm every detected field is visible.
+2. Approve a value, edit it, and confirm its approval is cleared.
+3. Navigate to another application route and confirm stale approvals cannot fill the new page.
+4. Confirm disabled, hidden, sensitive, changed, and unfillable fields remain unchanged.
+5. Confirm a partial or failed fill is not reported as complete.
+6. Confirm a page with no fields does not create an empty application session.
+7. Confirm clearing profiles preserves unrelated settings.
+8. Confirm clearing all local data also clears the remembered target page.
+9. Open the full assistant against a remembered target that has not loaded the content script and confirm the target is checked by id rather than compared with the assistant tab.

@@ -77,14 +77,14 @@ export function OptionsApp() {
     setSavedSearches(searches);
     if (nextProfileId) {
       const active = await profileRepo.get(nextProfileId);
-      if (active) setProfile(active);
+      if (active) {
+        setProfile(active);
+      } else {
+        await settingsRepo.clearActiveProfileId();
+        setActiveProfileId(undefined);
+        setStatus('The saved active profile reference was missing and has been cleared.');
+      }
     }
-  }
-
-  async function saveSettings(next: ExtensionSettings) {
-    setSettings(next);
-    await settingsRepo.saveSettings(next);
-    setStatus('Settings saved locally.');
   }
 
   async function parseAndSaveProfileFromText(
@@ -236,6 +236,7 @@ export function OptionsApp() {
     );
     if (!confirmed) return;
     await settingsRepo.clearSettings();
+    await clearTargetTab();
     await clearAllIndexedDbData();
     setSettings(defaultSettings);
     setProfile(emptyUserProfile());
@@ -280,7 +281,7 @@ export function OptionsApp() {
       ...(await profileRepo.list()).map((savedProfile) => profileRepo.delete(savedProfile.id)),
       ...(await resumeRepo.list()).map((resume) => resumeRepo.delete(resume.id))
     ]);
-    await settingsRepo.clearSettings();
+    await settingsRepo.clearActiveProfileId();
     setProfile(emptyUserProfile());
     setActiveProfileId(undefined);
     setResumeText('');
@@ -311,7 +312,7 @@ export function OptionsApp() {
           />
         </div>
         <aside className="options-sidebar stack">
-          <AiProviderSettingsPanel settings={settings} onSaveSettings={saveSettings} />
+          <AiProviderSettingsPanel />
           <SavedSearchesPanel
             searchForm={searchForm}
             savedSearches={savedSearches}
@@ -599,49 +600,23 @@ function ProfileReviewPanel({
   );
 }
 
-function AiProviderSettingsPanel({
-  settings,
-  onSaveSettings
-}: {
-  settings: ExtensionSettings;
-  onSaveSettings: (settings: ExtensionSettings) => void;
-}) {
+function AiProviderSettingsPanel() {
   return (
     <section className="card stack options-card compact-card">
       <h2>AI Provider Settings</h2>
       <label>
-        <input
-          type="checkbox"
-          checked={settings.localOnlyMode}
-          onChange={(event) =>
-            onSaveSettings({ ...settings, localOnlyMode: event.target.checked, aiEnabled: false })
-          }
-        />{' '}
-        Local-only mode
+        <input type="checkbox" checked readOnly disabled /> Local-only mode
       </label>
       <label>
-        <input
-          type="checkbox"
-          checked={settings.aiEnabled}
-          disabled={settings.localOnlyMode}
-          onChange={(event) => onSaveSettings({ ...settings, aiEnabled: event.target.checked })}
-        />{' '}
-        Enable AI provider after review
+        <input type="checkbox" checked={false} readOnly disabled /> Network AI provider
       </label>
-      <select
-        value={settings.aiProvider}
-        onChange={(event) =>
-          onSaveSettings({
-            ...settings,
-            aiProvider: event.target.value as ExtensionSettings['aiProvider']
-          })
-        }
-      >
+      <select value="manual" disabled>
         <option value="manual">Manual local rules</option>
-        <option value="openai-compatible">OpenAI-compatible</option>
-        <option value="ollama">Ollama</option>
       </select>
-      <p className="muted">AI remains disabled by default. API keys are not exported.</p>
+      <p className="muted">
+        Network AI providers are not implemented in this build. No resume, job-page, application,
+        field, or prompt data is sent to an AI provider.
+      </p>
     </section>
   );
 }
@@ -717,7 +692,7 @@ function SavedSearchesPanel({
           <p className="muted">{search.lastCheckStatus ?? 'Not checked yet.'}</p>
           <div className="row">
             <button className="secondary" onClick={() => onCheckSearch(search)}>
-              Check Now
+              Record Manual Check
             </button>
             <button className="danger" onClick={() => onDeleteSearch(search.id)}>
               Delete

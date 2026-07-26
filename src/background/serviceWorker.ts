@@ -13,6 +13,7 @@ import type {
 } from '../shared/extension/ExtensionMessaging';
 import type { ApplicationSession } from '../shared/models/ApplicationSession';
 import type { JobPosting } from '../shared/models/JobPosting';
+import { isMeaningfulJobPosting } from '../shared/jobs/JobPostingValidation';
 import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
 import {
   ApplicationSessionRepository,
@@ -28,6 +29,7 @@ import {
   buildOriginPattern,
   classifyInjectionFailure,
   isRestrictedUrl,
+  isSupportedWebUrl,
   preflightTab,
   type TabCapabilityResult
 } from '../shared/extension/TabPermissions';
@@ -95,7 +97,12 @@ async function handleMessage(
 
   if (message.command === 'SAVE_ANALYZED_JOB') {
     const job = message.payload as JobPosting | undefined;
-    if (!job?.id) return { ok: false, userMessage: 'No job data was available to save.' };
+    if (!isValidJobPayload(job) || !isMeaningfulJobPosting(job)) {
+      return {
+        ok: false,
+        userMessage: 'The page did not contain enough reliable job information to save.'
+      };
+    }
     const saved = await jobRepo.saveOrUpdate({ ...job, status: 'saved' });
     return {
       ok: true,
@@ -108,25 +115,42 @@ async function handleMessage(
 
   if (message.command === 'SAVE_APPLICATION_SESSION') {
     const payload = message.payload as Partial<ApplicationSession> | undefined;
-    if (!payload?.pageUrl) {
-      return { ok: false, userMessage: 'No application page was available to save.' };
+    const pageUrl = typeof payload?.pageUrl === 'string' ? payload.pageUrl.trim() : '';
+    if (!pageUrl || !isSupportedWebUrl(pageUrl)) {
+      return { ok: false, userMessage: 'No valid application page was available to save.' };
     }
-    const existing = await sessionRepo.findByPageUrl(payload.pageUrl);
+    const existing = await sessionRepo.findByPageUrl(pageUrl);
     const now = new Date().toISOString();
+    const status = isApplicationSessionStatus(payload?.status)
+      ? payload.status
+      : (existing?.status ?? 'draft');
+    const job = isValidJobPayload(payload?.job) ? payload.job : existing?.job;
     const session: ApplicationSession = {
       id: existing?.id ?? crypto.randomUUID(),
-      pageUrl: payload.pageUrl,
+      pageUrl,
       startedAt: existing?.startedAt ?? now,
       updatedAt: now,
-      fieldPreview: payload.fieldPreview ?? existing?.fieldPreview ?? [],
-      fillResults: payload.fillResults ?? existing?.fillResults ?? [],
+      fieldPreview: Array.isArray(payload?.fieldPreview)
+        ? payload.fieldPreview
+        : (existing?.fieldPreview ?? []),
+      fillResults: Array.isArray(payload?.fillResults)
+        ? payload.fillResults
+        : (existing?.fillResults ?? []),
       manualVerificationRequired:
-        payload.manualVerificationRequired ?? existing?.manualVerificationRequired ?? false,
-      notes: payload.notes ?? existing?.notes ?? '',
-      status: payload.status ?? existing?.status ?? 'draft',
-      submittedByUser: payload.submittedByUser ?? existing?.submittedByUser ?? false,
-      job: payload.job ?? existing?.job,
-      jobPostingId: payload.jobPostingId ?? existing?.jobPostingId
+        typeof payload?.manualVerificationRequired === 'boolean'
+          ? payload.manualVerificationRequired
+          : (existing?.manualVerificationRequired ?? false),
+      notes:
+        typeof payload?.notes === 'string'
+          ? payload.notes.slice(0, 20000)
+          : (existing?.notes ?? ''),
+      status,
+      submittedByUser: status === 'submitted-by-user',
+      job,
+      jobPostingId:
+        typeof payload?.jobPostingId === 'string'
+          ? payload.jobPostingId
+          : (job?.id ?? existing?.jobPostingId)
     };
     await sessionRepo.save(session);
     return {
@@ -140,7 +164,10 @@ async function handleMessage(
 
   if (message.command === 'GET_RECENT_SESSION_FOR_PAGE') {
     const pageUrl = (message.payload as { pageUrl?: string } | undefined)?.pageUrl;
-    const session = pageUrl ? await sessionRepo.findByPageUrl(pageUrl) : undefined;
+    const session =
+      typeof pageUrl === 'string' && isSupportedWebUrl(pageUrl)
+        ? await sessionRepo.findByPageUrl(pageUrl)
+        : undefined;
     return {
       ok: true,
       data: session,
@@ -152,12 +179,14 @@ async function handleMessage(
 
   if (message.command === 'SAVE_APPLICATION_NOTES') {
     const payload = message.payload as { pageUrl?: string; notes?: string } | undefined;
-    if (!payload?.pageUrl) return { ok: false, userMessage: 'No application page was selected.' };
+    if (!payload?.pageUrl || !isSupportedWebUrl(payload.pageUrl)) {
+      return { ok: false, userMessage: 'No valid application page was selected.' };
+    }
     const existing = await sessionRepo.findByPageUrl(payload.pageUrl);
     if (!existing) return { ok: false, userMessage: 'No saved application session found.' };
     const updated = {
       ...existing,
-      notes: payload.notes ?? '',
+      notes: typeof payload.notes === 'string' ? payload.notes.slice(0, 20000) : '',
       updatedAt: new Date().toISOString()
     };
     await sessionRepo.save(updated);
@@ -273,6 +302,16 @@ async function sendToActiveContent(
 
   try {
     const response = await chrome.tabs.sendMessage(capability.tabId, { command, payload });
+    if (response === undefined) {
+      return {
+        ok: false,
+        error: 'Content script returned no response.',
+        userMessage: 'Content script returned no response. Reload the page and try again.',
+        tabUrl: capability.url,
+        originPattern: capability.originPattern,
+        reason: 'content-message-failed'
+      };
+    }
     return {
       ok: true,
       data: response,
@@ -286,8 +325,11 @@ async function sendToActiveContent(
       reason: command === 'OPEN_IN_PAGE_ASSISTANT' ? 'in-page-assistant-opened' : 'completed'
     };
   } catch (error) {
-    const currentTab = await getActiveTab();
-    const classified = classifyContentMessageFailure(error, didTabChange(initialTab, currentTab));
+    const currentTarget = await getTabSnapshot(capability.tabId);
+    const classified = classifyContentMessageFailure(
+      error,
+      didTabChange(initialTab, currentTarget)
+    );
     return {
       ok: false,
       error: classified.userMessage,
@@ -392,8 +434,8 @@ async function ensureContentScriptReady(
     };
   }
 
-  const currentTab = await getActiveTab();
-  if (didTabChange(initialTab, currentTab)) {
+  const currentTarget = await getTabSnapshot(tabId);
+  if (didTabChange(initialTab, currentTarget)) {
     return {
       ok: false,
       error: 'The active page changed before analysis finished. Open the page and try again.',
@@ -433,6 +475,14 @@ async function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
   return tab;
 }
 
+async function getTabSnapshot(tabId: number): Promise<chrome.tabs.Tab | undefined> {
+  try {
+    return await chrome.tabs.get(tabId);
+  } catch {
+    return undefined;
+  }
+}
+
 async function getTabCapability(): Promise<TabCapabilityResult> {
   const tab = await getActiveTab();
   if (tab && buildTargetPage(tab)) {
@@ -467,6 +517,33 @@ async function getRememberedCapability(): Promise<TabCapabilityResult | undefine
   if (!target || !originPattern) return target;
   const hasPermission = await chrome.permissions.contains({ origins: [originPattern] });
   return validateTargetTab(hasPermission);
+}
+
+const applicationSessionStatuses = new Set<ApplicationSession['status']>([
+  'draft',
+  'manual-verification',
+  'filled',
+  'submitted-by-user',
+  'skipped'
+]);
+
+function isApplicationSessionStatus(value: unknown): value is ApplicationSession['status'] {
+  return applicationSessionStatuses.has(value as ApplicationSession['status']);
+}
+
+function isValidJobPayload(value: unknown): value is JobPosting {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<JobPosting>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.title === 'string' &&
+    typeof candidate.descriptionText === 'string' &&
+    typeof candidate.sourceUrl === 'string' &&
+    isSupportedWebUrl(candidate.sourceUrl) &&
+    typeof candidate.sourceSite === 'string' &&
+    typeof candidate.dateFound === 'string' &&
+    Array.isArray(candidate.detectedKeywords)
+  );
 }
 
 function commandFailureFromCapability(capability: TabCapabilityResult): ExtensionCommandResult {

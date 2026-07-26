@@ -46,3 +46,9 @@ The extension does not submit applications. The user handles login, CAPTCHA, MFA
 After field analysis, suggested values can be reviewed and corrected in the in-page assistant before approval. Safe fields can be approved individually or through the safe-field approval action. Sensitive fields, file uploads, hidden fields, disabled fields, read-only fields, and custom widgets remain manual-only.
 
 Weak job-page analysis is not saved as a real job. If no clear job details are found, review the page or try another job page.
+
+## Recursive Workflow Integrity
+
+The assistant shows every detected field that can participate in a fill attempt. Editing a value clears its approval. Page navigation or application-route changes clear stale approvals and require a new field analysis.
+
+A session is marked filled only when every approved field reports success. Partial and failed attempts remain review work. Empty field analysis and weak non-job pages are not saved as successful records.

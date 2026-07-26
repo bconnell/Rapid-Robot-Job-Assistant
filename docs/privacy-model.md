@@ -111,3 +111,9 @@ Fill previews, user-edited values, approval decisions, and fill results created 
 ## In-Page Assistant Persistence
 
 Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA details, login details, MFA details, and bot-check details are not stored.
+
+## Job Text And Session Minimization
+
+Job extraction prefers job-description content and removes form controls, dialog content, navigation, and footer content before storing description text. This reduces the chance of unrelated page or application-form text entering a saved job.
+
+Clearing all local data also clears the remembered target page. Clearing profiles does not erase unrelated extension settings.

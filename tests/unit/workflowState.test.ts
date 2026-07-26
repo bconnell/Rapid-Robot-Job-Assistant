@@ -29,8 +29,8 @@ const profile: UserProfile = {
   updatedAt: '2026-01-01T00:00:00.000Z'
 };
 
-const preview = [{ approved: false } as FillPreviewItem];
-const approvedPreview = [{ approved: true } as FillPreviewItem];
+const preview = [{ approved: false, candidate: { selector: '#first' } } as FillPreviewItem];
+const approvedPreview = [{ approved: true, candidate: { selector: '#first' } } as FillPreviewItem];
 const fillResults = [{ selector: '#first', ok: true, message: 'Filled' } as FillResult];
 
 describe('WorkflowState', () => {
@@ -118,6 +118,7 @@ describe('WorkflowState', () => {
     expect(compact).toHaveLength(3);
     expect(compact.map((step) => step.id)).toEqual(['analyze-job', 'profile', 'analyze-fields']);
     expect(statusTone('done')).toBe('done');
+    expect(statusTone('ready')).toBe('warning');
     expect(statusTone('needs-review')).toBe('warning');
     expect(statusTone('blocked')).toBe('blocked');
   });

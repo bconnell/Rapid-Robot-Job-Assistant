@@ -18,6 +18,7 @@ import {
 } from '../shared/extension/BrowserCompatibility';
 import { approveSafeHighConfidence, clearApprovals } from '../shared/fill/FillApprovalRules';
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
+import { isMeaningfulJobPosting } from '../shared/jobs/JobPostingValidation';
 import {
   buildWorkflowState,
   compactWorkflowSteps,
@@ -74,7 +75,37 @@ export function SidePanelApp() {
     })) as ExtensionCommandResult<TabCapabilityResult>;
     const nextStatus = result.data ?? result.response;
     setPageStatus(nextStatus);
-    if (nextStatus && !nextStatus.ok) setStatus(nextStatus.userMessage);
+    if (nextStatus && !nextStatus.ok) {
+      setStatus(nextStatus.userMessage);
+      return;
+    }
+    if (nextStatus?.url) {
+      const existing = await sessionRepo.findByPageUrl(nextStatus.url);
+      if (existing) {
+        const restoredPreview = existing.fieldPreview.map((item) => ({
+          ...item,
+          approved: false,
+          rejected: !item.value,
+          status:
+            item.status === 'manual-only'
+              ? ('manual-only' as const)
+              : item.value
+                ? ('pending' as const)
+                : ('rejected' as const)
+        }));
+        setSession(existing);
+        setJob(existing.job);
+        setPreview(restoredPreview);
+        setFillResults(existing.fillResults);
+        setNotes(existing.notes);
+        setVerification(
+          existing.manualVerificationRequired
+            ? 'Manual verification required.'
+            : 'No manual verification detected.'
+        );
+        setStatus('Saved session loaded. Analyze fields again before filling after a page change.');
+      }
+    }
   }
 
   async function loadActiveProfile() {
@@ -94,8 +125,8 @@ export function SidePanelApp() {
     }
     const response = result.data ?? result.response;
     const analyzed = response?.job;
-    if (!analyzed) {
-      setStatus('No job data returned from the current page.');
+    if (!analyzed || !isMeaningfulJobPosting(analyzed)) {
+      setStatus('No reliable job data was found. Nothing was saved.');
       return;
     }
     const saved = await jobRepo.saveOrUpdate({ ...analyzed, status: 'saved' });
@@ -130,6 +161,24 @@ export function SidePanelApp() {
     const response = result.data ?? result.response;
     if (!response?.pageUrl) {
       setStatus('No field data returned from the current page.');
+      return;
+    }
+    const detectedCount = response.fieldCount ?? response.mappings?.length ?? 0;
+    if (detectedCount === 0) {
+      const shieldsGuidance = getBraveShieldsGuidance({
+        browserName: browser?.browserName ?? 'unknown',
+        fieldCount: 0,
+        iframeWarnings: response.iframeWarnings,
+        formDetectionFailed: true
+      });
+      setPageWarnings(
+        [
+          ...(response.warnings ?? []),
+          ...(response.iframeWarnings ?? []),
+          ...(shieldsGuidance ? [shieldsGuidance] : [])
+        ].filter((warning, index, all) => all.indexOf(warning) === index)
+      );
+      setStatus(shieldsGuidance ?? 'No fields were found. No empty session was created.');
       return;
     }
     const nextPreview = buildFillPreview(response?.mappings ?? [], profile);
@@ -224,8 +273,20 @@ export function SidePanelApp() {
     });
     setPreview(nextPreview);
     setFillResults(results);
-    await saveSession({ fieldPreview: nextPreview, fillResults: results, status: 'filled' });
-    setStatus(postActionMessage('filled'));
+    const approvedCount = preview.filter((item) => item.approved).length;
+    const successfulCount = results.filter((result) => result.ok).length;
+    const complete =
+      approvedCount > 0 && results.length === approvedCount && successfulCount === approvedCount;
+    await saveSession({
+      fieldPreview: nextPreview,
+      fillResults: results,
+      status: complete ? 'filled' : 'draft'
+    });
+    setStatus(
+      complete
+        ? postActionMessage('filled')
+        : `${successfulCount} approved fields filled and ${results.length - successfulCount} failed. Review failures and analyze fields again.`
+    );
   }
 
   async function useCurrentPage() {
@@ -258,12 +319,24 @@ export function SidePanelApp() {
   }
 
   async function saveNotes() {
-    await saveSession({ notes });
-    setStatus('Application notes saved locally.');
+    if (!session) {
+      setStatus('Analyze application fields before saving session notes.');
+      return;
+    }
+    const saved = await saveSession({ notes });
+    if (saved) setStatus('Application notes saved locally.');
   }
 
   async function markStatus(nextStatus: ApplicationSession['status']) {
-    await saveSession({ status: nextStatus, submittedByUser: nextStatus === 'submitted-by-user' });
+    if (!session) {
+      setStatus('No application session is available to update.');
+      return;
+    }
+    const saved = await saveSession({
+      status: nextStatus,
+      submittedByUser: nextStatus === 'submitted-by-user'
+    });
+    if (!saved) return;
     setStatus(
       nextStatus === 'submitted-by-user'
         ? 'Marked submitted by user.'
@@ -271,9 +344,13 @@ export function SidePanelApp() {
     );
   }
 
-  async function saveSession(patch: Partial<ApplicationSession>) {
+  async function saveSession(patch: Partial<ApplicationSession>): Promise<boolean> {
     const now = new Date().toISOString();
-    const pageUrl = session?.pageUrl ?? job?.sourceUrl ?? 'unknown-page';
+    const pageUrl = session?.pageUrl ?? pageStatus?.url ?? job?.sourceUrl;
+    if (!pageUrl || !/^https?:\/\//i.test(pageUrl)) {
+      setStatus('No valid application page is available for this session.');
+      return false;
+    }
     const next: ApplicationSession = {
       id: session?.id ?? crypto.randomUUID(),
       job,
@@ -291,12 +368,42 @@ export function SidePanelApp() {
     };
     await sessionRepo.save(next);
     setSession(next);
+    return true;
   }
 
   function updatePreview(selector: string, patch: Partial<FillPreviewItem>) {
-    setPreview((items) =>
-      items.map((item) => (item.candidate.selector === selector ? { ...item, ...patch } : item))
-    );
+    const nextPreview = preview.map((item) => {
+      if (item.candidate.selector !== selector) return item;
+      const valueChanged =
+        Object.prototype.hasOwnProperty.call(patch, 'value') && patch.value !== item.value;
+      return {
+        ...item,
+        ...patch,
+        ...(valueChanged
+          ? {
+              approved: false,
+              rejected: !patch.value,
+              status: patch.value ? ('pending' as const) : ('rejected' as const)
+            }
+          : {})
+      };
+    });
+    setPreview(nextPreview);
+    void saveSession({ fieldPreview: nextPreview });
+  }
+
+  async function approveSafeFields() {
+    const nextPreview = approveSafeHighConfidence(preview);
+    setPreview(nextPreview);
+    await saveSession({ fieldPreview: nextPreview });
+    setStatus(postActionMessage('safe-approved'));
+  }
+
+  async function clearApprovedFields() {
+    const nextPreview = clearApprovals(preview);
+    setPreview(nextPreview);
+    await saveSession({ fieldPreview: nextPreview });
+    setStatus('Field approvals cleared.');
   }
 
   const canOfferPermission = canOfferSitePermission(pageStatus);
@@ -338,7 +445,7 @@ export function SidePanelApp() {
           <button disabled={!primaryAction.enabled} onClick={primaryAction.run}>
             {primaryAction.label}
           </button>
-          {(!pageStatus?.ok || pageStatus.userMessage.includes('assistant tab')) && (
+          {!pageStatus?.ok && !pageStatus?.userMessage.includes('assistant tab') && (
             <button className="secondary" onClick={useCurrentPage}>
               Use This Page
             </button>
@@ -572,7 +679,7 @@ export function SidePanelApp() {
           onChange={(event) => setNotes(event.target.value)}
           placeholder="Private local notes for this application."
         />
-        <button className="secondary" onClick={saveNotes}>
+        <button className="secondary" disabled={!session} onClick={saveNotes}>
           Save Notes
         </button>
       </section>
@@ -597,10 +704,7 @@ export function SidePanelApp() {
       return {
         label: 'Approve Safe Fields',
         enabled: preview.length > 0,
-        run: () => {
-          setPreview(approveSafeHighConfidence(preview));
-          setStatus(postActionMessage('safe-approved'));
-        }
+        run: approveSafeFields
       };
     }
     if (stepId === 'fill') {
@@ -653,8 +757,7 @@ export function SidePanelApp() {
           <button
             disabled={preview.length === 0}
             onClick={() => {
-              setPreview(approveSafeHighConfidence(preview));
-              setStatus(postActionMessage('safe-approved'));
+              void approveSafeFields();
             }}
           >
             Approve Safe Fields
@@ -662,7 +765,7 @@ export function SidePanelApp() {
           <button
             className="secondary"
             disabled={preview.length === 0}
-            onClick={() => setPreview(clearApprovals(preview))}
+            onClick={() => void clearApprovedFields()}
           >
             Clear Approvals
           </button>
@@ -681,10 +784,14 @@ export function SidePanelApp() {
     }
     return (
       <>
-        <button className="secondary" onClick={() => markStatus('submitted-by-user')}>
+        <button
+          className="secondary"
+          disabled={!session}
+          onClick={() => markStatus('submitted-by-user')}
+        >
           Mark Submitted
         </button>
-        <button className="secondary" onClick={() => markStatus('skipped')}>
+        <button className="secondary" disabled={!session} onClick={() => markStatus('skipped')}>
           Mark Skipped
         </button>
       </>
