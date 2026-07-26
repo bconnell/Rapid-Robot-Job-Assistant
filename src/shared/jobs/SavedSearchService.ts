@@ -39,7 +39,7 @@ export function markSavedSearchChecked(
   return { ...search, lastCheckedAt: now, lastCheckStatus: status, updatedAt: now };
 }
 
-function normalizeSavedSearchUrl(value: string): string {
+export function normalizeSavedSearchUrl(value: string): string {
   let url: URL;
   try {
     url = new URL(value);

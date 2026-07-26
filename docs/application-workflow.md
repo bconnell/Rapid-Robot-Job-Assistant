@@ -64,3 +64,9 @@ A fresh field analysis clears prior fill results and prior submission markers. R
 Opening the assistant may show a local review copy of a prior session, but it does not rewrite or erase the stored fill evidence merely because the panel opened. Any restored approvals are invalidated locally until fields are analyzed again.
 
 Session writes are serialized. A failed local save is reported instead of being described as successful.
+
+## Restored Session Review
+
+A restored session is historical evidence, not a fresh field analysis. The side panel may display its saved fields and notes, but editing, approval, and filling stay disabled until the current form is analyzed again. Updating notes or marking the application status preserves the stored preview and fill results.
+
+In-page fill attempts snapshot the exact approved preview before the write is queued. After a fill attempt, approvals are cleared locally and another fill requires a fresh analysis. The side panel also locks completed or partial fill history so a second fill cannot reuse stale field analysis.

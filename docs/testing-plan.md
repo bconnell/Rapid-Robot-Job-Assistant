@@ -306,3 +306,14 @@ Browser automation may be useful later for controlled extension QA. It should no
 - Confirm rapid in-page edits are serialized and save failures remain visible.
 - Confirm saved-search URLs reject embedded credentials and remove fragments and common tracking parameters.
 - Confirm repository documentation names are displayed without broken extension links.
+
+## Session Lifecycle And Import Regression Checks
+
+- Confirm restored session fields remain read-only until the current form is analyzed again.
+- Confirm saving notes on a restored session preserves prior field previews and fill results.
+- Confirm queued in-page writes capture immutable request snapshots and remain serialized after close and reopen.
+- Confirm a completed or partial fill clears active approvals and cannot be repeated without fresh analysis.
+- Confirm credential-bearing page URLs and noncanonical saved-search imports are rejected.
+- Confirm malformed profile structures, unsupported job enums, unknown record properties, unbound result selectors, mismatched fill-result states, and inconsistent job references fail validation.
+- Confirm invalid stored records are hidden from runtime surfaces and block local-data export.
+- Confirm completed and partial fill history cannot be reused without a fresh field analysis.

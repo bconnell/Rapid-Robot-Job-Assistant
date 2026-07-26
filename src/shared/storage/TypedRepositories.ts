@@ -5,6 +5,7 @@ import type { ResumeDocument } from '../models/ResumeDocument';
 import type { SavedSearch } from '../models/SavedSearch';
 import type { UserProfile } from '../models/UserProfile';
 import { buildJobDedupeKey } from '../jobs/JobDedupeService';
+import { normalizePageUrl } from '../extension/PageCommandIntegrity';
 import { IndexedDbRepository } from './IndexedDbRepository';
 
 class TypedRepository<T> {
@@ -66,7 +67,9 @@ export class ApplicationSessionRepository extends TypedRepository<ApplicationSes
   }
 
   async findByPageUrl(pageUrl: string): Promise<ApplicationSession | undefined> {
-    return (await this.list()).find((session) => session.pageUrl === pageUrl);
+    const normalized = normalizePageUrl(pageUrl);
+    if (!normalized) return undefined;
+    return (await this.list()).find((session) => normalizePageUrl(session.pageUrl) === normalized);
   }
 }
 

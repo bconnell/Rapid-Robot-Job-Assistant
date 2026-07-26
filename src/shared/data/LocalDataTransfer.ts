@@ -3,12 +3,15 @@ import type { JobPosting } from '../models/JobPosting';
 import type { SavedSearch } from '../models/SavedSearch';
 import type { UserProfile } from '../models/UserProfile';
 import {
+  areFillResultsBoundToPreview,
+  areFillResultsConsistentWithPreview,
   isValidFillPreviewArray,
   isValidFillResultArray,
   normalizePageUrl
 } from '../extension/PageCommandIntegrity';
 import type { ExtensionSettings } from '../storage/ChromeStorageRepository';
 import { isCompleteApprovedFill } from '../fill/FillApprovalRules';
+import { normalizeSavedSearchUrl } from '../jobs/SavedSearchService';
 
 export interface LocalDataExport {
   schemaVersion: 1;
@@ -43,6 +46,85 @@ const maxRecordsPerCollection = 5000;
 const maxShortText = 4000;
 const maxLongText = 20000;
 
+const profileKeys = new Set([
+  'id',
+  'contact',
+  'summary',
+  'skills',
+  'experience',
+  'education',
+  'certifications',
+  'projects',
+  'workAuthorization',
+  'sponsorshipRequired',
+  'remotePreference',
+  'desiredTitles',
+  'desiredSalary',
+  'earliestStartDate',
+  'updatedAt'
+]);
+const contactKeys = new Set([
+  'firstName',
+  'lastName',
+  'fullName',
+  'preferredName',
+  'email',
+  'phone',
+  'city',
+  'state',
+  'zip',
+  'linkedInUrl',
+  'githubUrl',
+  'portfolioUrl'
+]);
+const experienceKeys = new Set(['employer', 'title', 'startDate', 'endDate', 'highlights']);
+const educationKeys = new Set(['school', 'degree', 'field', 'graduationDate']);
+const projectKeys = new Set(['name', 'description', 'technologies']);
+const savedSearchKeys = new Set([
+  'id',
+  'label',
+  'url',
+  'keywords',
+  'location',
+  'remoteOnly',
+  'createdAt',
+  'updatedAt',
+  'lastCheckedAt',
+  'lastCheckStatus',
+  'enabled'
+]);
+const jobPostingKeys = new Set([
+  'id',
+  'title',
+  'company',
+  'location',
+  'salaryText',
+  'remoteStatus',
+  'descriptionText',
+  'requirementsText',
+  'preferredQualificationsText',
+  'detectedKeywords',
+  'sourceUrl',
+  'sourceSite',
+  'dateFound',
+  'status',
+  'updatedAt'
+]);
+const applicationSessionKeys = new Set([
+  'id',
+  'job',
+  'jobPostingId',
+  'pageUrl',
+  'startedAt',
+  'fieldPreview',
+  'fillResults',
+  'manualVerificationRequired',
+  'notes',
+  'status',
+  'submittedByUser',
+  'updatedAt'
+]);
+
 export function createLocalDataExport(input: LocalDataExportInput): LocalDataExport {
   const safeSettings: Omit<ExtensionSettings, 'aiEndpoint'> = {
     localOnlyMode: true,
@@ -73,10 +155,15 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
   const jobPostings = readArray(value.jobPostings, 'jobPostings', errors);
   const applicationSessions = readArray(value.applicationSessions, 'applicationSessions', errors);
 
-  validateCollection(profiles, 'profiles', isUserProfile, errors);
-  validateCollection(savedSearches, 'savedSearches', isSavedSearch, errors);
-  validateCollection(jobPostings, 'jobPostings', isJobPosting, errors);
-  validateCollection(applicationSessions, 'applicationSessions', isApplicationSession, errors);
+  validateCollection(profiles, 'profiles', isValidUserProfileRecord, errors);
+  validateCollection(savedSearches, 'savedSearches', isValidSavedSearchRecord, errors);
+  validateCollection(jobPostings, 'jobPostings', isValidJobPostingRecord, errors);
+  validateCollection(
+    applicationSessions,
+    'applicationSessions',
+    isValidApplicationSessionRecord,
+    errors
+  );
 
   if (value.settings !== undefined && !isRecord(value.settings)) {
     errors.push('settings must be an object.');
@@ -149,57 +236,104 @@ function validateCollection(
   }
 }
 
-function isUserProfile(value: unknown): value is UserProfile {
-  if (!isRecord(value) || !isSafeId(value.id) || !isRecord(value.contact)) return false;
-  return (
-    isStringArray(value.skills) &&
-    isRecordArray(value.experience) &&
-    isRecordArray(value.education) &&
-    isStringArray(value.certifications) &&
-    isRecordArray(value.projects) &&
-    isStringArray(value.desiredTitles) &&
-    isBoundedString(value.updatedAt, 100) &&
-    everyRecordStringValuesBounded(value.contact)
-  );
-}
-
-function isSavedSearch(value: unknown): value is SavedSearch {
-  return (
-    isRecord(value) &&
-    isSafeId(value.id) &&
-    isBoundedString(value.label, maxShortText) &&
-    typeof value.url === 'string' &&
-    Boolean(normalizePageUrl(value.url)) &&
-    isBoundedString(value.createdAt, 100) &&
-    typeof value.enabled === 'boolean' &&
-    (value.keywords === undefined || isStringArray(value.keywords))
-  );
-}
-
-function isJobPosting(value: unknown): value is JobPosting {
-  return (
-    isRecord(value) &&
-    isSafeId(value.id) &&
-    isBoundedString(value.title, 180) &&
-    isBoundedString(value.descriptionText, 12000, true) &&
-    typeof value.sourceUrl === 'string' &&
-    Boolean(normalizePageUrl(value.sourceUrl)) &&
-    isBoundedString(value.sourceSite, 300) &&
-    isBoundedString(value.dateFound, 100) &&
-    isStringArray(value.detectedKeywords)
-  );
-}
-
-function isApplicationSession(value: unknown): value is ApplicationSession {
+export function isValidUserProfileRecord(value: unknown): value is UserProfile {
   if (
     !isRecord(value) ||
+    !hasOnlyAllowedKeys(value, profileKeys) ||
+    !isSafeId(value.id) ||
+    !isRecord(value.contact) ||
+    !hasOnlyAllowedKeys(value.contact, contactKeys) ||
+    !everyOptionalStringValueBounded(value.contact, maxLongText)
+  ) {
+    return false;
+  }
+  return (
+    optionalBoundedString(value.summary, maxLongText, true) &&
+    isBoundedStringArray(value.skills, 500, 500) &&
+    isProfileExperienceArray(value.experience) &&
+    isProfileEducationArray(value.education) &&
+    isBoundedStringArray(value.certifications, 500, 500) &&
+    isProfileProjectArray(value.projects) &&
+    optionalBoundedString(value.workAuthorization, maxShortText, true) &&
+    (value.sponsorshipRequired === undefined || typeof value.sponsorshipRequired === 'boolean') &&
+    (value.remotePreference === undefined ||
+      ['remote', 'hybrid', 'onsite', 'flexible'].includes(String(value.remotePreference))) &&
+    isBoundedStringArray(value.desiredTitles, 200, 500) &&
+    optionalBoundedString(value.desiredSalary, maxShortText, true) &&
+    optionalBoundedString(value.earliestStartDate, 100, true) &&
+    isBoundedString(value.updatedAt, 100)
+  );
+}
+
+export function isValidSavedSearchRecord(value: unknown): value is SavedSearch {
+  if (
+    !isRecord(value) ||
+    !hasOnlyAllowedKeys(value, savedSearchKeys) ||
+    !isSafeId(value.id) ||
+    !isBoundedString(value.label, 200)
+  ) {
+    return false;
+  }
+
+  let normalizedUrl: string;
+  try {
+    normalizedUrl = normalizeSavedSearchUrl(String(value.url ?? ''));
+  } catch {
+    return false;
+  }
+
+  return (
+    value.url === normalizedUrl &&
+    (value.keywords === undefined || isBoundedStringArray(value.keywords, 100, 200)) &&
+    optionalBoundedString(value.location, 300, true) &&
+    (value.remoteOnly === undefined || typeof value.remoteOnly === 'boolean') &&
+    typeof value.enabled === 'boolean' &&
+    isBoundedString(value.createdAt, 100) &&
+    optionalBoundedString(value.updatedAt, 100) &&
+    optionalBoundedString(value.lastCheckedAt, 100) &&
+    optionalBoundedString(value.lastCheckStatus, maxShortText, true)
+  );
+}
+
+export function isValidJobPostingRecord(value: unknown): value is JobPosting {
+  if (!isRecord(value) || !hasOnlyAllowedKeys(value, jobPostingKeys)) return false;
+  const normalizedSourceUrl =
+    typeof value.sourceUrl === 'string' ? normalizePageUrl(value.sourceUrl) : undefined;
+  return (
+    isSafeId(value.id) &&
+    isBoundedString(value.title, 180) &&
+    optionalBoundedString(value.company, 300, true) &&
+    optionalBoundedString(value.location, 500, true) &&
+    optionalBoundedString(value.salaryText, 1000, true) &&
+    (value.remoteStatus === undefined ||
+      ['remote', 'hybrid', 'onsite', 'unknown'].includes(String(value.remoteStatus))) &&
+    isBoundedString(value.descriptionText, 12000, true) &&
+    optionalBoundedString(value.requirementsText, 12000, true) &&
+    optionalBoundedString(value.preferredQualificationsText, 12000, true) &&
+    isBoundedStringArray(value.detectedKeywords, 500, 200) &&
+    Boolean(normalizedSourceUrl) &&
+    value.sourceUrl === normalizedSourceUrl &&
+    isBoundedString(value.sourceSite, 300) &&
+    isBoundedString(value.dateFound, 100) &&
+    (value.status === undefined ||
+      ['saved', 'reviewing', 'applied', 'skipped'].includes(String(value.status))) &&
+    optionalBoundedString(value.updatedAt, 100, true)
+  );
+}
+
+export function isValidApplicationSessionRecord(value: unknown): value is ApplicationSession {
+  if (
+    !isRecord(value) ||
+    !hasOnlyAllowedKeys(value, applicationSessionKeys) ||
     !isSafeId(value.id) ||
     typeof value.pageUrl !== 'string' ||
-    !normalizePageUrl(value.pageUrl) ||
+    normalizePageUrl(value.pageUrl) !== value.pageUrl ||
     !isBoundedString(value.startedAt, 100) ||
     !isBoundedString(value.updatedAt, 100) ||
     !isValidFillPreviewArray(value.fieldPreview) ||
     !isValidFillResultArray(value.fillResults) ||
+    !areFillResultsBoundToPreview(value.fieldPreview, value.fillResults) ||
+    !areFillResultsConsistentWithPreview(value.fieldPreview, value.fillResults) ||
     typeof value.manualVerificationRequired !== 'boolean' ||
     !isBoundedString(value.notes, maxLongText, true) ||
     !['draft', 'manual-verification', 'filled', 'submitted-by-user', 'skipped'].includes(
@@ -210,7 +344,20 @@ function isApplicationSession(value: unknown): value is ApplicationSession {
     return false;
   }
 
+  if (value.job !== undefined && !isValidJobPostingRecord(value.job)) return false;
+  if (value.jobPostingId !== undefined && !isSafeId(value.jobPostingId)) return false;
+  if (value.job && value.jobPostingId && value.job.id !== value.jobPostingId) return false;
+
   if (value.status === 'filled' && !isCompleteApprovedFill(value.fieldPreview, value.fillResults)) {
+    return false;
+  }
+  if (value.status === 'manual-verification' && !value.manualVerificationRequired) {
+    return false;
+  }
+  if (
+    value.manualVerificationRequired &&
+    !['manual-verification', 'submitted-by-user', 'skipped'].includes(String(value.status))
+  ) {
     return false;
   }
   if (value.submittedByUser !== (value.status === 'submitted-by-user')) {
@@ -219,8 +366,70 @@ function isApplicationSession(value: unknown): value is ApplicationSession {
   return true;
 }
 
+function isProfileExperienceArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length <= 500 &&
+    value.every(
+      (item) =>
+        isRecord(item) &&
+        hasOnlyAllowedKeys(item, experienceKeys) &&
+        isBoundedString(item.employer, 500) &&
+        isBoundedString(item.title, 500) &&
+        optionalBoundedString(item.startDate, 100, true) &&
+        optionalBoundedString(item.endDate, 100, true) &&
+        isBoundedStringArray(item.highlights, 500, maxLongText)
+    )
+  );
+}
+
+function isProfileEducationArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length <= 500 &&
+    value.every(
+      (item) =>
+        isRecord(item) &&
+        hasOnlyAllowedKeys(item, educationKeys) &&
+        isBoundedString(item.school, 500) &&
+        optionalBoundedString(item.degree, 500, true) &&
+        optionalBoundedString(item.field, 500, true) &&
+        optionalBoundedString(item.graduationDate, 100, true)
+    )
+  );
+}
+
+function isProfileProjectArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length <= 500 &&
+    value.every(
+      (item) =>
+        isRecord(item) &&
+        hasOnlyAllowedKeys(item, projectKeys) &&
+        isBoundedString(item.name, 500) &&
+        isBoundedString(item.description, maxLongText, true) &&
+        isBoundedStringArray(item.technologies, 500, 500)
+    )
+  );
+}
+
+function hasOnlyAllowedKeys(value: Record<string, any>, allowed: Set<string>): boolean {
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
+function everyOptionalStringValueBounded(value: Record<string, any>, maxLength: number): boolean {
+  return Object.values(value).every(
+    (item) => item === undefined || (typeof item === 'string' && item.length <= maxLength)
+  );
+}
+
 function isSafeId(value: unknown): value is string {
   return isBoundedString(value, 200);
+}
+
+function optionalBoundedString(value: unknown, maxLength: number, allowEmpty = false): boolean {
+  return value === undefined || isBoundedString(value, maxLength, allowEmpty);
 }
 
 function isBoundedString(value: unknown, maxLength: number, allowEmpty = false): value is string {
@@ -231,39 +440,16 @@ function isBoundedString(value: unknown, maxLength: number, allowEmpty = false):
   );
 }
 
-function isStringArray(value: unknown): value is string[] {
+function isBoundedStringArray(
+  value: unknown,
+  maxItems: number,
+  maxItemLength: number
+): value is string[] {
   return (
     Array.isArray(value) &&
-    value.length <= 5000 &&
-    value.every((item) => typeof item === 'string' && item.length <= maxLongText)
+    value.length <= maxItems &&
+    value.every((item) => isBoundedString(item, maxItemLength))
   );
-}
-
-function isRecordArray(value: unknown): value is Record<string, unknown>[] {
-  return (
-    Array.isArray(value) &&
-    value.length <= 5000 &&
-    value.every((item) => isRecord(item) && everyRecordStringValuesBounded(item))
-  );
-}
-
-function everyRecordStringValuesBounded(value: Record<string, any>): boolean {
-  return Object.values(value).every((item) => {
-    if (typeof item === 'string') return item.length <= maxLongText;
-    if (Array.isArray(item)) {
-      return (
-        item.length <= 5000 &&
-        item.every((entry) => {
-          if (typeof entry === 'string') return entry.length <= maxLongText;
-          return isRecord(entry) && everyRecordStringValuesBounded(entry);
-        })
-      );
-    }
-    if (isRecord(item)) return everyRecordStringValuesBounded(item);
-    return (
-      item === undefined || item === null || typeof item === 'boolean' || typeof item === 'number'
-    );
-  });
 }
 
 function emptyPreview(errors: string[]): ImportPreview {

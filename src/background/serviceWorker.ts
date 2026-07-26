@@ -16,9 +16,12 @@ import type { JobPosting } from '../shared/models/JobPosting';
 import { isMeaningfulJobPosting } from '../shared/jobs/JobPostingValidation';
 import { isCompleteApprovedFill } from '../shared/fill/FillApprovalRules';
 import {
+  areFillResultsBoundToPreview,
+  areFillResultsConsistentWithPreview,
   isSamePageUrl,
   isValidFillPreviewArray,
   isValidFillResultArray,
+  normalizePageUrl,
   readFillApprovedFieldsRequest
 } from '../shared/extension/PageCommandIntegrity';
 import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
@@ -36,11 +39,15 @@ import {
   buildOriginPattern,
   classifyInjectionFailure,
   isRestrictedUrl,
-  isSupportedWebUrl,
   preflightTab,
   type TabCapabilityResult
 } from '../shared/extension/TabPermissions';
 import { Logger } from '../shared/utils/Logger';
+import {
+  isValidApplicationSessionRecord,
+  isValidJobPostingRecord,
+  isValidUserProfileRecord
+} from '../shared/data/LocalDataTransfer';
 
 const logger = new Logger('service-worker');
 const settingsRepo = new ChromeStorageRepository();
@@ -92,7 +99,9 @@ async function handleMessage(
 
   if (message.command === 'GET_ACTIVE_PROFILE') {
     const profileId = await settingsRepo.getActiveProfileId();
-    const profile = profileId ? await profileRepo.get(profileId) : undefined;
+    const storedProfile = profileId ? await profileRepo.get(profileId) : undefined;
+    const profile =
+      storedProfile && isValidUserProfileRecord(storedProfile) ? storedProfile : undefined;
     if (profileId && !profile) {
       await settingsRepo.clearActiveProfileId();
     }
@@ -100,14 +109,18 @@ async function handleMessage(
       ok: true,
       data: profile,
       response: profile,
-      userMessage: profile ? 'Active profile loaded.' : 'No active profile saved.',
+      userMessage: profile
+        ? 'Active profile loaded.'
+        : storedProfile
+          ? 'The saved active profile was invalid and was not loaded.'
+          : 'No active profile saved.',
       reason: profile ? 'active-profile-loaded' : 'active-profile-missing'
     };
   }
 
   if (message.command === 'SAVE_ANALYZED_JOB') {
     const job = message.payload as JobPosting | undefined;
-    if (!isValidJobPayload(job) || !isMeaningfulJobPosting(job)) {
+    if (!isValidJobPostingRecord(job) || !isMeaningfulJobPosting(job)) {
       return {
         ok: false,
         userMessage: 'The page did not contain enough reliable job information to save.'
@@ -125,11 +138,19 @@ async function handleMessage(
 
   if (message.command === 'SAVE_APPLICATION_SESSION') {
     const payload = message.payload as Partial<ApplicationSession> | undefined;
-    const pageUrl = typeof payload?.pageUrl === 'string' ? payload.pageUrl.trim() : '';
-    if (!pageUrl || !isSupportedWebUrl(pageUrl)) {
+    const pageUrl =
+      typeof payload?.pageUrl === 'string' ? normalizePageUrl(payload.pageUrl) : undefined;
+    if (!pageUrl) {
       return { ok: false, userMessage: 'No valid application page was available to save.' };
     }
-    const existing = await sessionRepo.findByPageUrl(pageUrl);
+    const storedExisting = await sessionRepo.findByPageUrl(pageUrl);
+    if (storedExisting && !isValidApplicationSessionRecord(storedExisting)) {
+      return {
+        ok: false,
+        userMessage: 'The saved application session was invalid and was not overwritten.'
+      };
+    }
+    const existing = storedExisting;
     const now = new Date().toISOString();
 
     if (payload?.fieldPreview !== undefined && !isValidFillPreviewArray(payload.fieldPreview)) {
@@ -138,9 +159,33 @@ async function handleMessage(
     if (payload?.fillResults !== undefined && !isValidFillResultArray(payload.fillResults)) {
       return { ok: false, userMessage: 'The application fill results were invalid.' };
     }
+    if (
+      payload?.manualVerificationRequired !== undefined &&
+      typeof payload.manualVerificationRequired !== 'boolean'
+    ) {
+      return { ok: false, userMessage: 'The manual-verification state was invalid.' };
+    }
+    if (payload?.status !== undefined && !isApplicationSessionStatus(payload.status)) {
+      return { ok: false, userMessage: 'The application session status was invalid.' };
+    }
+    if (payload?.notes !== undefined && typeof payload.notes !== 'string') {
+      return { ok: false, userMessage: 'The application session notes were invalid.' };
+    }
+    if (payload?.job !== undefined && !isValidJobPostingRecord(payload.job)) {
+      return { ok: false, userMessage: 'The application session job was invalid.' };
+    }
 
     const fieldPreview = payload?.fieldPreview ?? existing?.fieldPreview ?? [];
     const fillResults = payload?.fillResults ?? existing?.fillResults ?? [];
+    if (
+      !areFillResultsBoundToPreview(fieldPreview, fillResults) ||
+      !areFillResultsConsistentWithPreview(fieldPreview, fillResults)
+    ) {
+      return {
+        ok: false,
+        userMessage: 'The application fill results did not match the saved field preview.'
+      };
+    }
     const manualVerificationRequired =
       typeof payload?.manualVerificationRequired === 'boolean'
         ? payload.manualVerificationRequired
@@ -154,7 +199,18 @@ async function handleMessage(
       fillResults,
       manualVerificationRequired
     );
-    const job = isValidJobPayload(payload?.job) ? payload.job : existing?.job;
+    const job = payload?.job ?? existing?.job;
+    if (
+      payload?.jobPostingId !== undefined &&
+      (typeof payload.jobPostingId !== 'string' ||
+        payload.jobPostingId.length > 200 ||
+        (job && payload.jobPostingId !== job.id))
+    ) {
+      return {
+        ok: false,
+        userMessage: 'The application session job reference was inconsistent.'
+      };
+    }
     const session: ApplicationSession = {
       id: existing?.id ?? crypto.randomUUID(),
       pageUrl,
@@ -171,10 +227,15 @@ async function handleMessage(
       submittedByUser: status === 'submitted-by-user',
       job,
       jobPostingId:
-        typeof payload?.jobPostingId === 'string' && payload.jobPostingId.length <= 200
-          ? payload.jobPostingId
-          : (job?.id ?? existing?.jobPostingId)
+        job?.id ??
+        (typeof payload?.jobPostingId === 'string' ? payload.jobPostingId : existing?.jobPostingId)
     };
+    if (!isValidApplicationSessionRecord(session)) {
+      return {
+        ok: false,
+        userMessage: 'The application session did not pass persistence validation.'
+      };
+    }
     await sessionRepo.save(session);
     return {
       ok: true,
@@ -186,32 +247,51 @@ async function handleMessage(
   }
 
   if (message.command === 'GET_RECENT_SESSION_FOR_PAGE') {
-    const pageUrl = (message.payload as { pageUrl?: string } | undefined)?.pageUrl;
+    const rawPageUrl = (message.payload as { pageUrl?: string } | undefined)?.pageUrl;
+    const pageUrl = typeof rawPageUrl === 'string' ? normalizePageUrl(rawPageUrl) : undefined;
+    const storedSession = pageUrl ? await sessionRepo.findByPageUrl(pageUrl) : undefined;
     const session =
-      typeof pageUrl === 'string' && isSupportedWebUrl(pageUrl)
-        ? await sessionRepo.findByPageUrl(pageUrl)
-        : undefined;
+      storedSession && isValidApplicationSessionRecord(storedSession) ? storedSession : undefined;
     return {
-      ok: true,
+      ok: !storedSession || Boolean(session),
       data: session,
       response: session,
-      userMessage: session ? 'Application session loaded.' : 'No saved session for this page.',
-      reason: session ? 'application-session-loaded' : 'application-session-missing'
+      userMessage: session
+        ? 'Application session loaded.'
+        : storedSession
+          ? 'The saved application session was invalid and was not loaded.'
+          : 'No saved session for this page.',
+      reason: session
+        ? 'application-session-loaded'
+        : storedSession
+          ? 'application-session-invalid'
+          : 'application-session-missing'
     };
   }
 
   if (message.command === 'SAVE_APPLICATION_NOTES') {
     const payload = message.payload as { pageUrl?: string; notes?: string } | undefined;
-    if (!payload?.pageUrl || !isSupportedWebUrl(payload.pageUrl)) {
+    const pageUrl =
+      typeof payload?.pageUrl === 'string' ? normalizePageUrl(payload.pageUrl) : undefined;
+    if (!pageUrl) {
       return { ok: false, userMessage: 'No valid application page was selected.' };
     }
-    const existing = await sessionRepo.findByPageUrl(payload.pageUrl);
+    if (payload?.notes !== undefined && typeof payload.notes !== 'string') {
+      return { ok: false, userMessage: 'The application notes were invalid.' };
+    }
+    const existing = await sessionRepo.findByPageUrl(pageUrl);
     if (!existing) return { ok: false, userMessage: 'No saved application session found.' };
+    if (!isValidApplicationSessionRecord(existing)) {
+      return { ok: false, userMessage: 'The saved application session was invalid.' };
+    }
     const updated = {
       ...existing,
-      notes: typeof payload.notes === 'string' ? payload.notes.slice(0, 20000) : '',
+      notes: typeof payload?.notes === 'string' ? payload.notes.slice(0, 20000) : '',
       updatedAt: new Date().toISOString()
     };
+    if (!isValidApplicationSessionRecord(updated)) {
+      return { ok: false, userMessage: 'The application notes update was invalid.' };
+    }
     await sessionRepo.save(updated);
     return {
       ok: true,
@@ -646,33 +726,6 @@ const applicationSessionStatuses = new Set<ApplicationSession['status']>([
 
 function isApplicationSessionStatus(value: unknown): value is ApplicationSession['status'] {
   return applicationSessionStatuses.has(value as ApplicationSession['status']);
-}
-
-function isValidJobPayload(value: unknown): value is JobPosting {
-  if (!isRecord(value)) return false;
-  const candidate = value as Partial<JobPosting>;
-  return (
-    typeof candidate.id === 'string' &&
-    candidate.id.length > 0 &&
-    candidate.id.length <= 200 &&
-    typeof candidate.title === 'string' &&
-    candidate.title.length > 0 &&
-    candidate.title.length <= 180 &&
-    typeof candidate.descriptionText === 'string' &&
-    candidate.descriptionText.length <= 12000 &&
-    typeof candidate.sourceUrl === 'string' &&
-    candidate.sourceUrl.length <= 4000 &&
-    isSupportedWebUrl(candidate.sourceUrl) &&
-    typeof candidate.sourceSite === 'string' &&
-    candidate.sourceSite.length <= 300 &&
-    typeof candidate.dateFound === 'string' &&
-    candidate.dateFound.length <= 100 &&
-    Array.isArray(candidate.detectedKeywords) &&
-    candidate.detectedKeywords.length <= 500 &&
-    candidate.detectedKeywords.every(
-      (keyword) => typeof keyword === 'string' && keyword.length <= 200
-    )
-  );
 }
 
 function deriveApplicationSessionStatus(

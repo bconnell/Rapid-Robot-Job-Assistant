@@ -12,6 +12,16 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-07-26. Session Lifecycle And Stored-Record Integrity
+
+- Kept restored application history read-only until a fresh field analysis is completed.
+- Prevented note and status updates from erasing prior fill evidence.
+- Snapshotted queued in-page writes and preserved serialization across assistant close and reopen.
+- Disabled immediate repeated fill attempts until fields are analyzed again.
+- Rejected credential-bearing or noncanonical page URLs, unbound or status-inconsistent fill results, unsupported record properties, malformed profile structures, unsupported job states, and inconsistent job references.
+- Validated stored profiles, searches, jobs, and sessions before loading or exporting them from extension surfaces.
+- Locked completed or partial fill history until the current form is analyzed again.
+
 ### 2026-07-26. Session Persistence And Boundary Hardening
 
 - Prevented session restoration from erasing previously recorded fill evidence.

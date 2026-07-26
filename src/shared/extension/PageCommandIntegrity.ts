@@ -73,11 +73,59 @@ const controlFamilies = new Set([
 ]);
 
 const candidateSources = new Set(['native-control', 'aria-widget', 'grouped-control']);
+const previewItemKeys = new Set([
+  'candidate',
+  'kind',
+  'confidence',
+  'sensitive',
+  'fillable',
+  'requiresDirectReview',
+  'warning',
+  'explanation',
+  'value',
+  'approved',
+  'rejected',
+  'status'
+]);
+const candidateKeys = new Set([
+  'selector',
+  'inputType',
+  'tagName',
+  'labelText',
+  'ariaLabel',
+  'ariaDescribedBy',
+  'ariaLabelledBy',
+  'placeholder',
+  'name',
+  'id',
+  'autocomplete',
+  'dataTestId',
+  'nearbyText',
+  'sectionHeading',
+  'groupName',
+  'groupLabel',
+  'fieldsetLegend',
+  'options',
+  'optionValues',
+  'required',
+  'visible',
+  'disabled',
+  'readOnly',
+  'role',
+  'controlFamily',
+  'candidateSource',
+  'frameWarning',
+  'stableSelector'
+]);
+const fillResultKeys = new Set(['selector', 'ok', 'message']);
 
 export function normalizePageUrl(value: string): string | undefined {
   try {
-    const url = new URL(value);
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > 4000) return undefined;
+    const url = new URL(trimmed);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+    if (url.username || url.password) return undefined;
     return url.href;
   } catch {
     return undefined;
@@ -115,6 +163,7 @@ export function isValidFillResultArray(value: unknown): value is FillResult[] {
     value.every(
       (item) =>
         isRecord(item) &&
+        hasOnlyAllowedKeys(item, fillResultKeys) &&
         isBoundedString(item.selector, maxSelectorLength) &&
         typeof item.ok === 'boolean' &&
         isBoundedString(item.message, maxMessageLength, true)
@@ -123,8 +172,36 @@ export function isValidFillResultArray(value: unknown): value is FillResult[] {
   );
 }
 
+export function areFillResultsBoundToPreview(
+  preview: FillPreviewItem[],
+  results: FillResult[]
+): boolean {
+  const previewSelectors = new Set(preview.map((item) => item.candidate.selector));
+  return results.every((result) => previewSelectors.has(result.selector));
+}
+
+export function areFillResultsConsistentWithPreview(
+  preview: FillPreviewItem[],
+  results: FillResult[]
+): boolean {
+  const previewBySelector = new Map(
+    preview.map((item) => [item.candidate.selector, item] as const)
+  );
+  return results.every((result) => {
+    const item = previewBySelector.get(result.selector);
+    return Boolean(item && item.approved && item.status === (result.ok ? 'filled' : 'failed'));
+  });
+}
+
 function isValidFillPreviewItem(value: unknown): value is FillPreviewItem {
-  if (!isRecord(value) || !isRecord(value.candidate)) return false;
+  if (
+    !isRecord(value) ||
+    !hasOnlyAllowedKeys(value, previewItemKeys) ||
+    !isRecord(value.candidate) ||
+    !hasOnlyAllowedKeys(value.candidate, candidateKeys)
+  ) {
+    return false;
+  }
   const candidate = value.candidate;
   return (
     isBoundedString(candidate.selector, maxSelectorLength) &&
@@ -210,6 +287,10 @@ function isBoundedString(value: unknown, maxLength: number, allowEmpty = false):
 function hasUniqueSelectors(items: FillPreviewItem[]): boolean {
   const selectors = items.map((item) => item.candidate.selector);
   return new Set(selectors).size === selectors.length;
+}
+
+function hasOnlyAllowedKeys(value: Record<string, any>, allowed: Set<string>): boolean {
+  return Object.keys(value).every((key) => allowed.has(key));
 }
 
 function isRecord(value: unknown): value is Record<string, any> {

@@ -21,7 +21,14 @@ import {
   type ResumeParseSummary
 } from '../shared/parsing/ResumeSectionParser';
 import { createSavedSearch, markSavedSearchChecked } from '../shared/jobs/SavedSearchService';
-import { createLocalDataExport, validateLocalDataImport } from '../shared/data/LocalDataTransfer';
+import {
+  createLocalDataExport,
+  isValidApplicationSessionRecord,
+  isValidJobPostingRecord,
+  isValidSavedSearchRecord,
+  isValidUserProfileRecord,
+  validateLocalDataImport
+} from '../shared/data/LocalDataTransfer';
 import { clearTargetTab } from '../shared/extension/TargetPageTracker';
 import {
   browserLabel,
@@ -77,17 +84,25 @@ export function OptionsApp() {
       settingsRepo.getActiveProfileId(),
       searchRepo.list()
     ]);
+    const validSearches = searches.filter(isValidSavedSearchRecord);
     setSettings(nextSettings);
     setActiveProfileId(nextProfileId);
-    setSavedSearches(searches);
+    setSavedSearches(validSearches);
+    if (searches.length !== validSearches.length) {
+      setStatus('One or more invalid saved searches were hidden from the options page.');
+    }
     if (nextProfileId) {
       const active = await profileRepo.get(nextProfileId);
-      if (active) {
+      if (active && isValidUserProfileRecord(active)) {
         setProfile(active);
       } else {
         await settingsRepo.clearActiveProfileId();
         setActiveProfileId(undefined);
-        setStatus('The saved active profile reference was missing and has been cleared.');
+        setStatus(
+          active
+            ? 'The saved active profile was invalid and has been deactivated.'
+            : 'The saved active profile reference was missing and has been cleared.'
+        );
       }
     }
   }
@@ -127,6 +142,10 @@ export function OptionsApp() {
       id: profile.id || parsed.profile.id,
       updatedAt: new Date().toISOString()
     };
+    if (!isValidUserProfileRecord(nextProfile)) {
+      setStatus('The parsed profile did not pass local storage validation.');
+      return;
+    }
     const resumeDocument: ResumeDocument = {
       id: crypto.randomUUID(),
       fileName,
@@ -150,6 +169,10 @@ export function OptionsApp() {
 
   async function saveProfile() {
     const next = { ...profile, updatedAt: new Date().toISOString() };
+    if (!isValidUserProfileRecord(next)) {
+      setStatus('The profile contains invalid or oversized data and was not saved.');
+      return;
+    }
     await profileRepo.save(next);
     await settingsRepo.setActiveProfileId(next.id);
     setProfile(next);
@@ -167,7 +190,7 @@ export function OptionsApp() {
         remoteOnly: searchForm.remoteOnly
       });
       await searchRepo.save(search);
-      setSavedSearches(await searchRepo.list());
+      setSavedSearches((await searchRepo.list()).filter(isValidSavedSearchRecord));
       setSearchForm({ label: '', url: '', keywords: '', location: '', remoteOnly: false });
       setStatus('Saved search stored locally.');
     } catch (error) {
@@ -181,13 +204,13 @@ export function OptionsApp() {
       'Manual check saved. Open the search URL and analyze visible results when ready.'
     );
     await searchRepo.save(updated);
-    setSavedSearches(await searchRepo.list());
+    setSavedSearches((await searchRepo.list()).filter(isValidSavedSearchRecord));
     setStatus('Manual saved-search check recorded. No background crawling was run.');
   }
 
   async function deleteSearch(id: string) {
     await searchRepo.delete(id);
-    setSavedSearches(await searchRepo.list());
+    setSavedSearches((await searchRepo.list()).filter(isValidSavedSearchRecord));
     setStatus('Saved search deleted locally.');
   }
 
@@ -196,11 +219,26 @@ export function OptionsApp() {
       'Exported JSON may contain private profile, resume-derived, job, and application data. Keep it out of git and shared folders.'
     );
     if (!confirmed) return;
+    const [profiles, savedSearches, jobPostings, applicationSessions] = await Promise.all([
+      profileRepo.list(),
+      searchRepo.list(),
+      jobRepo.list(),
+      sessionRepo.list()
+    ]);
+    if (
+      !profiles.every(isValidUserProfileRecord) ||
+      !savedSearches.every(isValidSavedSearchRecord) ||
+      !jobPostings.every(isValidJobPostingRecord) ||
+      !applicationSessions.every(isValidApplicationSessionRecord)
+    ) {
+      setStatus('Local data contains an invalid record. Export was stopped to avoid copying it.');
+      return;
+    }
     const data = createLocalDataExport({
-      profiles: await profileRepo.list(),
-      savedSearches: await searchRepo.list(),
-      jobPostings: await jobRepo.list(),
-      applicationSessions: await sessionRepo.list(),
+      profiles,
+      savedSearches,
+      jobPostings,
+      applicationSessions,
       settings
     });
     const url = URL.createObjectURL(

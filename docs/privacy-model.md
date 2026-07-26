@@ -119,3 +119,9 @@ Private log details are redacted regardless of whether a caller passes a string 
 Saved search URLs must use HTTP or HTTPS and cannot contain embedded usernames or passwords. URL fragments and common marketing parameters are removed before storage.
 
 Until network AI providers are implemented, stored settings are normalized back to local-only mode with manual review required.
+
+## Stored-Record Validation
+
+Stored profiles, saved searches, jobs, and application sessions are validated before they are returned to assistant surfaces or included in an export. Invalid records are not silently treated as trusted runtime state. HTTP and HTTPS page URLs with embedded credentials or noncanonical forms are rejected.
+
+Import previews reject unsupported record properties as well as canonicality failures. They require bounded structured profile records, supported job status values, fill results that belong to approved preview fields with matching completion states, and consistent embedded job references.

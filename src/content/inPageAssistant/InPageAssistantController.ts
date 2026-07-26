@@ -1,5 +1,6 @@
 import {
   approveSafeHighConfidence,
+  clearApprovals,
   invalidateApprovals as invalidateFillApprovals,
   isCompleteApprovedFill
 } from '../../shared/fill/FillApprovalRules';
@@ -110,7 +111,6 @@ export function closeInPageAssistant(): { closed: boolean } {
   document.getElementById(rootId)?.remove();
   activeState = undefined;
   activeShadow = undefined;
-  sessionWriteChain = Promise.resolve();
   return { closed: true };
 }
 
@@ -284,6 +284,8 @@ function bindPanelEvents(
       if (!saved) {
         state.status += ' The fill result was not saved locally.';
       }
+      state.preview = clearApprovals(state.preview);
+      state.fieldAnalysisPageUrl = undefined;
     });
   });
 
@@ -527,10 +529,11 @@ function fieldMarkup(item: FillPreviewItem, index: number, busy: boolean): strin
     item.candidate.name ||
     item.kind;
   const approveDisabled = busy || !canIndividuallyApprove(item) ? 'disabled' : '';
+  const editorDisabled = busy || item.status === 'manual-only' ? 'disabled' : '';
   const multiline = item.kind === 'education' || item.kind === 'workExperience';
   const valueEditor = multiline
-    ? `<textarea data-field-value data-index="${index}">${escapeHtml(item.value ?? '')}</textarea>`
-    : `<input type="text" value="${escapeAttribute(item.value ?? '')}" data-field-value data-index="${index}" />`;
+    ? `<textarea data-field-value data-index="${index}" ${editorDisabled}>${escapeHtml(item.value ?? '')}</textarea>`
+    : `<input type="text" value="${escapeAttribute(item.value ?? '')}" data-field-value data-index="${index}" ${editorDisabled} />`;
   return `<div class="field">
     <p><strong>${escapeHtml(label)}</strong> ${item.sensitive ? '<span class="chip warn">Sensitive</span>' : ''}</p>
     ${valueEditor}
@@ -553,6 +556,9 @@ function getRecommendedAction(state: InPageAssistantState): string {
     return 'Profile is needed before filling. You can still analyze fields now.';
   }
   if (!state.preview.length) return 'Analyze application fields.';
+  if (state.fillResults.length) {
+    return 'Review the fill results and page manually. Analyze fields again before another fill attempt.';
+  }
   if (!state.preview.some((item) => item.approved)) return 'Review values and approve safe fields.';
   return 'Fill approved fields, then submit manually yourself.';
 }
@@ -613,6 +619,17 @@ async function persistApplicationSession(
   patch: { status?: ApplicationSession['status'] } = {}
 ): Promise<boolean> {
   if (!state.pageUrl || !state.preview.length) return false;
+  const payload = {
+    pageUrl: state.pageUrl,
+    fieldPreview: snapshotPreview(state.preview),
+    fillResults: state.fillResults.map((result) => ({ ...result })),
+    manualVerificationRequired: state.manualVerificationRequired,
+    status: patch.status ?? 'draft',
+    job: state.job
+      ? { ...state.job, detectedKeywords: [...state.job.detectedKeywords] }
+      : undefined,
+    jobPostingId: state.job?.id
+  };
   try {
     const write = sessionWriteChain
       .catch(() => undefined)
@@ -620,15 +637,7 @@ async function persistApplicationSession(
         () =>
           chrome.runtime.sendMessage({
             command: 'SAVE_APPLICATION_SESSION',
-            payload: {
-              pageUrl: state.pageUrl,
-              fieldPreview: state.preview,
-              fillResults: state.fillResults,
-              manualVerificationRequired: state.manualVerificationRequired,
-              status: patch.status ?? 'draft',
-              job: state.job,
-              jobPostingId: state.job?.id
-            }
+            payload
           }) as Promise<ExtensionCommandResult<ApplicationSession>>
       );
     sessionWriteChain = write.then(() => undefined);
@@ -648,6 +657,17 @@ async function persistApplicationSession(
     );
     return false;
   }
+}
+
+function snapshotPreview(preview: FillPreviewItem[]): FillPreviewItem[] {
+  return preview.map((item) => ({
+    ...item,
+    candidate: {
+      ...item.candidate,
+      options: [...item.candidate.options],
+      optionValues: item.candidate.optionValues ? [...item.candidate.optionValues] : undefined
+    }
+  }));
 }
 
 function uniqueOnly(value: string, index: number, values: string[]): boolean {

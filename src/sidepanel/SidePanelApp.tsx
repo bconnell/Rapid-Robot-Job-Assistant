@@ -25,7 +25,12 @@ import {
 } from '../shared/fill/FillApprovalRules';
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
 import { isMeaningfulJobPosting } from '../shared/jobs/JobPostingValidation';
-import { isSamePageUrl } from '../shared/extension/PageCommandIntegrity';
+import { isSamePageUrl, normalizePageUrl } from '../shared/extension/PageCommandIntegrity';
+import {
+  isValidApplicationSessionRecord,
+  isValidJobPostingRecord,
+  isValidUserProfileRecord
+} from '../shared/data/LocalDataTransfer';
 import {
   buildWorkflowState,
   compactWorkflowSteps,
@@ -104,8 +109,14 @@ export function SidePanelApp() {
       return;
     }
 
-    const existing = await sessionRepo.findByPageUrl(nextStatus.url);
+    const storedExisting = await sessionRepo.findByPageUrl(nextStatus.url);
     if (requestId !== loadSequence.current) return;
+    if (storedExisting && !isValidApplicationSessionRecord(storedExisting)) {
+      clearSessionBoundState(true);
+      setStatus('The saved application session was invalid and was not loaded.');
+      return;
+    }
+    const existing = storedExisting;
     if (!existing) {
       if (session && !isSamePageUrl(session.pageUrl, nextStatus.url)) {
         clearSessionBoundState(true);
@@ -114,40 +125,35 @@ export function SidePanelApp() {
     }
 
     const restoredPreview = invalidateApprovals(existing.fieldPreview);
-    const restoredSession: ApplicationSession = {
-      ...existing,
-      fieldPreview: restoredPreview,
-      fillResults: [],
-      status:
-        existing.status === 'submitted-by-user' || existing.status === 'skipped'
-          ? existing.status
-          : existing.manualVerificationRequired
-            ? 'manual-verification'
-            : 'draft',
-      submittedByUser: existing.status === 'submitted-by-user',
-      updatedAt: new Date().toISOString()
-    };
-    setSession(restoredSession);
-    setJob(restoredSession.job);
+    setSession(existing);
+    setJob(existing.job);
+    previewRef.current = restoredPreview;
     setPreview(restoredPreview);
     setFillResults([]);
-    setNotes(restoredSession.notes);
+    setNotes(existing.notes);
     setFieldSummary(undefined);
     setVerification(
-      restoredSession.manualVerificationRequired
+      existing.manualVerificationRequired
         ? 'Manual verification required.'
         : 'No manual verification detected.'
     );
-    setStatus('Saved session loaded. Analyze fields again before filling.');
+    setStatus(
+      'Saved session history loaded for review. Analyze fields again before editing, approving, or filling.'
+    );
   }
 
   async function loadActiveProfile() {
     const id = await settingsRepo.getActiveProfileId();
-    const active = id ? await profileRepo.get(id) : undefined;
+    const storedActive = id ? await profileRepo.get(id) : undefined;
+    const active =
+      storedActive && isValidUserProfileRecord(storedActive) ? storedActive : undefined;
     if (id && !active) {
       await settingsRepo.clearActiveProfileId();
     }
     setProfile(active);
+    if (storedActive && !active) {
+      setStatus('The saved active profile was invalid and was not loaded.');
+    }
   }
 
   async function analyzeJob() {
@@ -160,7 +166,7 @@ export function SidePanelApp() {
     }
     const response = result.data ?? result.response;
     const analyzed = response?.job;
-    if (!analyzed || !isMeaningfulJobPosting(analyzed)) {
+    if (!analyzed || !isValidJobPostingRecord(analyzed) || !isMeaningfulJobPosting(analyzed)) {
       setJob(undefined);
       setStatus('No reliable job data was found. Nothing was saved.');
       return;
@@ -241,8 +247,16 @@ export function SidePanelApp() {
       sensitiveCount: nextPreview.filter((item) => item.sensitive).length,
       unknownCount: nextPreview.filter((item) => item.kind === 'unknown').length
     };
-    const pageUrl = response.pageUrl;
+    const pageUrl = normalizePageUrl(response.pageUrl);
+    if (!pageUrl) {
+      setStatus('The application page URL was invalid. No session was created.');
+      return;
+    }
     const existing = await sessionRepo.findByPageUrl(pageUrl);
+    if (existing && !isValidApplicationSessionRecord(existing)) {
+      setStatus('The saved application session was invalid and was not overwritten.');
+      return;
+    }
     const now = new Date().toISOString();
     const nextSession: ApplicationSession = {
       id: existing?.id ?? crypto.randomUUID(),
@@ -263,6 +277,7 @@ export function SidePanelApp() {
       return;
     }
     setSession(nextSession);
+    previewRef.current = nextPreview;
     setPreview(nextPreview);
     setFieldSummary(nextSummary);
     setPageWarnings(nextWarnings);
@@ -279,20 +294,25 @@ export function SidePanelApp() {
   }
 
   async function fillApproved() {
+    if (!fieldSummary || fillResults.length > 0 || session?.status === 'filled') {
+      setStatus('Analyze the current application fields before another fill attempt.');
+      return;
+    }
     const pageUrl = session?.pageUrl;
     if (!pageUrl || !pageStatus?.url || !isSamePageUrl(pageUrl, pageStatus.url)) {
       clearSessionBoundState();
       setStatus('The application page changed. Analyze fields again before filling.');
       return;
     }
-    if (!preview.some((item) => item.approved)) {
+    const requestPreview = previewRef.current;
+    if (!requestPreview.some((item) => item.approved)) {
       setStatus('Approve at least one safe field before filling.');
       return;
     }
 
     const result = (await chrome.runtime.sendMessage({
       command: 'FILL_APPROVED_FIELDS',
-      payload: { pageUrl, preview }
+      payload: { pageUrl, preview: requestPreview }
     })) as ExtensionCommandResult<FillApprovedFieldsResponse>;
     if (!result.ok) {
       await handleCommandFailure(result);
@@ -316,7 +336,7 @@ export function SidePanelApp() {
     }
 
     const results = response.results;
-    const nextPreview = preview.map((item) => {
+    const nextPreview = requestPreview.map((item) => {
       const fillResult = results.find(
         (candidate) => candidate.selector === item.candidate.selector
       );
@@ -325,6 +345,7 @@ export function SidePanelApp() {
         : item;
     });
     const complete = isCompleteApprovedFill(nextPreview, results);
+    previewRef.current = nextPreview;
     setPreview(nextPreview);
     setFillResults(results);
     const saved = await saveSession({
@@ -333,6 +354,9 @@ export function SidePanelApp() {
       status: complete ? 'filled' : 'draft'
     });
     if (!saved) return;
+    if (!complete) {
+      setFieldSummary(undefined);
+    }
     const successfulCount = results.filter((fillResult) => fillResult.ok).length;
     setStatus(
       complete
@@ -398,8 +422,8 @@ export function SidePanelApp() {
 
   async function saveSession(patch: Partial<ApplicationSession>): Promise<boolean> {
     const now = new Date().toISOString();
-    const pageUrl = session?.pageUrl ?? pageStatus?.url ?? job?.sourceUrl;
-    if (!pageUrl || !/^https?:\/\//i.test(pageUrl)) {
+    const pageUrl = normalizePageUrl(session?.pageUrl ?? pageStatus?.url ?? job?.sourceUrl ?? '');
+    if (!pageUrl) {
       setStatus('No valid application page is available for this session.');
       return false;
     }
@@ -411,8 +435,8 @@ export function SidePanelApp() {
       jobPostingId: job?.id,
       pageUrl,
       startedAt: session?.startedAt ?? now,
-      fieldPreview: patch.fieldPreview ?? preview,
-      fillResults: patch.fillResults ?? fillResults,
+      fieldPreview: patch.fieldPreview ?? session?.fieldPreview ?? preview,
+      fillResults: patch.fillResults ?? session?.fillResults ?? fillResults,
       manualVerificationRequired:
         patch.manualVerificationRequired ?? session?.manualVerificationRequired ?? false,
       notes: patch.notes ?? notes,
@@ -426,6 +450,10 @@ export function SidePanelApp() {
   }
 
   async function queueSessionWrite(next: ApplicationSession): Promise<boolean> {
+    if (!isValidApplicationSessionRecord(next)) {
+      setStatus('The application session did not pass local persistence validation.');
+      return false;
+    }
     const write = sessionWriteChain.current
       .catch(() => undefined)
       .then(() => sessionRepo.save(next));
@@ -452,6 +480,10 @@ export function SidePanelApp() {
   }
 
   function updatePreview(selector: string, patch: Partial<FillPreviewItem>) {
+    if (!fieldSummary || fillResults.length > 0 || session?.status === 'filled') {
+      setStatus('Analyze the current application fields before editing saved values.');
+      return;
+    }
     const nextPreview = previewRef.current.map((item) => {
       if (item.candidate.selector !== selector) return item;
       const valueChanged =
@@ -474,7 +506,11 @@ export function SidePanelApp() {
   }
 
   async function approveSafeFields() {
-    const nextPreview = approveSafeHighConfidence(preview);
+    if (!fieldSummary || fillResults.length > 0 || session?.status === 'filled') {
+      setStatus('Analyze the current application fields before approving values.');
+      return;
+    }
+    const nextPreview = approveSafeHighConfidence(previewRef.current);
     previewRef.current = nextPreview;
     setPreview(nextPreview);
     if (await saveSession({ fieldPreview: nextPreview })) {
@@ -483,7 +519,11 @@ export function SidePanelApp() {
   }
 
   async function clearApprovedFields() {
-    const nextPreview = clearApprovals(preview);
+    if (!fieldSummary || fillResults.length > 0 || session?.status === 'filled') {
+      setStatus('Analyze the current application fields before changing approvals.');
+      return;
+    }
+    const nextPreview = clearApprovals(previewRef.current);
     previewRef.current = nextPreview;
     setPreview(nextPreview);
     if (await saveSession({ fieldPreview: nextPreview })) {
@@ -493,12 +533,17 @@ export function SidePanelApp() {
 
   const canOfferPermission = canOfferSitePermission(pageStatus);
   const blockedPage = !canRunPageCommand(pageStatus);
+  const previewInteractive = Boolean(
+    fieldSummary && fillResults.length === 0 && session?.status !== 'filled'
+  );
+  const freshPreview = fieldSummary ? preview : [];
+  const freshFillResults = fieldSummary ? fillResults : [];
   const workflow = buildWorkflowState({
     pageStatus,
     profile,
     job,
-    preview,
-    fillResults,
+    preview: freshPreview,
+    fillResults: freshFillResults,
     manualVerificationRequired: verification.includes('required'),
     sessionStatus: session?.status
   });
@@ -666,6 +711,12 @@ export function SidePanelApp() {
           not bulk-approved.
         </p>
         {preview.length === 0 && <p className="muted">No fields analyzed yet.</p>}
+        {preview.length > 0 && !previewInteractive && (
+          <p className="warn">
+            This is saved or completed field history. Analyze the current form before editing,
+            approving, or filling again.
+          </p>
+        )}
         {preview.map((item) => (
           <div className="field-row" key={item.candidate.selector}>
             <div>
@@ -696,7 +747,7 @@ export function SidePanelApp() {
             </div>
             <input
               value={item.value ?? ''}
-              disabled={item.status === 'manual-only'}
+              disabled={!previewInteractive || item.status === 'manual-only'}
               onChange={(event) =>
                 updatePreview(item.candidate.selector, { value: event.target.value })
               }
@@ -708,6 +759,7 @@ export function SidePanelApp() {
                   type="checkbox"
                   checked={item.approved}
                   disabled={
+                    !previewInteractive ||
                     !item.value ||
                     item.status === 'manual-only' ||
                     item.sensitive ||
@@ -728,6 +780,7 @@ export function SidePanelApp() {
               </label>
               <button
                 className="secondary"
+                disabled={!previewInteractive}
                 onClick={() =>
                   updatePreview(item.candidate.selector, {
                     approved: false,
@@ -788,14 +841,14 @@ export function SidePanelApp() {
     if (stepId === 'review') {
       return {
         label: 'Approve Safe Fields',
-        enabled: preview.length > 0,
+        enabled: previewInteractive && preview.length > 0,
         run: approveSafeFields
       };
     }
     if (stepId === 'fill') {
       return {
         label: 'Fill Approved',
-        enabled: !pageBlocked && preview.some((item) => item.approved),
+        enabled: !pageBlocked && previewInteractive && preview.some((item) => item.approved),
         run: fillApproved
       };
     }
@@ -840,7 +893,7 @@ export function SidePanelApp() {
       return (
         <>
           <button
-            disabled={preview.length === 0}
+            disabled={!previewInteractive || preview.length === 0}
             onClick={() => {
               void approveSafeFields();
             }}
@@ -849,7 +902,7 @@ export function SidePanelApp() {
           </button>
           <button
             className="secondary"
-            disabled={preview.length === 0}
+            disabled={!previewInteractive || preview.length === 0}
             onClick={() => void clearApprovedFields()}
           >
             Clear Approvals
@@ -860,7 +913,7 @@ export function SidePanelApp() {
     if (workflow.currentStepId === 'fill') {
       return (
         <button
-          disabled={blockedPage || !preview.some((item) => item.approved)}
+          disabled={blockedPage || !previewInteractive || !preview.some((item) => item.approved)}
           onClick={fillApproved}
         >
           Fill Approved
