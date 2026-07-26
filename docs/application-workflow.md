@@ -47,8 +47,14 @@ After field analysis, suggested values can be reviewed and corrected in the in-p
 
 Weak job-page analysis is not saved as a real job. If no clear job details are found, review the page or try another job page.
 
-## Recursive Workflow Integrity
+## Reviewed Filling Integrity
 
 The assistant shows every detected field that can participate in a fill attempt. Editing a value clears its approval. Page navigation or application-route changes clear stale approvals and require a new field analysis.
 
 A session is marked filled only when every approved field reports success. Partial and failed attempts remain review work. Empty field analysis and weak non-job pages are not saved as successful records.
+
+## Target-Bound Fill Requests
+
+Field analysis records the current application URL. Fill requests include that URL, and both the service worker and content script compare it with the current target before any field changes occur.
+
+A fresh field analysis clears prior fill results and prior submission markers. Reopening a saved session clears approvals and requires a new analysis before filling. Session status becomes `filled` only when every currently approved selector has a successful result.

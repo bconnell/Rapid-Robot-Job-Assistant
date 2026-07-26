@@ -1,9 +1,18 @@
 import { err, ok, type Result } from '../utils/Result';
 
+export const maxResumeSourceLength = 1_000_000;
+export const maxNormalizedResumeLength = 500_000;
+
 export function extractPlainTextFromPaste(value: string): Result<string> {
+  if (value.length > maxResumeSourceLength) {
+    return err('Resume text is too large. Keep the source under 1,000,000 characters.');
+  }
   const text = normalizeResumeText(value);
   if (text.length < 20) {
     return err('Resume text is too short to parse safely.');
+  }
+  if (text.length > maxNormalizedResumeLength) {
+    return err('Normalized resume text is too large. Keep it under 500,000 characters.');
   }
   return ok(text);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ApplicationSession } from '../shared/models/ApplicationSession';
 import type { FillPreviewItem, FillResult } from '../shared/models/FieldMapping';
 import type { JobPosting } from '../shared/models/JobPosting';
@@ -7,6 +7,7 @@ import type {
   ExtensionCommandResult,
   PermissionRequestResult
 } from '../shared/extension/ExtensionMessaging';
+import type { FillApprovedFieldsResponse } from '../content/contentMessenger';
 import { requestCurrentSitePermissionFromUi } from '../shared/extension/PermissionRequestClient';
 import type { TabCapabilityResult } from '../shared/extension/TabPermissions';
 import { canOfferSitePermission, canRunPageCommand } from '../shared/extension/TabPermissions';
@@ -16,9 +17,15 @@ import {
   getBraveShieldsGuidance,
   type BrowserCompatibility
 } from '../shared/extension/BrowserCompatibility';
-import { approveSafeHighConfidence, clearApprovals } from '../shared/fill/FillApprovalRules';
+import {
+  approveSafeHighConfidence,
+  clearApprovals,
+  invalidateApprovals,
+  isCompleteApprovedFill
+} from '../shared/fill/FillApprovalRules';
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
 import { isMeaningfulJobPosting } from '../shared/jobs/JobPostingValidation';
+import { isSamePageUrl } from '../shared/extension/PageCommandIntegrity';
 import {
   buildWorkflowState,
   compactWorkflowSteps,
@@ -62,6 +69,7 @@ export function SidePanelApp() {
   const [fieldSummary, setFieldSummary] = useState<FieldAnalysisSummary>();
   const [pageWarnings, setPageWarnings] = useState<string[]>([]);
   const [browser, setBrowser] = useState<BrowserCompatibility>();
+  const sessionWriteChain = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     void loadActiveProfile();
@@ -75,42 +83,63 @@ export function SidePanelApp() {
     })) as ExtensionCommandResult<TabCapabilityResult>;
     const nextStatus = result.data ?? result.response;
     setPageStatus(nextStatus);
-    if (nextStatus && !nextStatus.ok) {
-      setStatus(nextStatus.userMessage);
+
+    if (!result.ok || !nextStatus?.ok || !nextStatus.url) {
+      clearSessionBoundState();
+      setStatus(
+        nextStatus?.userMessage ??
+          result.userMessage ??
+          'Open a normal job or application page before continuing.'
+      );
       return;
     }
-    if (nextStatus?.url) {
-      const existing = await sessionRepo.findByPageUrl(nextStatus.url);
-      if (existing) {
-        const restoredPreview = existing.fieldPreview.map((item) => ({
-          ...item,
-          approved: false,
-          rejected: !item.value,
-          status:
-            item.status === 'manual-only'
-              ? ('manual-only' as const)
-              : item.value
-                ? ('pending' as const)
-                : ('rejected' as const)
-        }));
-        setSession(existing);
-        setJob(existing.job);
-        setPreview(restoredPreview);
-        setFillResults(existing.fillResults);
-        setNotes(existing.notes);
-        setVerification(
-          existing.manualVerificationRequired
-            ? 'Manual verification required.'
-            : 'No manual verification detected.'
-        );
-        setStatus('Saved session loaded. Analyze fields again before filling after a page change.');
+
+    const existing = await sessionRepo.findByPageUrl(nextStatus.url);
+    if (!existing) {
+      if (session && !isSamePageUrl(session.pageUrl, nextStatus.url)) {
+        clearSessionBoundState();
       }
+      return;
     }
+
+    const restoredPreview = invalidateApprovals(existing.fieldPreview);
+    const restoredSession: ApplicationSession = {
+      ...existing,
+      fieldPreview: restoredPreview,
+      fillResults: [],
+      status:
+        existing.status === 'submitted-by-user' || existing.status === 'skipped'
+          ? existing.status
+          : existing.manualVerificationRequired
+            ? 'manual-verification'
+            : 'draft',
+      submittedByUser: existing.status === 'submitted-by-user',
+      updatedAt: new Date().toISOString()
+    };
+    if (!(await queueSessionWrite(restoredSession))) {
+      setStatus('The saved session could not be refreshed locally.');
+      return;
+    }
+    setSession(restoredSession);
+    setJob(restoredSession.job);
+    setPreview(restoredPreview);
+    setFillResults([]);
+    setNotes(restoredSession.notes);
+    setFieldSummary(undefined);
+    setVerification(
+      restoredSession.manualVerificationRequired
+        ? 'Manual verification required.'
+        : 'No manual verification detected.'
+    );
+    setStatus('Saved session loaded. Analyze fields again before filling.');
   }
 
   async function loadActiveProfile() {
     const id = await settingsRepo.getActiveProfileId();
     const active = id ? await profileRepo.get(id) : undefined;
+    if (id && !active) {
+      await settingsRepo.clearActiveProfileId();
+    }
     setProfile(active);
     if (!active) setStatus('Profile needed before filling. You can analyze a job first.');
   }
@@ -126,6 +155,7 @@ export function SidePanelApp() {
     const response = result.data ?? result.response;
     const analyzed = response?.job;
     if (!analyzed || !isMeaningfulJobPosting(analyzed)) {
+      setJob(undefined);
       setStatus('No reliable job data was found. Nothing was saved.');
       return;
     }
@@ -159,12 +189,16 @@ export function SidePanelApp() {
       return;
     }
     const response = result.data ?? result.response;
-    if (!response?.pageUrl) {
-      setStatus('No field data returned from the current page.');
+    if (!response?.pageUrl || !result.tabUrl || !isSamePageUrl(response.pageUrl, result.tabUrl)) {
+      clearSessionBoundState();
+      setStatus(
+        'The application page changed during field analysis. Analyze the current page again.'
+      );
       return;
     }
     const detectedCount = response.fieldCount ?? response.mappings?.length ?? 0;
     if (detectedCount === 0) {
+      clearSessionBoundState();
       const shieldsGuidance = getBraveShieldsGuidance({
         browserName: browser?.browserName ?? 'unknown',
         fieldCount: 0,
@@ -215,20 +249,23 @@ export function SidePanelApp() {
       pageUrl,
       startedAt: existing?.startedAt ?? now,
       fieldPreview: nextPreview,
-      fillResults: existing?.fillResults ?? [],
+      fillResults: [],
       manualVerificationRequired: Boolean(response?.verification?.detected),
       notes: existing?.notes ?? notes,
       status: response?.verification?.detected ? 'manual-verification' : 'draft',
-      submittedByUser: existing?.submittedByUser ?? false,
+      submittedByUser: false,
       updatedAt: now
     };
-    await sessionRepo.save(nextSession);
+    if (!(await queueSessionWrite(nextSession))) {
+      setStatus('The analyzed fields could not be saved locally.');
+      return;
+    }
     setSession(nextSession);
     setPreview(nextPreview);
     setFieldSummary(nextSummary);
     setPageWarnings(nextWarnings);
     setNotes(nextSession.notes);
-    setFillResults(nextSession.fillResults);
+    setFillResults([]);
     setVerification(
       nextSession.manualVerificationRequired
         ? 'Manual verification required.'
@@ -240,29 +277,43 @@ export function SidePanelApp() {
   }
 
   async function fillApproved() {
+    const pageUrl = session?.pageUrl;
+    if (!pageUrl || !pageStatus?.url || !isSamePageUrl(pageUrl, pageStatus.url)) {
+      clearSessionBoundState();
+      setStatus('The application page changed. Analyze fields again before filling.');
+      return;
+    }
     if (!preview.some((item) => item.approved)) {
       setStatus('Approve at least one safe field before filling.');
       return;
     }
+
     const result = (await chrome.runtime.sendMessage({
       command: 'FILL_APPROVED_FIELDS',
-      payload: preview
-    })) as ExtensionCommandResult<{
-      verification?: { detected?: boolean };
-      results?: FillResult[];
-    }>;
+      payload: { pageUrl, preview }
+    })) as ExtensionCommandResult<FillApprovedFieldsResponse>;
     if (!result.ok) {
       await handleCommandFailure(result);
       return;
     }
+
     const response = result.data ?? result.response;
-    if (response?.verification?.detected) {
+    if (!response?.pageMatched || !isSamePageUrl(pageUrl, response.pageUrl)) {
+      clearSessionBoundState();
+      setStatus(
+        response?.userMessage ??
+          'The application page changed. Analyze fields again before filling.'
+      );
+      return;
+    }
+    if (response.verification.detected) {
       setVerification('Manual verification required. Filling paused.');
       setStatus('CAPTCHA or bot check detected. Finish it manually, then analyze fields again.');
       await saveSession({ manualVerificationRequired: true, status: 'manual-verification' });
       return;
     }
-    const results = response?.results ?? [];
+
+    const results = response.results;
     const nextPreview = preview.map((item) => {
       const fillResult = results.find(
         (candidate) => candidate.selector === item.candidate.selector
@@ -271,17 +322,15 @@ export function SidePanelApp() {
         ? { ...item, status: fillResult.ok ? ('filled' as const) : ('failed' as const) }
         : item;
     });
+    const complete = isCompleteApprovedFill(nextPreview, results);
     setPreview(nextPreview);
     setFillResults(results);
-    const approvedCount = preview.filter((item) => item.approved).length;
-    const successfulCount = results.filter((result) => result.ok).length;
-    const complete =
-      approvedCount > 0 && results.length === approvedCount && successfulCount === approvedCount;
     await saveSession({
       fieldPreview: nextPreview,
       fillResults: results,
       status: complete ? 'filled' : 'draft'
     });
+    const successfulCount = results.filter((fillResult) => fillResult.ok).length;
     setStatus(
       complete
         ? postActionMessage('filled')
@@ -351,6 +400,8 @@ export function SidePanelApp() {
       setStatus('No valid application page is available for this session.');
       return false;
     }
+
+    const nextStatus = patch.status ?? session?.status ?? 'draft';
     const next: ApplicationSession = {
       id: session?.id ?? crypto.randomUUID(),
       job,
@@ -362,13 +413,37 @@ export function SidePanelApp() {
       manualVerificationRequired:
         patch.manualVerificationRequired ?? session?.manualVerificationRequired ?? false,
       notes: patch.notes ?? notes,
-      status: patch.status ?? session?.status ?? 'draft',
-      submittedByUser: patch.submittedByUser ?? session?.submittedByUser ?? false,
+      status: nextStatus,
+      submittedByUser: nextStatus === 'submitted-by-user',
       updatedAt: now
     };
-    await sessionRepo.save(next);
+    if (!(await queueSessionWrite(next))) return false;
     setSession(next);
     return true;
+  }
+
+  async function queueSessionWrite(next: ApplicationSession): Promise<boolean> {
+    const write = sessionWriteChain.current
+      .catch(() => undefined)
+      .then(() => sessionRepo.save(next));
+    sessionWriteChain.current = write;
+    try {
+      await write;
+      return true;
+    } catch {
+      setStatus('The application session could not be saved locally.');
+      return false;
+    }
+  }
+
+  function clearSessionBoundState() {
+    setSession(undefined);
+    setPreview([]);
+    setFillResults([]);
+    setNotes('');
+    setFieldSummary(undefined);
+    setPageWarnings([]);
+    setVerification('No manual verification detected.');
   }
 
   function updatePreview(selector: string, patch: Partial<FillPreviewItem>) {

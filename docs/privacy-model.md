@@ -100,20 +100,16 @@ Do not commit real user data. Fixtures, examples, tests, screenshots, and docs m
 
 Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA details, login details, MFA details, and bot-check details are not stored.
 
-## In-Page Assistant Persistence
-
-Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA details, login details, MFA details, and bot-check details are not stored.
-
-## In-Page Assistant Persistence
-
-Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA details, login details, MFA details, and bot-check details are not stored.
-
-## In-Page Assistant Persistence
-
-Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA details, login details, MFA details, and bot-check details are not stored.
-
 ## Job Text And Session Minimization
 
 Job extraction prefers job-description content and removes form controls, dialog content, navigation, and footer content before storing description text. This reduces the chance of unrelated page or application-form text entering a saved job.
 
 Clearing all local data also clears the remembered target page. Clearing profiles does not erase unrelated extension settings.
+
+## Target-Bound Commands And Import Limits
+
+Fill requests carry the exact HTTP or HTTPS application URL used during field analysis. The service worker and content script recheck that URL before filling, and stale approvals are cleared when the page changes.
+
+Pasted resume text, `.docx` files, and JSON import previews have explicit size limits. Imported records are checked by collection, identifier, URL, field-preview shape, fill-result shape, and truthful session status before they can be presented as valid.
+
+Private log details are redacted regardless of whether a caller passes a string or an object.

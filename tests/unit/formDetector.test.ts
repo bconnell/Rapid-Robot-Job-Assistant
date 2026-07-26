@@ -77,4 +77,44 @@ describe('form detector', () => {
 
     expect(fields.every((field) => field.stableSelector === false)).toBe(true);
   });
+  it('treats controls inside hidden and disabled ancestors as manual-only candidates', () => {
+    document.body.innerHTML = `
+      <section hidden><label>Email <input id="hidden-email" type="email" /></label></section>
+      <fieldset disabled><label>Phone <input id="disabled-phone" type="tel" /></label></fieldset>`;
+
+    const fields = detectFormFields(document);
+    expect(fields.find((field) => field.id === 'hidden-email')?.visible).toBe(false);
+    expect(fields.find((field) => field.id === 'disabled-phone')?.disabled).toBe(true);
+  });
+
+  it('keeps same-name choice groups in separate forms isolated', () => {
+    document.body.innerHTML = `
+      <form id="first-form">
+        <label><input type="radio" name="answer" value="yes" /> Yes</label>
+        <label><input type="radio" name="answer" value="no" /> No</label>
+      </form>
+      <form id="second-form">
+        <label><input type="radio" name="answer" value="remote" /> Remote</label>
+        <label><input type="radio" name="answer" value="onsite" /> Onsite</label>
+      </form>`;
+
+    const fields = detectFormFields(document).filter(
+      (field) => field.controlFamily === 'radio-group'
+    );
+    expect(fields).toHaveLength(2);
+    expect(fields[0].selector).toContain('#first-form');
+    expect(fields[1].selector).toContain('#second-form');
+  });
+
+  it('keeps multiple select controls manual-only', () => {
+    document.body.innerHTML = `
+      <label for="locations">Preferred locations</label>
+      <select id="locations" multiple>
+        <option value="remote">Remote</option>
+        <option value="hybrid">Hybrid</option>
+      </select>`;
+
+    const [field] = detectFormFields(document);
+    expect(field.controlFamily).toBe('native-multi-select');
+  });
 });

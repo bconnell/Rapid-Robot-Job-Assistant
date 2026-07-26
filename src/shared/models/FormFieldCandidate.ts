@@ -27,6 +27,7 @@ export interface FormFieldCandidate {
     | 'native-input'
     | 'native-textarea'
     | 'native-select'
+    | 'native-multi-select'
     | 'radio-group'
     | 'checkbox-group'
     | 'file-upload'

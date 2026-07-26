@@ -45,4 +45,14 @@ describe('requestCurrentSitePermissionFromUi', () => {
     expect(request).not.toHaveBeenCalled();
     expect(result.granted).toBe(false);
   });
+  it('returns a user-facing result when Chrome rejects the permission request', async () => {
+    const request = vi.fn().mockRejectedValue(new Error('gesture expired'));
+    vi.stubGlobal('chrome', { permissions: { request } });
+    const status = preflightTab({ id: 1, url: 'https://company.example.com/careers/123' }, false);
+
+    const result = await requestCurrentSitePermissionFromUi(status);
+
+    expect(result.granted).toBe(false);
+    expect(result.userMessage).toContain('could not complete');
+  });
 });

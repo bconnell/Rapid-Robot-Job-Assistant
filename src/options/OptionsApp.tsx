@@ -7,10 +7,12 @@ import {
 import { clearAllIndexedDbData } from '../shared/storage/IndexedDbRepository';
 import {
   ApplicationSessionRepository,
+  FieldMappingRepository,
   JobPostingRepository,
   ProfileRepository,
   ResumeDocumentRepository,
-  SavedSearchRepository
+  SavedSearchRepository,
+  TailoringSuggestionRepository
 } from '../shared/storage/TypedRepositories';
 import { extractTextFromDocx } from '../shared/parsing/DocxResumeParser';
 import { extractPlainTextFromPaste } from '../shared/parsing/ResumeTextExtractor';
@@ -41,6 +43,9 @@ const resumeRepo = new ResumeDocumentRepository();
 const searchRepo = new SavedSearchRepository();
 const jobRepo = new JobPostingRepository();
 const sessionRepo = new ApplicationSessionRepository();
+const fieldMappingRepo = new FieldMappingRepository();
+const tailoringRepo = new TailoringSuggestionRepository();
+const maxImportBytes = 5 * 1024 * 1024;
 
 export function OptionsApp() {
   const [settings, setSettings] = useState<ExtensionSettings>(defaultSettings);
@@ -204,13 +209,23 @@ export function OptionsApp() {
     const link = document.createElement('a');
     link.href = url;
     link.download = 'rapid-robot-job-assistant-export.json';
+    link.hidden = true;
+    document.body.append(link);
     link.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => {
+      link.remove();
+      URL.revokeObjectURL(url);
+    }, 1000);
     setStatus('Local data export created. Do not commit exported files.');
   }
 
   async function previewImport(file?: File) {
     if (!file) return;
+    if (file.size > maxImportBytes) {
+      setImportPreview('Import file is too large. Keep JSON exports under 5 MB.');
+      setStatus('Import file did not validate.');
+      return;
+    }
     try {
       const parsed = JSON.parse(await file.text()) as unknown;
       const preview = validateLocalDataImport(parsed);
@@ -265,9 +280,13 @@ export function OptionsApp() {
       return;
     await Promise.all([
       ...(await jobRepo.list()).map((job) => jobRepo.delete(job.id)),
-      ...(await sessionRepo.list()).map((session) => sessionRepo.delete(session.id))
+      ...(await sessionRepo.list()).map((session) => sessionRepo.delete(session.id)),
+      ...(await fieldMappingRepo.list()).map((mapping) => fieldMappingRepo.delete(mapping.id)),
+      ...(await tailoringRepo.list()).map((suggestion) => tailoringRepo.delete(suggestion.id))
     ]);
-    setStatus('Saved jobs and application sessions cleared locally.');
+    setStatus(
+      'Saved jobs, application sessions, field mappings, and tailoring suggestions cleared locally.'
+    );
   }
 
   async function clearSavedProfiles() {
@@ -279,7 +298,8 @@ export function OptionsApp() {
       return;
     await Promise.all([
       ...(await profileRepo.list()).map((savedProfile) => profileRepo.delete(savedProfile.id)),
-      ...(await resumeRepo.list()).map((resume) => resumeRepo.delete(resume.id))
+      ...(await resumeRepo.list()).map((resume) => resumeRepo.delete(resume.id)),
+      ...(await tailoringRepo.list()).map((suggestion) => tailoringRepo.delete(suggestion.id))
     ]);
     await settingsRepo.clearActiveProfileId();
     setProfile(emptyUserProfile());

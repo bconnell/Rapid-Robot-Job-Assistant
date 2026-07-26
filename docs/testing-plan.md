@@ -273,7 +273,7 @@ GitHub Actions runs `npm ci`, build, tests, typecheck, lint, and format. It does
 
 Browser automation may be useful later for controlled extension QA. It should not be used to automate real job applications or bypass site protections.
 
-## Recursive Integrity QA
+## Workflow Integrity QA
 
 1. Analyze a form with more than twelve fields and confirm every detected field is visible.
 2. Approve a value, edit it, and confirm its approval is cleared.
@@ -284,3 +284,16 @@ Browser automation may be useful later for controlled extension QA. It should no
 7. Confirm clearing profiles preserves unrelated settings.
 8. Confirm clearing all local data also clears the remembered target page.
 9. Open the full assistant against a remembered target that has not loaded the content script and confirm the target is checked by id rather than compared with the assistant tab.
+
+## Target And Data Boundary QA
+
+1. Analyze a form, navigate to a different URL with matching selectors, and confirm filling is refused.
+2. Open the full assistant tab from a remembered target and confirm readiness is checked against that target tab.
+3. Confirm malformed fill payloads and duplicate selectors are rejected without changing the page.
+4. Confirm hidden or inert ancestors, disabled fieldsets, disabled options, and disabled option groups remain unchanged.
+5. Confirm same-name choice groups in separate forms are detected and filled independently.
+6. Confirm checkbox groups exactly match the approved set instead of leaving old selections checked.
+7. Confirm stale successful fill results cannot mark a newly approved preview complete.
+8. Confirm oversized pasted resumes, `.docx` files, and JSON imports are rejected locally.
+9. Confirm malformed imported profiles, jobs, searches, and sessions do not receive a valid preview.
+10. Confirm target-bound page state is cleared when the target changes or becomes unavailable.

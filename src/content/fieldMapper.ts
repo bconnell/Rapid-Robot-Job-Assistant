@@ -154,9 +154,17 @@ export function mapFieldCandidate(candidate: FormFieldCandidate): FieldMapping {
     !sensitive &&
     !manualOnlyReason &&
     candidate.visible &&
+    !candidate.disabled &&
+    !candidate.readOnly &&
     candidate.stableSelector !== false;
   const requiresDirectReview =
-    sensitive || (confidence >= 0.7 && confidence < 0.9) || Boolean(manualOnlyReason);
+    sensitive ||
+    !candidate.visible ||
+    Boolean(candidate.disabled) ||
+    Boolean(candidate.readOnly) ||
+    candidate.stableSelector === false ||
+    (confidence >= 0.7 && confidence < 0.9) ||
+    Boolean(manualOnlyReason);
 
   return {
     candidate,
@@ -280,8 +288,17 @@ function getManualOnlyReason(
   candidate: FormFieldCandidate,
   kind: FieldMappingKind
 ): string | undefined {
+  if (!candidate.visible) return 'Hidden fields are not filled.';
+  if (candidate.disabled) return 'Disabled fields are not filled.';
+  if (candidate.readOnly) return 'Read-only fields are not filled.';
+  if (candidate.stableSelector === false) {
+    return 'Manual review required because no stable selector was found.';
+  }
   if (candidate.inputType === 'file' || kind === 'resumeUpload' || kind === 'coverLetterUpload') {
     return 'File upload detected. Select the file manually.';
+  }
+  if (candidate.controlFamily === 'native-multi-select') {
+    return 'Multiple-choice select detected. Review and fill manually.';
   }
   if (candidate.controlFamily === 'aria-combobox' || candidate.controlFamily === 'custom-select') {
     return 'Custom dropdown detected. Review and fill manually.';

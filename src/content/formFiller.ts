@@ -38,19 +38,22 @@ function fillField(item: FillPreviewItem, doc: Document): FillResult {
   }
   if (isElementDisabledOrReadOnly(element)) return fail(item, 'Field is not editable.');
 
-  if (element instanceof HTMLInputElement && element.type === 'file') {
+  if (isInput(element) && element.type === 'file') {
     return fail(item, 'File uploads require manual selection.');
   }
 
-  if (element instanceof HTMLSelectElement) return fillSelect(item, element);
-  if (element instanceof HTMLInputElement && element.type === 'radio') {
+  if (isSelect(element)) return fillSelect(item, element);
+  if (isInput(element) && element.type === 'radio') {
     return fillRadioGroup(item, doc);
   }
-  if (element instanceof HTMLInputElement && element.type === 'checkbox') {
+  if (isInput(element) && element.type === 'checkbox') {
     return fillCheckbox(item, doc);
   }
+  if (!isInput(element) && !isTextArea(element)) {
+    return fail(item, 'Unsupported field type.');
+  }
 
-  setNativeValue(element, item.value);
+  setNativeProperty(element, 'value', item.value);
   dispatchFieldEvents(element);
   return element.value === item.value
     ? ok(item, 'Filled approved field.')
@@ -58,9 +61,12 @@ function fillField(item: FillPreviewItem, doc: Document): FillResult {
 }
 
 function fillSelect(item: FillPreviewItem, element: HTMLSelectElement): FillResult {
+  if (element.multiple) {
+    return fail(item, 'Multiple-choice select fields require manual review.');
+  }
   const option = findMatchingOption(Array.from(element.options), item.value ?? '');
-  if (!option) return fail(item, 'No matching select option. Review this field manually.');
-  setNativeSelectValue(element, option.value);
+  if (!option) return fail(item, 'No editable matching select option. Review this field manually.');
+  setNativeProperty(element, 'value', option.value);
   dispatchFieldEvents(element);
   return element.value === option.value
     ? ok(item, 'Selected approved option.')
@@ -71,7 +77,7 @@ function fillRadioGroup(item: FillPreviewItem, doc: Document): FillResult {
   const radios = getGroupedInputs(item, doc, 'radio').filter(isEditableChoice);
   const match = radios.find((radio) => optionMatches(radio, item.value ?? '', doc));
   if (!match) return fail(item, 'No editable matching radio option. Review this field manually.');
-  setNativeChecked(match, true);
+  setNativeProperty(match, 'checked', true);
   dispatchFieldEvents(match);
   return match.checked
     ? ok(item, 'Selected approved radio option.')
@@ -81,9 +87,11 @@ function fillRadioGroup(item: FillPreviewItem, doc: Document): FillResult {
 function fillCheckbox(item: FillPreviewItem, doc: Document): FillResult {
   const boxes = getGroupedInputs(item, doc, 'checkbox').filter(isEditableChoice);
   const values = splitRequestedValues(item.value ?? '');
+  if (!boxes.length) return fail(item, 'No editable checkbox options were found.');
+
   if (boxes.length === 1 && isYesNo(values)) {
     const checked = ['yes', 'true', '1'].includes(values[0]);
-    setNativeChecked(boxes[0], checked);
+    setNativeProperty(boxes[0], 'checked', checked);
     dispatchFieldEvents(boxes[0]);
     return boxes[0].checked === checked
       ? ok(item, 'Updated approved checkbox.')
@@ -97,12 +105,17 @@ function fillCheckbox(item: FillPreviewItem, doc: Document): FillResult {
     return fail(item, 'Not every requested checkbox option has an editable match.');
   }
 
-  const matched = [...new Set(requestedMatches.filter(Boolean) as HTMLInputElement[])];
-  matched.forEach((box) => {
-    setNativeChecked(box, true);
-    dispatchFieldEvents(box);
-  });
-  return matched.every((box) => box.checked)
+  const matched = new Set(requestedMatches.filter(Boolean) as HTMLInputElement[]);
+  for (const box of boxes) {
+    const checked = matched.has(box);
+    if (box.checked !== checked) {
+      setNativeProperty(box, 'checked', checked);
+      dispatchFieldEvents(box);
+    }
+  }
+
+  const exact = boxes.every((box) => box.checked === matched.has(box));
+  return exact
     ? ok(item, 'Updated approved checkbox options.')
     : fail(item, 'The page rejected one or more approved checkbox options.');
 }
@@ -112,14 +125,10 @@ function getGroupedInputs(
   doc: Document,
   type: 'radio' | 'checkbox'
 ): HTMLInputElement[] {
-  const name = item.candidate.name;
-  if (name) {
-    return Array.from(
-      doc.querySelectorAll<HTMLInputElement>(`input[type="${type}"][name="${escapeCss(name)}"]`)
-    );
-  }
-  const element = safeQuerySelector(doc, item.candidate.selector);
-  return element instanceof HTMLInputElement ? [element] : [];
+  const selected = safeQuerySelectorAll(doc, item.candidate.selector).filter(
+    (element): element is HTMLInputElement => isInput(element) && element.type === type
+  );
+  return selected;
 }
 
 function findMatchingOption(
@@ -128,9 +137,9 @@ function findMatchingOption(
 ): HTMLOptionElement | undefined {
   const requested = normalizeOption(value);
   return options.find((option) => {
+    if (isOptionDisabled(option)) return false;
     const optionValue = normalizeOption(option.value);
     const optionLabel = normalizeOption(option.textContent ?? '');
-    if (option.disabled) return false;
     if (optionValue === requested || optionLabel === requested) return true;
     if (isYesNo([requested])) {
       return (
@@ -165,12 +174,18 @@ function safeQuerySelector(
   selector: string
 ): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | undefined {
   try {
-    return (
-      doc.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(selector) ??
-      undefined
-    );
+    const element = doc.querySelector<HTMLElement>(selector);
+    return isInput(element) || isTextArea(element) || isSelect(element) ? element : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function safeQuerySelectorAll(doc: Document, selector: string): HTMLElement[] {
+  try {
+    return Array.from(doc.querySelectorAll<HTMLElement>(selector));
+  } catch {
+    return [];
   }
 }
 
@@ -178,56 +193,55 @@ function matchesCandidateIdentity(
   item: FillPreviewItem,
   element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
 ): boolean {
-  if (item.candidate.tagName && element.tagName.toLowerCase() !== item.candidate.tagName) {
+  const candidate = item.candidate;
+  if (candidate.tagName && element.tagName.toLowerCase() !== candidate.tagName) return false;
+  if (candidate.inputType && isInput(element) && element.type !== candidate.inputType) return false;
+  if (candidate.id && element.id !== candidate.id) return false;
+  if (candidate.name && element.getAttribute('name') !== candidate.name) return false;
+  if (candidate.autocomplete && element.getAttribute('autocomplete') !== candidate.autocomplete) {
     return false;
   }
-  if (
-    item.candidate.inputType &&
-    element instanceof HTMLInputElement &&
-    element.type !== item.candidate.inputType
-  ) {
+  if (candidate.ariaLabel && element.getAttribute('aria-label') !== candidate.ariaLabel) {
     return false;
   }
-  if (item.candidate.id && element.id !== item.candidate.id) return false;
-  if (item.candidate.name && element.getAttribute('name') !== item.candidate.name) return false;
+  if (candidate.dataTestId && getDataTestId(element) !== candidate.dataTestId) {
+    return false;
+  }
   return true;
 }
 
-function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
-  const prototype =
-    element instanceof HTMLTextAreaElement
-      ? HTMLTextAreaElement.prototype
-      : HTMLInputElement.prototype;
-  const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
-  descriptor?.set?.call(element, value);
-  if (!descriptor?.set) element.value = value;
-}
-
-function setNativeSelectValue(element: HTMLSelectElement, value: string): void {
-  const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
-  descriptor?.set?.call(element, value);
-  if (!descriptor?.set) element.value = value;
-}
-
-function setNativeChecked(element: HTMLInputElement, checked: boolean): void {
-  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
-  descriptor?.set?.call(element, checked);
-  if (!descriptor?.set) element.checked = checked;
+function setNativeProperty(
+  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  property: 'value' | 'checked',
+  value: string | boolean
+): void {
+  let prototype: object | null = Object.getPrototypeOf(element);
+  while (prototype) {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, property);
+    if (descriptor?.set) {
+      descriptor.set.call(element, value);
+      return;
+    }
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  Reflect.set(element, property, value);
 }
 
 function dispatchFieldEvents(element: HTMLElement): void {
-  element.dispatchEvent(new Event('input', { bubbles: true }));
-  element.dispatchEvent(new Event('change', { bubbles: true }));
-  element.dispatchEvent(new Event('blur', { bubbles: true }));
+  const EventConstructor = element.ownerDocument.defaultView?.Event ?? Event;
+  element.dispatchEvent(new EventConstructor('input', { bubbles: true }));
+  element.dispatchEvent(new EventConstructor('change', { bubbles: true }));
+  element.dispatchEvent(new EventConstructor('blur', { bubbles: true }));
 }
 
 function isElementDisabledOrReadOnly(
   element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
 ): boolean {
   return (
-    element.disabled ||
-    ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) &&
-      element.readOnly)
+    element.matches(':disabled') ||
+    element.getAttribute('aria-disabled') === 'true' ||
+    Boolean(element.closest('[aria-disabled="true"], [inert]')) ||
+    ((isInput(element) || isTextArea(element)) && element.readOnly)
   );
 }
 
@@ -237,9 +251,11 @@ function isElementVisibleNow(element: HTMLElement): boolean {
     const style = current.ownerDocument.defaultView?.getComputedStyle(current);
     if (
       current.hasAttribute('hidden') ||
+      current.hasAttribute('inert') ||
       current.getAttribute('aria-hidden') === 'true' ||
       style?.display === 'none' ||
-      style?.visibility === 'hidden'
+      style?.visibility === 'hidden' ||
+      style?.visibility === 'collapse'
     ) {
       return false;
     }
@@ -249,7 +265,37 @@ function isElementVisibleNow(element: HTMLElement): boolean {
 }
 
 function isEditableChoice(element: HTMLInputElement): boolean {
-  return !element.disabled && !element.readOnly && isElementVisibleNow(element);
+  return !isElementDisabledOrReadOnly(element) && isElementVisibleNow(element);
+}
+
+function isOptionDisabled(option: HTMLOptionElement): boolean {
+  return (
+    option.disabled ||
+    option.matches(':disabled') ||
+    (option.parentElement?.tagName.toLowerCase() === 'optgroup' &&
+      option.parentElement.hasAttribute('disabled'))
+  );
+}
+
+function isInput(element: Element | null): element is HTMLInputElement {
+  return element?.tagName.toLowerCase() === 'input';
+}
+
+function isTextArea(element: Element | null): element is HTMLTextAreaElement {
+  return element?.tagName.toLowerCase() === 'textarea';
+}
+
+function isSelect(element: Element | null): element is HTMLSelectElement {
+  return element?.tagName.toLowerCase() === 'select';
+}
+
+function getDataTestId(element: Element): string | undefined {
+  return (
+    element.getAttribute('data-testid') ||
+    element.getAttribute('data-test') ||
+    element.getAttribute('data-qa') ||
+    undefined
+  );
 }
 
 function splitRequestedValues(value: string): string[] {

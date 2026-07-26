@@ -12,6 +12,11 @@ const genericTitles = new Set([
   'search jobs',
   'open positions',
   'opportunities',
+  'privacy policy',
+  'accessibility statement',
+  'terms of use',
+  'sign in',
+  'login',
   'untitled job'
 ]);
 
@@ -21,7 +26,6 @@ const jobEvidenceTerms = [
   'compensation',
   'employment',
   'experience',
-  'job',
   'position',
   'qualifications',
   'requirements',
@@ -40,19 +44,22 @@ export function isMeaningfulJobPosting(job: JobPosting): boolean {
 
   if (!specificTitle) return false;
 
-  let evidence = 0;
-  if (job.company?.trim()) evidence += 1;
-  if (job.location?.trim()) evidence += 1;
-  if (job.salaryText?.trim()) evidence += 1;
-  if ((job.requirementsText?.trim().length ?? 0) >= 40) evidence += 1;
-  if ((job.preferredQualificationsText?.trim().length ?? 0) >= 40) evidence += 1;
-  if (job.detectedKeywords.length > 0) evidence += 1;
-
   const description = normalizeKey(job.descriptionText);
-  const termCount = jobEvidenceTerms.filter((term) =>
-    new RegExp(`(^|[^a-z0-9])${term}([^a-z0-9]|$)`).test(description)
-  ).length;
-  if (description.length >= 200 && termCount >= 2) evidence += 1;
+  const termCount = jobEvidenceTerms.filter((term) => matchesPhrase(description, term)).length;
+  const hasDescriptionEvidence = description.length >= 160 && termCount >= 2;
+  const hasRequirementsEvidence =
+    (job.requirementsText?.trim().length ?? 0) >= 40 ||
+    (job.preferredQualificationsText?.trim().length ?? 0) >= 40;
+  const hasCompensationEvidence =
+    Boolean(job.salaryText?.trim()) &&
+    description.length >= 80 &&
+    Boolean(job.company?.trim() || job.location?.trim());
 
-  return evidence >= 1;
+  return hasDescriptionEvidence || hasRequirementsEvidence || hasCompensationEvidence;
+}
+
+function matchesPhrase(text: string, phrase: string): boolean {
+  const normalized = normalizeKey(phrase);
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text);
 }

@@ -10,4 +10,9 @@ describe('SensitiveFieldRules', () => {
     expect(isSensitiveFieldText('Are you authorized to work in the United States?')).toBe(true);
     expect(isSensitiveMappingKind('veteranStatus')).toBe(true);
   });
+  it('uses term boundaries instead of matching race inside unrelated words', () => {
+    expect(isSensitiveFieldText('Trace identifier')).toBe(false);
+    expect(isSensitiveFieldText('Embrace new opportunities')).toBe(false);
+    expect(isSensitiveFieldText('Race and ethnicity')).toBe(true);
+  });
 });

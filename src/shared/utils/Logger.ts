@@ -22,7 +22,7 @@ export class Logger {
   }
 
   private write(level: LogLevel, message: string, details?: unknown): void {
-    const safeDetails = typeof details === 'string' ? '[redacted string detail]' : details;
-    console[level](`${privateDataWarning} ${this.scope}: ${message}`, safeDetails ?? '');
+    const safeDetails = details === undefined ? '' : '[details redacted]';
+    console[level](`${privateDataWarning} ${this.scope}: ${message}`, safeDetails);
   }
 }

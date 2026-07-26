@@ -101,10 +101,12 @@ export function extractJobPostingFromDocument(doc: Document = document): JobPost
 
 function extractJobDescriptionText(doc: Document): string {
   for (const selector of descriptionSelectors) {
-    const element = doc.querySelector<HTMLElement>(selector);
-    if (!element) continue;
-    const text = sanitizedText(element);
-    if (text.length >= 200) return text;
+    const candidates = Array.from(doc.querySelectorAll<HTMLElement>(selector))
+      .filter(isVisible)
+      .map((element) => sanitizedText(element))
+      .filter((text) => text.length >= 160)
+      .sort((left, right) => right.length - left.length);
+    if (candidates[0]) return candidates[0];
   }
 
   return doc.body ? sanitizedText(doc.body) : '';
@@ -118,7 +120,8 @@ function sanitizedText(element: HTMLElement): string {
 
 function firstText(doc: Document, selectors: string[]): string | undefined {
   for (const selector of selectors) {
-    const value = normalizeWhitespace(doc.querySelector(selector)?.textContent ?? '');
+    const element = Array.from(doc.querySelectorAll<HTMLElement>(selector)).find(isVisible);
+    const value = normalizeWhitespace(element?.textContent ?? '');
     if (value) return value;
   }
   return undefined;
@@ -127,9 +130,10 @@ function firstText(doc: Document, selectors: string[]): string | undefined {
 function detectRemoteStatus(text: string): JobPosting['remoteStatus'] {
   const key = text.toLowerCase();
   if (
-    /\b(?:not|no)\s+(?:a\s+)?remote\b/.test(key) ||
-    /remote (?:work|option|positions?) (?:is|are )?not available/.test(key) ||
-    /on[- ]site only/.test(key)
+    /\b(?:not|no)\s+(?:a\s+)?(?:fully\s+)?remote\b/.test(key) ||
+    /\bremote\s+(?:work|option|positions?|role)\s+(?:is\s+|are\s+)?not\s+available\b/.test(key) ||
+    /\bmust\s+(?:work|be)\s+(?:on[- ]?site|in[- ]?office)\b/.test(key) ||
+    /\bon[- ]site only\b/.test(key)
   ) {
     return 'onsite';
   }
@@ -141,10 +145,38 @@ function detectRemoteStatus(text: string): JobPosting['remoteStatus'] {
 
 function extractSection(text: string, headings: string[]): string | undefined {
   const lower = text.toLowerCase();
-  const starts = headings.map((heading) => lower.indexOf(heading)).filter((index) => index >= 0);
-  if (!starts.length) return undefined;
-  const start = Math.min(...starts);
-  return text.slice(start, start + 2500);
+  const matches = headings
+    .map((heading) => ({ heading, index: findHeadingIndex(lower, heading) }))
+    .filter((match) => match.index >= 0)
+    .sort((left, right) => left.index - right.index);
+  const first = matches[0];
+  if (!first) return undefined;
+
+  const laterHeading = [
+    'responsibilities',
+    'requirements',
+    'qualifications',
+    'preferred qualifications',
+    'nice to have',
+    'benefits',
+    'compensation',
+    'about the company',
+    'how to apply'
+  ]
+    .map((heading) => findHeadingIndex(lower, heading, first.index + first.heading.length))
+    .filter((index) => index > first.index)
+    .sort((left, right) => left - right)[0];
+
+  const end = Math.min(laterHeading ?? first.index + 2500, first.index + 2500);
+  return text.slice(first.index, end).trim() || undefined;
+}
+
+function findHeadingIndex(text: string, heading: string, fromIndex = 0): number {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  const match = new RegExp(`(^|[\\n\\r]|[.!?]\\s+)${escaped}(?=\\s|:|$)`, 'i').exec(
+    text.slice(fromIndex)
+  );
+  return match?.index === undefined ? -1 : fromIndex + match.index + match[1].length;
 }
 
 function detectKeywords(text: string): string[] {
@@ -168,6 +200,24 @@ function normalizeSourceUrl(value: string): string {
   } catch {
     return value;
   }
+}
+
+function isVisible(element: HTMLElement): boolean {
+  let current: HTMLElement | null = element;
+  while (current) {
+    const style = current.ownerDocument.defaultView?.getComputedStyle(current);
+    if (
+      current.hasAttribute('hidden') ||
+      current.getAttribute('aria-hidden') === 'true' ||
+      style?.display === 'none' ||
+      style?.visibility === 'hidden' ||
+      style?.visibility === 'collapse'
+    ) {
+      return false;
+    }
+    current = current.parentElement;
+  }
+  return true;
 }
 
 function limitText(value: string, maxLength: number): string {

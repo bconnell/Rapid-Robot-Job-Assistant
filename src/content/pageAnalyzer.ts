@@ -1,10 +1,17 @@
 import { detectCaptchaAndBotCheck } from '../shared/security/CaptchaAndBotCheckRules';
-import type { FillPreviewItem } from '../shared/models/FieldMapping';
+import {
+  isSamePageUrl,
+  readFillApprovedFieldsRequest
+} from '../shared/extension/PageCommandIntegrity';
 import { extractJobPostingFromDocument } from './jobPageExtractor';
 import { detectApplicationIframeWarnings, detectFormFields } from './formDetector';
 import { mapFieldCandidates } from './fieldMapper';
 import { fillApprovedFields } from './formFiller';
-import type { ContentMessage, ContentPingResponse } from './contentMessenger';
+import type {
+  ContentMessage,
+  ContentPingResponse,
+  FillApprovedFieldsResponse
+} from './contentMessenger';
 import {
   closeInPageAssistant,
   getInPageAssistantStatus,
@@ -31,6 +38,7 @@ export function analyzeApplicationFields() {
   const iframeWarnings = detectApplicationIframeWarnings(document);
   const manualOnlyCount = mappings.filter(
     (mapping) =>
+      !mapping.fillable ||
       mapping.candidate.inputType === 'file' ||
       mapping.candidate.disabled ||
       mapping.candidate.readOnly ||
@@ -65,49 +73,100 @@ export function pingContentScript(): ContentPingResponse {
 
 if (globalThis.chrome?.runtime?.onMessage && !globalThis.__rapidRobotJobAssistantContentReady) {
   globalThis.__rapidRobotJobAssistantContentReady = true;
-  chrome.runtime.onMessage.addListener(
-    (message: ContentMessage<FillPreviewItem[]>, _sender, sendResponse) => {
-      if (message.command === 'PING_CONTENT_SCRIPT') {
-        sendResponse(pingContentScript());
-        return true;
-      }
-      if (message.command === 'OPEN_IN_PAGE_ASSISTANT') {
-        void openInPageAssistant().then(sendResponse);
-        return true;
-      }
-      if (message.command === 'CLOSE_IN_PAGE_ASSISTANT') {
-        sendResponse(closeInPageAssistant());
-        return true;
-      }
-      if (message.command === 'TOGGLE_IN_PAGE_ASSISTANT') {
-        void toggleInPageAssistant().then(sendResponse);
-        return true;
-      }
-      if (message.command === 'IN_PAGE_ASSISTANT_STATUS') {
-        sendResponse(getInPageAssistantStatus());
-        return true;
-      }
-      if (message.command === 'ANALYZE_JOB_PAGE') {
-        sendResponse(analyzeJobPage());
-        return true;
-      }
-      if (message.command === 'ANALYZE_APPLICATION_FIELDS') {
-        sendResponse(analyzeApplicationFields());
-        return true;
-      }
-      if (message.command === 'FILL_APPROVED_FIELDS') {
-        const verification = detectCaptchaAndBotCheck(document);
-        if (verification.detected) {
-          sendResponse({ verification, results: [] });
-          return true;
-        }
-        sendResponse({
-          verification,
-          results: fillApprovedFields(message.payload ?? [], document)
-        });
-        return true;
-      }
-      return false;
+  chrome.runtime.onMessage.addListener((message: ContentMessage, _sender, sendResponse) => {
+    if (message.command === 'PING_CONTENT_SCRIPT') {
+      sendResponse(pingContentScript());
+      return true;
     }
-  );
+    if (message.command === 'OPEN_IN_PAGE_ASSISTANT') {
+      void openInPageAssistant()
+        .then(sendResponse)
+        .catch(() =>
+          sendResponse({
+            opened: false,
+            openedAs: 'none',
+            userMessage: 'The in-page assistant could not open. Reload the page and try again.'
+          })
+        );
+      return true;
+    }
+    if (message.command === 'CLOSE_IN_PAGE_ASSISTANT') {
+      sendResponse(closeInPageAssistant());
+      return true;
+    }
+    if (message.command === 'TOGGLE_IN_PAGE_ASSISTANT') {
+      void toggleInPageAssistant()
+        .then(sendResponse)
+        .catch(() =>
+          sendResponse({
+            opened: false,
+            userMessage:
+              'The in-page assistant could not be toggled. Reload the page and try again.'
+          })
+        );
+      return true;
+    }
+    if (message.command === 'IN_PAGE_ASSISTANT_STATUS') {
+      sendResponse(getInPageAssistantStatus());
+      return true;
+    }
+    if (message.command === 'ANALYZE_JOB_PAGE') {
+      sendResponse(analyzeJobPage());
+      return true;
+    }
+    if (message.command === 'ANALYZE_APPLICATION_FIELDS') {
+      sendResponse(analyzeApplicationFields());
+      return true;
+    }
+    if (message.command === 'FILL_APPROVED_FIELDS') {
+      const request = readFillApprovedFieldsRequest(message.payload);
+      const currentPageUrl = document.location.href;
+      const verification = detectCaptchaAndBotCheck(document);
+
+      if (!request) {
+        const response: FillApprovedFieldsResponse = {
+          pageUrl: currentPageUrl,
+          pageMatched: false,
+          verification,
+          results: [],
+          userMessage: 'The fill request was invalid. Analyze fields again before filling.'
+        };
+        sendResponse(response);
+        return true;
+      }
+
+      if (!isSamePageUrl(request.pageUrl, currentPageUrl)) {
+        const response: FillApprovedFieldsResponse = {
+          pageUrl: currentPageUrl,
+          pageMatched: false,
+          verification,
+          results: [],
+          userMessage: 'The application page changed. Analyze fields again before filling.'
+        };
+        sendResponse(response);
+        return true;
+      }
+
+      if (verification.detected) {
+        const response: FillApprovedFieldsResponse = {
+          pageUrl: currentPageUrl,
+          pageMatched: true,
+          verification,
+          results: []
+        };
+        sendResponse(response);
+        return true;
+      }
+
+      const response: FillApprovedFieldsResponse = {
+        pageUrl: currentPageUrl,
+        pageMatched: true,
+        verification,
+        results: fillApprovedFields(request.preview, document)
+      };
+      sendResponse(response);
+      return true;
+    }
+    return false;
+  });
 }

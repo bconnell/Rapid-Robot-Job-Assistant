@@ -1,5 +1,5 @@
 import type { ContentCommand } from '../content/contentMessenger';
-import type { ContentPingResponse } from '../content/contentMessenger';
+import type { ContentPingResponse, FillApprovedFieldsResponse } from '../content/contentMessenger';
 import {
   classifyContentMessageFailure,
   contentNotReadyMessage,
@@ -14,6 +14,13 @@ import type {
 import type { ApplicationSession } from '../shared/models/ApplicationSession';
 import type { JobPosting } from '../shared/models/JobPosting';
 import { isMeaningfulJobPosting } from '../shared/jobs/JobPostingValidation';
+import { isCompleteApprovedFill } from '../shared/fill/FillApprovalRules';
+import {
+  isSamePageUrl,
+  isValidFillPreviewArray,
+  isValidFillResultArray,
+  readFillApprovedFieldsRequest
+} from '../shared/extension/PageCommandIntegrity';
 import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
 import {
   ApplicationSessionRepository,
@@ -86,6 +93,9 @@ async function handleMessage(
   if (message.command === 'GET_ACTIVE_PROFILE') {
     const profileId = await settingsRepo.getActiveProfileId();
     const profile = profileId ? await profileRepo.get(profileId) : undefined;
+    if (profileId && !profile) {
+      await settingsRepo.clearActiveProfileId();
+    }
     return {
       ok: true,
       data: profile,
@@ -121,25 +131,38 @@ async function handleMessage(
     }
     const existing = await sessionRepo.findByPageUrl(pageUrl);
     const now = new Date().toISOString();
-    const status = isApplicationSessionStatus(payload?.status)
+
+    if (payload?.fieldPreview !== undefined && !isValidFillPreviewArray(payload.fieldPreview)) {
+      return { ok: false, userMessage: 'The application field preview was invalid.' };
+    }
+    if (payload?.fillResults !== undefined && !isValidFillResultArray(payload.fillResults)) {
+      return { ok: false, userMessage: 'The application fill results were invalid.' };
+    }
+
+    const fieldPreview = payload?.fieldPreview ?? existing?.fieldPreview ?? [];
+    const fillResults = payload?.fillResults ?? existing?.fillResults ?? [];
+    const manualVerificationRequired =
+      typeof payload?.manualVerificationRequired === 'boolean'
+        ? payload.manualVerificationRequired
+        : (existing?.manualVerificationRequired ?? false);
+    const requestedStatus = isApplicationSessionStatus(payload?.status)
       ? payload.status
       : (existing?.status ?? 'draft');
+    const status = deriveApplicationSessionStatus(
+      requestedStatus,
+      fieldPreview,
+      fillResults,
+      manualVerificationRequired
+    );
     const job = isValidJobPayload(payload?.job) ? payload.job : existing?.job;
     const session: ApplicationSession = {
       id: existing?.id ?? crypto.randomUUID(),
       pageUrl,
       startedAt: existing?.startedAt ?? now,
       updatedAt: now,
-      fieldPreview: Array.isArray(payload?.fieldPreview)
-        ? payload.fieldPreview
-        : (existing?.fieldPreview ?? []),
-      fillResults: Array.isArray(payload?.fillResults)
-        ? payload.fillResults
-        : (existing?.fillResults ?? []),
-      manualVerificationRequired:
-        typeof payload?.manualVerificationRequired === 'boolean'
-          ? payload.manualVerificationRequired
-          : (existing?.manualVerificationRequired ?? false),
+      fieldPreview,
+      fillResults,
+      manualVerificationRequired,
       notes:
         typeof payload?.notes === 'string'
           ? payload.notes.slice(0, 20000)
@@ -148,7 +171,7 @@ async function handleMessage(
       submittedByUser: status === 'submitted-by-user',
       job,
       jobPostingId:
-        typeof payload?.jobPostingId === 'string'
+        typeof payload?.jobPostingId === 'string' && payload.jobPostingId.length <= 200
           ? payload.jobPostingId
           : (job?.id ?? existing?.jobPostingId)
     };
@@ -291,17 +314,53 @@ async function sendToActiveContent(
   command: ContentCommand,
   payload?: unknown
 ): Promise<ExtensionCommandResult> {
+  const fillRequest =
+    command === 'FILL_APPROVED_FIELDS' ? readFillApprovedFieldsRequest(payload) : undefined;
+  if (command === 'FILL_APPROVED_FIELDS' && !fillRequest) {
+    return {
+      ok: false,
+      error: 'Invalid fill request.',
+      userMessage: 'Analyze fields again before filling.',
+      reason: 'invalid-fill-request'
+    };
+  }
+
   const capability = await getTabCapability();
   if (!capability.ok || !capability.tabId) {
     return commandFailureFromCapability(capability);
+  }
+  if (fillRequest && (!capability.url || !isSamePageUrl(fillRequest.pageUrl, capability.url))) {
+    return {
+      ok: false,
+      error: 'The application page changed after analysis.',
+      userMessage: 'The application page changed. Analyze fields again before filling.',
+      tabUrl: capability.url,
+      originPattern: capability.originPattern,
+      reason: 'tab-changed'
+    };
   }
 
   const initialTab = { id: capability.tabId, url: capability.url };
   const ready = await ensureContentScriptReady(capability);
   if (!ready.ok) return ready;
 
+  const currentTarget = await getTabSnapshot(capability.tabId);
+  if (didTabChange(initialTab, currentTarget)) {
+    return {
+      ok: false,
+      error: 'The page changed before the command started.',
+      userMessage: 'The page changed. Open the application page and try again.',
+      tabUrl: currentTarget?.url,
+      originPattern: capability.originPattern,
+      reason: 'tab-changed'
+    };
+  }
+
   try {
-    const response = await chrome.tabs.sendMessage(capability.tabId, { command, payload });
+    const response = await chrome.tabs.sendMessage(capability.tabId, {
+      command,
+      payload: fillRequest ?? payload
+    });
     if (response === undefined) {
       return {
         ok: false,
@@ -312,6 +371,40 @@ async function sendToActiveContent(
         reason: 'content-message-failed'
       };
     }
+    if (command === 'OPEN_IN_PAGE_ASSISTANT' && (!isRecord(response) || response.opened !== true)) {
+      return {
+        ok: false,
+        error: 'The in-page assistant did not open.',
+        userMessage:
+          isRecord(response) && typeof response.userMessage === 'string'
+            ? response.userMessage
+            : 'The in-page assistant did not open. Reload the page and try again.',
+        tabUrl: capability.url,
+        originPattern: capability.originPattern,
+        reason: 'in-page-assistant-open-failed'
+      };
+    }
+
+    if (command === 'FILL_APPROVED_FIELDS') {
+      const fillResponse = response as FillApprovedFieldsResponse;
+      if (
+        !fillResponse?.pageMatched ||
+        !capability.url ||
+        !isSamePageUrl(fillResponse.pageUrl, capability.url)
+      ) {
+        return {
+          ok: false,
+          error: 'The application page changed during filling.',
+          userMessage:
+            fillResponse?.userMessage ??
+            'The application page changed. Analyze fields again before filling.',
+          tabUrl: fillResponse?.pageUrl ?? capability.url,
+          originPattern: capability.originPattern,
+          reason: 'tab-changed'
+        };
+      }
+    }
+
     return {
       ok: true,
       data: response,
@@ -411,7 +504,19 @@ async function ensureContentScriptReady(
 
   const initialTab = { id: tabId, url: capability.url };
   const existingPing = await pingContentScript(tabId);
-  if (existingPing?.ok) return { ok: true, data: existingPing };
+  if (existingPing?.ok) {
+    if (capability.url && isSamePageUrl(existingPing.url, capability.url)) {
+      return { ok: true, data: existingPing };
+    }
+    return {
+      ok: false,
+      error: 'The page changed before analysis started.',
+      userMessage: 'The page changed. Open the page and try again.',
+      tabUrl: existingPing.url,
+      originPattern: capability.originPattern,
+      reason: 'tab-changed'
+    };
+  }
 
   try {
     await chrome.scripting.executeScript({
@@ -447,7 +552,19 @@ async function ensureContentScriptReady(
   }
 
   const readyPing = await waitForContentReadiness(() => pingContentScript(tabId), 5, 75);
-  if (readyPing?.ok) return { ok: true, data: readyPing };
+  if (readyPing?.ok) {
+    if (capability.url && isSamePageUrl(readyPing.url, capability.url)) {
+      return { ok: true, data: readyPing };
+    }
+    return {
+      ok: false,
+      error: 'The page changed while the content script was starting.',
+      userMessage: 'The page changed. Open the page and try again.',
+      tabUrl: readyPing.url,
+      originPattern: capability.originPattern,
+      reason: 'tab-changed'
+    };
+  }
 
   return {
     ok: false,
@@ -532,18 +649,46 @@ function isApplicationSessionStatus(value: unknown): value is ApplicationSession
 }
 
 function isValidJobPayload(value: unknown): value is JobPosting {
-  if (!value || typeof value !== 'object') return false;
+  if (!isRecord(value)) return false;
   const candidate = value as Partial<JobPosting>;
   return (
     typeof candidate.id === 'string' &&
+    candidate.id.length > 0 &&
+    candidate.id.length <= 200 &&
     typeof candidate.title === 'string' &&
+    candidate.title.length > 0 &&
+    candidate.title.length <= 180 &&
     typeof candidate.descriptionText === 'string' &&
+    candidate.descriptionText.length <= 12000 &&
     typeof candidate.sourceUrl === 'string' &&
+    candidate.sourceUrl.length <= 4000 &&
     isSupportedWebUrl(candidate.sourceUrl) &&
     typeof candidate.sourceSite === 'string' &&
+    candidate.sourceSite.length <= 300 &&
     typeof candidate.dateFound === 'string' &&
-    Array.isArray(candidate.detectedKeywords)
+    candidate.dateFound.length <= 100 &&
+    Array.isArray(candidate.detectedKeywords) &&
+    candidate.detectedKeywords.length <= 500 &&
+    candidate.detectedKeywords.every(
+      (keyword) => typeof keyword === 'string' && keyword.length <= 200
+    )
   );
+}
+
+function deriveApplicationSessionStatus(
+  requested: ApplicationSession['status'],
+  preview: ApplicationSession['fieldPreview'],
+  results: ApplicationSession['fillResults'],
+  manualVerificationRequired: boolean
+): ApplicationSession['status'] {
+  if (requested === 'submitted-by-user' || requested === 'skipped') return requested;
+  if (manualVerificationRequired) return 'manual-verification';
+  if (requested === 'filled' && isCompleteApprovedFill(preview, results)) return 'filled';
+  return 'draft';
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function commandFailureFromCapability(capability: TabCapabilityResult): ExtensionCommandResult {

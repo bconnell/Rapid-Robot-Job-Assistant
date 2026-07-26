@@ -12,7 +12,17 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
-### 2026-07-26. Recursive Workflow Integrity
+### 2026-07-26. Target-Bound Filling And Local Data Validation
+
+- Bound every fill request to the exact application URL that was analyzed.
+- Rechecked the target tab and content-script URL before and during page commands.
+- Added runtime field identity, visibility, disabled-state, and choice-group safeguards.
+- Cleared stale approvals and prior fill results when pages or suggested values change.
+- Strengthened local import validation, file-size limits, cleanup coverage, and private logging.
+- Improved job-page evidence checks, keyword matching, resume value resolution, and CAPTCHA precision.
+- Added regression coverage for target drift, malformed local records, hidden ancestors, grouped forms, and exact checkbox selection.
+
+### 2026-07-26. Reviewed Filling And Workflow Integrity
 
 - Prevented hidden, stale, sensitive, disabled, and changed fields from being filled.
 - Made approval changes, partial fill results, and manual completion status truthful.

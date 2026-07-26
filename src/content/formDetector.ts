@@ -12,7 +12,7 @@ export function detectFormFields(doc: Document = document): FormFieldCandidate[]
   for (const element of nativeFields) {
     if (isIgnoredInput(element)) continue;
     if (element instanceof HTMLInputElement && ['radio', 'checkbox'].includes(element.type)) {
-      const groupKey = `${element.type}:${element.name || buildSelector(element, doc).selector}`;
+      const groupKey = `${element.type}:${getFormScopeKey(element, doc)}:${element.name || buildSelector(element, doc).selector}`;
       if (groupedNames.has(groupKey)) continue;
       groupedNames.add(groupKey);
       candidates.push(toGroupedCandidate(element, doc));
@@ -80,26 +80,25 @@ function toNativeCandidate(element: HTMLElement, doc: Document): FormFieldCandid
         : input instanceof HTMLTextAreaElement
           ? 'native-textarea'
           : input instanceof HTMLSelectElement
-            ? 'native-select'
+            ? input.multiple
+              ? 'native-multi-select'
+              : 'native-select'
             : 'native-input',
     candidateSource: 'native-control'
   };
 }
 
 function toGroupedCandidate(input: HTMLInputElement, doc: Document): FormFieldCandidate {
+  const groupSelector = input.name ? buildGroupedSelector(input, doc) : buildSelector(input, doc);
+  const scope: ParentNode = input.form ?? doc;
   const group = input.name
     ? Array.from(
-        doc.querySelectorAll<HTMLInputElement>(
+        scope.querySelectorAll<HTMLInputElement>(
           `input[type="${input.type}"][name="${escapeCss(input.name)}"]`
         )
       )
     : [input];
-  const selectorInfo = input.name
-    ? {
-        selector: `input[type="${input.type}"][name="${escapeCss(input.name)}"]`,
-        stable: true
-      }
-    : buildSelector(input, doc);
+  const selectorInfo = groupSelector;
   const fieldsetLegend = findFieldsetLegend(input);
   const groupLabel = fieldsetLegend ?? findGroupLabel(input, doc) ?? findLabelText(input, doc);
 
@@ -314,22 +313,29 @@ function isRequired(input: HTMLElement): boolean {
 
 function isDisabled(element: HTMLElement): boolean {
   return (
-    ((element instanceof HTMLInputElement ||
-      element instanceof HTMLTextAreaElement ||
-      element instanceof HTMLSelectElement) &&
-      element.disabled) ||
-    element.getAttribute('aria-disabled') === 'true'
+    element.matches(':disabled') ||
+    element.getAttribute('aria-disabled') === 'true' ||
+    Boolean(element.closest('[aria-disabled="true"], [inert]'))
   );
 }
 
 function isVisible(element: HTMLElement): boolean {
-  const style = window.getComputedStyle(element);
-  return (
-    style.display !== 'none' &&
-    style.visibility !== 'hidden' &&
-    !element.hasAttribute('hidden') &&
-    element.getAttribute('aria-hidden') !== 'true'
-  );
+  let current: HTMLElement | null = element;
+  while (current) {
+    const style = current.ownerDocument.defaultView?.getComputedStyle(current);
+    if (
+      current.hasAttribute('hidden') ||
+      current.hasAttribute('inert') ||
+      current.getAttribute('aria-hidden') === 'true' ||
+      style?.display === 'none' ||
+      style?.visibility === 'hidden' ||
+      style?.visibility === 'collapse'
+    ) {
+      return false;
+    }
+    current = current.parentElement;
+  }
+  return true;
 }
 
 function buildSelector(element: HTMLElement, doc: Document): { selector: string; stable: boolean } {
@@ -353,8 +359,51 @@ function buildSelector(element: HTMLElement, doc: Document): { selector: string;
     if (doc.querySelectorAll(selector).length === 1) return { selector, stable: true };
   }
 
-  const index = Array.from(doc.querySelectorAll(element.tagName)).indexOf(element) + 1;
-  return { selector: `${element.tagName.toLowerCase()}:nth-of-type(${index})`, stable: false };
+  return { selector: buildDomPath(element, doc), stable: false };
+}
+
+function buildGroupedSelector(
+  input: HTMLInputElement,
+  doc: Document
+): { selector: string; stable: boolean } {
+  const base = `input[type="${input.type}"][name="${escapeCss(input.name)}"]`;
+  if (!input.form) {
+    return {
+      selector: base,
+      stable: doc.querySelectorAll(base).length > 0
+    };
+  }
+
+  const formSelector = buildSelector(input.form, doc);
+  return {
+    selector: `${formSelector.selector} ${base}`,
+    stable: formSelector.stable
+  };
+}
+
+function getFormScopeKey(input: HTMLInputElement, doc: Document): string {
+  if (!input.form) return 'document';
+  const index = Array.from(doc.forms).indexOf(input.form);
+  return `form-${index}`;
+}
+
+function buildDomPath(element: HTMLElement, doc: Document): string {
+  const parts: string[] = [];
+  let current: HTMLElement | null = element;
+
+  while (current && current !== doc.documentElement) {
+    const tag = current.tagName.toLowerCase();
+    const siblings = current.parentElement
+      ? Array.from(current.parentElement.children).filter(
+          (candidate) => candidate.tagName === current?.tagName
+        )
+      : [];
+    const position = siblings.indexOf(current) + 1;
+    parts.unshift(`${tag}:nth-of-type(${Math.max(position, 1)})`);
+    current = current.parentElement;
+  }
+
+  return parts.join(' > ');
 }
 
 function attrSelector(element: HTMLElement, attr: string): string | undefined {

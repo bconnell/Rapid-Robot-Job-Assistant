@@ -1,3 +1,5 @@
+import type { FillApprovedFieldsRequest } from '../shared/extension/PageCommandIntegrity';
+
 export type ContentCommand =
   | 'PING_CONTENT_SCRIPT'
   | 'OPEN_IN_PAGE_ASSISTANT'
@@ -27,8 +29,13 @@ export type AnalyzeApplicationFieldsResponse = ReturnType<
 >;
 
 export interface FillApprovedFieldsResponse {
+  pageUrl: string;
+  pageMatched: boolean;
   verification: ReturnType<
     typeof import('../shared/security/CaptchaAndBotCheckRules').detectCaptchaAndBotCheck
   >;
   results: import('../shared/models/FieldMapping').FillResult[];
+  userMessage?: string;
 }
+
+export type { FillApprovedFieldsRequest };

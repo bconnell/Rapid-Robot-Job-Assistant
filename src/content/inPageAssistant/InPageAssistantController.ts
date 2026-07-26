@@ -1,4 +1,8 @@
-import { approveSafeHighConfidence } from '../../shared/fill/FillApprovalRules';
+import {
+  approveSafeHighConfidence,
+  invalidateApprovals as invalidateFillApprovals,
+  isCompleteApprovedFill
+} from '../../shared/fill/FillApprovalRules';
 import { buildFillPreview } from '../../shared/fill/ProfileValueResolver';
 import type { BrowserCompatibility } from '../../shared/extension/BrowserCompatibility';
 import {
@@ -12,6 +16,7 @@ import type { FillPreviewItem, FillResult } from '../../shared/models/FieldMappi
 import type { JobPosting } from '../../shared/models/JobPosting';
 import type { UserProfile } from '../../shared/models/UserProfile';
 import { isMeaningfulJobPosting } from '../../shared/jobs/JobPostingValidation';
+import { isSamePageUrl } from '../../shared/extension/PageCommandIntegrity';
 import { detectCaptchaAndBotCheck } from '../../shared/security/CaptchaAndBotCheckRules';
 import { fillApprovedFields } from '../formFiller';
 import { detectApplicationIframeWarnings, detectFormFields } from '../formDetector';
@@ -261,10 +266,7 @@ function bindPanelEvents(
       state.preview = updatePreviewStatusesFromResults(state.preview, state.fillResults);
       const succeeded = state.fillResults.filter((result) => result.ok).length;
       const failed = state.fillResults.length - succeeded;
-      const complete =
-        approvedItems.length > 0 &&
-        state.fillResults.length === approvedItems.length &&
-        failed === 0;
+      const complete = isCompleteApprovedFill(state.preview, state.fillResults);
 
       state.status = complete
         ? `All ${succeeded} approved fields were filled. Review the page manually before submitting.`
@@ -283,6 +285,12 @@ function bindPanelEvents(
     .querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-field-value]')
     .forEach((input) => {
       input.addEventListener('input', () => {
+        if (!isSamePageUrl(state.pageUrl, document.location.href)) {
+          resetForPageChange(state);
+          state.warnings = ['Approvals were cleared because the application page changed.'];
+          render(shadow, state);
+          return;
+        }
         const index = Number(input.dataset.index);
         if (!Number.isInteger(index) || !state.preview[index]) return;
         const value = input.value;
@@ -299,6 +307,14 @@ function bindPanelEvents(
         if (fillButton) fillButton.disabled = !state.preview.some((item) => item.approved);
       });
       input.addEventListener('change', () => {
+        if (!isSamePageUrl(state.pageUrl, document.location.href)) {
+          resetForPageChange(state);
+          state.warnings = [
+            'The changed page was not saved under the previous application session.'
+          ];
+          render(shadow, state);
+          return;
+        }
         void persistApplicationSession(state);
       });
     });
@@ -365,7 +381,7 @@ async function runBusy(
 
 function resetForPageChange(state: InPageAssistantState): void {
   const currentUrl = document.location.href;
-  if (state.pageUrl === currentUrl) return;
+  if (isSamePageUrl(state.pageUrl, currentUrl)) return;
   state.pageUrl = currentUrl;
   state.fieldAnalysisPageUrl = undefined;
   state.job = undefined;
@@ -377,13 +393,7 @@ function resetForPageChange(state: InPageAssistantState): void {
 }
 
 function invalidateApprovals(state: InPageAssistantState): void {
-  state.preview = state.preview.map((item) => ({
-    ...item,
-    approved: false,
-    rejected: item.value?.trim() ? false : true,
-    status:
-      item.status === 'manual-only' ? 'manual-only' : item.value?.trim() ? 'pending' : 'rejected'
-  }));
+  state.preview = invalidateFillApprovals(state.preview);
 }
 
 function analyzeCurrentJobPage() {

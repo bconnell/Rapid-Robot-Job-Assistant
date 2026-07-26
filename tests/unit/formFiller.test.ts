@@ -98,4 +98,50 @@ describe('form filler', () => {
 
     expect(results.every((result) => !result.ok)).toBe(true);
   });
+  it('makes checkbox groups match the approved set exactly', () => {
+    document.body.innerHTML = `
+      <label><input id="remote" type="checkbox" name="location" value="remote" /> Remote</label>
+      <label><input id="hybrid" type="checkbox" name="location" value="hybrid" checked /> Hybrid</label>`;
+    const item = preview('input[name="location"]', 'Remote', 'checkbox');
+    item.candidate.name = 'location';
+    item.candidate.controlFamily = 'checkbox-group';
+
+    const [result] = fillApprovedFields([item], document);
+
+    expect(result.ok).toBe(true);
+    expect(document.querySelector<HTMLInputElement>('#remote')?.checked).toBe(true);
+    expect(document.querySelector<HTMLInputElement>('#hybrid')?.checked).toBe(false);
+  });
+
+  it('refuses fields disabled by an ancestor fieldset', () => {
+    document.body.innerHTML = '<fieldset disabled><input id="name" /></fieldset>';
+    const [result] = fillApprovedFields([preview('#name', 'Alex Morgan')], document);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('not editable');
+  });
+
+  it('rechecks stable identity attributes before filling', () => {
+    document.body.innerHTML = '<input id="email" type="email" autocomplete="username" />';
+    const item = preview('#email', 'alex@example.test', 'email');
+    item.candidate.id = 'email';
+    item.candidate.autocomplete = 'email';
+    const [result] = fillApprovedFields([item], document);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('identity changed');
+  });
+
+  it('refuses multi-select controls', () => {
+    document.body.innerHTML = `
+      <select id="locations" multiple>
+        <option value="remote">Remote</option>
+        <option value="hybrid">Hybrid</option>
+      </select>`;
+    const item = preview('#locations', 'Remote');
+    item.candidate.tagName = 'select';
+    item.candidate.inputType = undefined;
+    item.candidate.controlFamily = 'native-multi-select';
+    const [result] = fillApprovedFields([item], document);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('Multiple-choice');
+  });
 });

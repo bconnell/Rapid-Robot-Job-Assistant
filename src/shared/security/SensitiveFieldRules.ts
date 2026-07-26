@@ -38,9 +38,15 @@ const sensitiveKinds: FieldMappingKind[] = [
 
 export function isSensitiveFieldText(value: string): boolean {
   const key = normalizeKey(value);
-  return sensitiveTerms.some((term) => key.includes(term));
+  return sensitiveTerms.some((term) => matchesPhrase(key, term));
 }
 
 export function isSensitiveMappingKind(kind: FieldMappingKind): boolean {
   return sensitiveKinds.includes(kind);
+}
+
+function matchesPhrase(text: string, phrase: string): boolean {
+  const normalized = normalizeKey(phrase);
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text);
 }
