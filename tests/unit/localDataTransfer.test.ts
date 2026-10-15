@@ -49,5 +49,32 @@ describe('LocalDataTransfer', () => {
     expect(preview.valid).toBe(true);
     expect(preview.counts.profiles).toBe(1);
     expect(validateLocalDataImport({ schemaVersion: 2 }).valid).toBe(false);
+    expect(validateLocalDataImport({ schemaVersion: 1 }).valid).toBe(false);
+  });
+  it('rejects truncated exports and unexpected imported secrets', () => {
+    const safe = createLocalDataExport({
+      profiles: [],
+      savedSearches: [],
+      jobPostings: [],
+      applicationSessions: [],
+      settings: {
+        localOnlyMode: true,
+        aiEnabled: false,
+        aiProvider: 'manual',
+        manualReviewRequired: true
+      }
+    });
+    const { profiles: _omitted, ...truncated } = safe;
+    expect(validateLocalDataImport(truncated).valid).toBe(false);
+    expect(
+      validateLocalDataImport({ ...safe, apiToken: 'not allowed' }).valid
+    ).toBe(false);
+    expect(
+      validateLocalDataImport({
+        ...safe,
+        settings: { ...safe.settings, aiEndpoint: 'https://provider.example.test' }
+      }).valid
+    ).toBe(false);
+    expect(validateLocalDataImport(safe).valid).toBe(true);
   });
 });

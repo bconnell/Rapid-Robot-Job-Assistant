@@ -43,6 +43,21 @@ export interface ImportPreview {
 }
 
 const maxRecordsPerCollection = 5000;
+const exportKeys = new Set([
+  'schemaVersion',
+  'exportedAt',
+  'profiles',
+  'savedSearches',
+  'jobPostings',
+  'applicationSessions',
+  'settings'
+]);
+const importedSettingsKeys = new Set([
+  'localOnlyMode',
+  'aiEnabled',
+  'aiProvider',
+  'manualReviewRequired'
+]);
 const maxShortText = 4000;
 const maxLongText = 20000;
 
@@ -149,6 +164,9 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
     return emptyPreview(['Import file must contain a JSON object.']);
   }
   if (value.schemaVersion !== 1) errors.push('Unsupported or missing schemaVersion.');
+  if (!hasOnlyAllowedKeys(value, exportKeys)) {
+    errors.push('Import contains unsupported top-level fields.');
+  }
 
   const profiles = readArray(value.profiles, 'profiles', errors);
   const savedSearches = readArray(value.savedSearches, 'savedSearches', errors);
@@ -165,8 +183,11 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
     errors
   );
 
-  if (value.settings !== undefined && !isRecord(value.settings)) {
-    errors.push('settings must be an object.');
+  if (
+    !isRecord(value.settings) ||
+    !hasOnlyAllowedKeys(value.settings, importedSettingsKeys)
+  ) {
+    errors.push('settings must be a supported object without provider endpoints or secrets.');
   }
 
   const data = errors.length
@@ -203,7 +224,6 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
 }
 
 function readArray(value: unknown, name: string, errors: string[]): unknown[] {
-  if (value === undefined) return [];
   if (!Array.isArray(value)) {
     errors.push(`${name} must be an array.`);
     return [];

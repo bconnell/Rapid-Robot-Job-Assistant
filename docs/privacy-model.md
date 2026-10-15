@@ -90,7 +90,7 @@ Resume parsing is local and review-first. The parser normalizes text, detects se
 
 Export creates `rapid-robot-job-assistant-export.json`. It can contain private profile, resume-derived, job, saved search, and application session data. Do not commit exported files.
 
-Import validates JSON and previews counts before a separate user confirmation. Restoration adds only new record IDs, atomically across the four exported collections. Collisions or write failures cancel the entire import. Settings and active profile selection are not applied. Non-exported resume documents, field mappings, and tailoring suggestions remain untouched. API endpoints and keys are not imported or exported.
+Import requires the full expected collection envelope, rejects unsupported top-level fields and provider secrets, and previews counts before a separate user confirmation. Restoration adds only new record IDs, atomically across the four exported collections. Collisions or write failures cancel the entire import. Settings and active profile selection are not applied. Non-exported resume documents, field mappings, and tailoring suggestions remain untouched. API endpoints and keys are not imported or exported.
 
 ## Public Repo Rule
 

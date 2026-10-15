@@ -128,6 +128,29 @@ describe('additive local data import', () => {
     expect(await new ApplicationSessionRepository().list()).toEqual([]);
   });
 
+  it('rejects a late collection ID collision without partially inserting earlier stores', async () => {
+    const existingJobs = new JobPostingRepository();
+    const existingJob = { ...job, title: 'Existing retained job' };
+    await existingJobs.save(existingJob);
+    await expect(importLocalDataAdditively(backup())).rejects.toThrow(/same ID/i);
+    expect(await existingJobs.get(job.id)).toEqual(existingJob);
+    expect(await new ProfileRepository().list()).toEqual([]);
+    expect(await new ApplicationSessionRepository().list()).toEqual([]);
+  });
+
+  it('serializes two competing restores so only one can create a record ID', async () => {
+    const incoming = backup();
+    const results = await Promise.allSettled([
+      importLocalDataAdditively(incoming),
+      importLocalDataAdditively(incoming)
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(await new ProfileRepository().list()).toHaveLength(1);
+    expect(await new JobPostingRepository().list()).toHaveLength(1);
+    expect(await new ApplicationSessionRepository().list()).toHaveLength(1);
+  });
+
   it('revalidates a previously reviewed object at commit time', async () => {
     const incoming = backup();
     expect(validateLocalDataImport(incoming).valid).toBe(true);
