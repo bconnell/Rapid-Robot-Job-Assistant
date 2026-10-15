@@ -13,6 +13,7 @@ Current unit and regression coverage includes:
 - Profile value resolution
 - Fill approval defaults
 - Transactional backup snapshots and atomic multi-store local cleanup with failure-injection rollback
+- Export size enforcement against the 5 MB import boundary; oversized files must never be downloaded as restorable backups
 - Local export round-trip validation (including duplicate embedded IDs) and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write failure rollback
 - Saved search creation and manual check status
 - Typed IndexedDB repositories

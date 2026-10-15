@@ -24,6 +24,7 @@
 - Cross-origin iframe forms are not inspected. Users may need to open the frame directly or fill it manually.
 - Additive import restores new backup records only. Duplicate IDs cancel the entire import. Replacing existing records is not supported; browser settings and non-exported stores are not restored.
 - Record export is not a complete extension backup: resume documents, field mappings, tailoring suggestions, and active-profile selection remain outside the current backup schema.
+- The backup import/export path currently supports up to 5 MB; larger backups are not yet supported.
 - AI provider network calls are scaffolded but intentionally not executed.
 - Resume parsing is improved but still review-first. Users should verify every parsed field.
 - Experience fallback parsing is conservative. Inferred entries should be checked and corrected.
