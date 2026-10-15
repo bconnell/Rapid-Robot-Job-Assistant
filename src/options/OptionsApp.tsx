@@ -296,9 +296,12 @@ export function OptionsApp() {
       );
       return;
     }
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    );
+    const backup = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    if (backup.size > maxImportBytes) {
+      setStatus('Backup exceeds the 5 MB restore limit and was not downloaded. Saved records are unchanged.');
+      return;
+    }
+    const url = URL.createObjectURL(backup);
     const link = document.createElement('a');
     link.href = url;
     link.download = 'rapid-robot-job-assistant-export.json';
