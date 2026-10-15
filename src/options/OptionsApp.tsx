@@ -294,6 +294,12 @@ export function OptionsApp() {
       applicationSessions,
       settings
     });
+    if (!validateLocalDataImport(data).valid) {
+      setStatus(
+        'Export stopped: local records cannot be restored safely. Review invalid or duplicate data.'
+      );
+      return;
+    }
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     );

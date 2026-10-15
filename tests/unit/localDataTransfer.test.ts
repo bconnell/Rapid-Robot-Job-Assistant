@@ -52,6 +52,33 @@ describe('LocalDataTransfer', () => {
     expect(validateLocalDataImport({ schemaVersion: 1 }).valid).toBe(false);
   });
 
+  it('rejects exports with duplicate embedded record IDs', () => {
+    const profile = {
+      id: 'example-profile',
+      contact: {},
+      skills: [],
+      experience: [],
+      education: [],
+      certifications: [],
+      projects: [],
+      desiredTitles: [],
+      updatedAt: '2026-10-15T00:00:00.000Z'
+    };
+    const exported = createLocalDataExport({
+      profiles: [profile, { ...profile, contact: { fullName: 'Other person' } }],
+      savedSearches: [],
+      jobPostings: [],
+      applicationSessions: [],
+      settings: {
+        localOnlyMode: true,
+        aiEnabled: false,
+        aiProvider: 'manual',
+        manualReviewRequired: true
+      }
+    });
+    expect(validateLocalDataImport(exported).valid).toBe(false);
+  });
+
   it('rejects truncated exports and unexpected imported secrets', () => {
     const safe = createLocalDataExport({
       profiles: [],

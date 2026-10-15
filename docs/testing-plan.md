@@ -12,7 +12,7 @@ Current unit and regression coverage includes:
 - Job dedupe
 - Profile value resolution
 - Fill approval defaults
-- Local export/import validation and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write failure rollback
+- Local export round-trip validation (including duplicate embedded IDs) and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write failure rollback
 - Saved search creation and manual check status
 - Typed IndexedDB repositories
 - Resume text normalization for collapsed `.docx`-style text

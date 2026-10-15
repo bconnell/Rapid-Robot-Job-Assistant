@@ -15,6 +15,7 @@ Newest changes are listed first.
 ### 2026-10-15. Additive Backup Restore Candidate
 
 - Options previews a local JSON backup and requests separate confirmation before importing.
+- Export also verifies the complete import contract before offering the backup file.
 - Import adds profiles, saved searches, jobs, and sessions in one IndexedDB transaction.
 - Existing IDs or storage failures cancel the restore without overwriting existing data.
 - Settings and active profile selection remain unchanged, and non-exported stores are untouched.
