@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ChromeStorageRepository,
   defaultSettings,
@@ -27,8 +27,10 @@ import {
   isValidJobPostingRecord,
   isValidSavedSearchRecord,
   isValidUserProfileRecord,
-  validateLocalDataImport
+  validateLocalDataImport,
+  type LocalDataExport
 } from '../shared/data/LocalDataTransfer';
+import { importLocalDataAdditively } from '../shared/data/LocalDataImportService';
 import { clearTargetTab } from '../shared/extension/TargetPageTracker';
 import {
   browserLabel,
@@ -71,6 +73,9 @@ export function OptionsApp() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [parseSummary, setParseSummary] = useState<ResumeParseSummary | undefined>();
   const [importPreview, setImportPreview] = useState('');
+  const [validatedImport, setValidatedImport] = useState<LocalDataExport>();
+  const [importPending, setImportPending] = useState(false);
+  const importGeneration = useRef(0);
   const [browser, setBrowser] = useState<BrowserCompatibility>();
 
   useEffect(() => {
@@ -258,6 +263,9 @@ export function OptionsApp() {
   }
 
   async function previewImport(file?: File) {
+    const generation = ++importGeneration.current;
+    setValidatedImport(undefined);
+    setImportPreview('');
     if (!file) return;
     if (file.size > maxImportBytes) {
       setImportPreview('Import file is too large. Keep JSON exports under 5 MB.');
@@ -266,20 +274,57 @@ export function OptionsApp() {
     }
     try {
       const parsed = JSON.parse(await file.text()) as unknown;
+      if (generation !== importGeneration.current) return;
       const preview = validateLocalDataImport(parsed);
+      setValidatedImport(preview.data);
       setImportPreview(
         preview.valid
-          ? `Valid import: ${preview.counts.profiles} profiles, ${preview.counts.savedSearches} searches, ${preview.counts.jobPostings} jobs, ${preview.counts.applicationSessions} sessions.`
+          ? 'Valid import: ' + preview.counts.profiles + ' profiles, ' +
+            preview.counts.savedSearches + ' searches, ' + preview.counts.jobPostings +
+            ' jobs, ' + preview.counts.applicationSessions + ' sessions.'
           : preview.errors.join(' ')
       );
       setStatus(
         preview.valid
-          ? 'Import preview validated. Merge import still needs a separate review step.'
+          ? 'Import preview validated. Confirm to add these records without changing existing data.'
           : 'Import file did not validate.'
       );
     } catch {
+      if (generation !== importGeneration.current) return;
       setImportPreview('Invalid JSON file.');
       setStatus('Import file did not validate.');
+    }
+  }
+
+  async function restoreValidatedImport() {
+    if (!validatedImport || importPending) return;
+    if (
+      !window.confirm(
+        'Add the validated backup records to this browser? Existing records are not replaced. ' +
+          'If any record ID already exists, the entire import will be cancelled.'
+      )
+    ) return;
+    setImportPending(true);
+    try {
+      const counts = await importLocalDataAdditively(validatedImport);
+      ++importGeneration.current;
+      setValidatedImport(undefined);
+      setImportPreview('');
+      await loadOptions();
+      setStatus(
+        'Imported ' + counts.profiles + ' profiles, ' + counts.savedSearches +
+          ' searches, ' + counts.jobPostings + ' jobs, and ' +
+          counts.applicationSessions +
+          ' sessions. Active profile and settings were not changed.'
+      );
+    } catch (error) {
+      setStatus(
+        error instanceof Error
+          ? 'Import cancelled: ' + error.message
+          : 'Import failed. Existing data was preserved.'
+      );
+    } finally {
+      setImportPending(false);
     }
   }
 
@@ -298,6 +343,9 @@ export function OptionsApp() {
     setResumeText('');
     setWarnings([]);
     setParseSummary(undefined);
+    ++importGeneration.current;
+    setValidatedImport(undefined);
+    setImportPreview('');
     setStatus('Local extension data cleared.');
   }
 
@@ -381,8 +429,11 @@ export function OptionsApp() {
           />
           <PrivacyControlsPanel
             importPreview={importPreview}
+            importPending={importPending}
+            canRestoreImport={Boolean(validatedImport)}
             onExport={exportLocalData}
             onPreviewImport={previewImport}
+            onRestoreImport={restoreValidatedImport}
             onClearTargetPage={clearTargetPage}
             onClearSavedSearches={clearSavedSearches}
             onClearSavedJobsAndSessions={clearSavedJobsAndSessions}
@@ -764,8 +815,11 @@ function SavedSearchesPanel({
 
 function PrivacyControlsPanel({
   importPreview,
+  importPending,
+  canRestoreImport,
   onExport,
   onPreviewImport,
+  onRestoreImport,
   onClearTargetPage,
   onClearSavedSearches,
   onClearSavedJobsAndSessions,
@@ -773,8 +827,11 @@ function PrivacyControlsPanel({
   onClearLocalData
 }: {
   importPreview: string;
+  importPending: boolean;
+  canRestoreImport: boolean;
   onExport: () => void;
   onPreviewImport: (file?: File) => void;
+  onRestoreImport: () => void;
   onClearTargetPage: () => void;
   onClearSavedSearches: () => void;
   onClearSavedJobsAndSessions: () => void;
@@ -796,10 +853,19 @@ function PrivacyControlsPanel({
         <input
           type="file"
           accept="application/json,.json"
-          onChange={(event) => onPreviewImport(event.target.files?.[0])}
+          disabled={importPending}
+          onChange={(event) => {
+            void onPreviewImport(event.target.files?.[0]);
+            event.target.value = '';
+          }}
         />
       </label>
       {importPreview && <p className="muted">{importPreview}</p>}
+      {canRestoreImport && (
+        <button className="secondary" onClick={onRestoreImport} disabled={importPending}>
+          {importPending ? 'Importing Local Data...' : 'Restore Validated Data'}
+        </button>
+      )
       <div className="stack mini-card">
         <h3>Local Data Cleanup</h3>
         <button className="secondary" onClick={onClearTargetPage}>

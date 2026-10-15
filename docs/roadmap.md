@@ -22,7 +22,7 @@
 - Field filling avoids file uploads and navigation.
 - Custom widgets are detected but manual-only. The extension does not click custom dropdowns.
 - Cross-origin iframe forms are not inspected. Users may need to open the frame directly or fill it manually.
-- Import is validation-preview only. Merge/replace import still needs another review pass.
+- Additive import restores new backup records only. Duplicate IDs cancel the entire import. Replacing existing records is not supported; exported settings and non-exported stores are not restored.
 - AI provider network calls are scaffolded but intentionally not executed.
 - Resume parsing is improved but still review-first. Users should verify every parsed field.
 - Experience fallback parsing is conservative. Inferred entries should be checked and corrected.
@@ -39,7 +39,7 @@
 - Side panel has per-field edit, approve, skip, bulk-safe approval, clear approvals, and fill-result feedback.
 - Profile value resolution fills only saved values and does not invent missing data.
 - Local export is implemented with a privacy warning.
-- Import validates JSON and shows preview counts, but does not merge records yet.
+- Import validates JSON, previews record counts, and requires confirmation before atomic additive restoration. Collisions prevent all writes.
 - CI runs install, build, test, typecheck, lint, and format.
 
 ## Options UI And Resume Parsing Hardening Completed
@@ -142,7 +142,7 @@
 
 - Add a Chrome Web Store readiness checklist.
 - Add a dedicated privacy policy page.
-- Add safe merge/replace import after another review pass.
+- Evaluate explicit conflict resolution or replace import under a separately reviewed recovery contract.
 - Continue real browser QA fixes as they appear.
 - Add more application form fixture coverage.
 - Continue improving resume parsing for unusual layouts after real browser QA.

@@ -12,7 +12,7 @@ Current unit and regression coverage includes:
 - Job dedupe
 - Profile value resolution
 - Fill approval defaults
-- Local export/import validation
+- Local export/import validation and additive restore with collision rejection, commit-time revalidation, and simulated write failure rollback
 - Saved search creation and manual check status
 - Typed IndexedDB repositories
 - Resume text normalization for collapsed `.docx`-style text
@@ -317,3 +317,16 @@ Browser automation may be useful later for controlled extension QA. It should no
 - Confirm malformed profile structures, unsupported job enums, unknown record properties, unbound result selectors, mismatched fill-result states, and inconsistent job references fail validation.
 - Confirm invalid stored records are hidden from runtime surfaces and block local-data export.
 - Confirm completed and partial fill history cannot be reused without a fresh field analysis.
+
+## Additive Backup Restore QA
+
+1. Export fake profiles, searches, jobs, and sessions from Options.
+2. In a fresh test browser profile, preview and confirm the exported record counts.
+3. Verify invalid or oversized files cannot enable the restore action.
+4. Cancel the confirmation and verify local data is unchanged.
+5. Confirm restore, restart the extension, and verify all exported records are present.
+6. Confirm local settings and active profile selection have not changed.
+7. Repeat the same restore and verify duplicate IDs cancel every write without overwrites.
+8. Inject a database write failure and verify all inserted records roll back.
+9. Confirm restored fill approvals require fresh form analysis before re-use.
+10. Confirm no form submission, external request, or unrelated storage deletion occurred.

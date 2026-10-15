@@ -12,6 +12,15 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-10-15. Additive Backup Restore Candidate
+
+- Options previews a local JSON backup and requests separate confirmation before importing.
+- Import adds profiles, saved searches, jobs, and sessions in one IndexedDB transaction.
+- Existing IDs or storage failures cancel the restore without overwriting existing data.
+- Settings and active profile selection remain unchanged, and non-exported stores are untouched.
+- Local builds, automated tests, and unpacked-browser QA remain required before release.
+
+
 ### 2026-07-26. Session Lifecycle And Stored-Record Integrity
 
 - Kept restored application history read-only until a fresh field analysis is completed.
@@ -244,7 +253,7 @@ AI is disabled by default. If a provider is configured later, the extension must
 
 The extension does not inject remote scripts, use `eval`, log private data, or submit forms.
 
-Exports may contain private data. Keep `rapid-robot-job-assistant-export.json` out of git and shared folders.
+Exports may contain private data. Keep `rapid-robot-job-assistant-export.json` out of git and shared folders. Import is local, requires review and confirmation, and adds records only when their IDs do not already exist.
 
 ## CAPTCHA And Bot Checks
 
