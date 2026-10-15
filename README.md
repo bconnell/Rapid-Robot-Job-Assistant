@@ -21,7 +21,6 @@ Newest changes are listed first.
 - Imported profiles can be selected in Options; new profiles cannot silently overwrite an unselected imported record.
 - Local builds, automated tests, and unpacked-browser QA remain required before release.
 
-
 ### 2026-07-26. Session Lifecycle And Stored-Record Integrity
 
 - Kept restored application history read-only until a fresh field analysis is completed.

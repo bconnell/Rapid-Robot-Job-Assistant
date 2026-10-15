@@ -1,6 +1,9 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLocalDataExport, validateLocalDataImport } from '../../src/shared/data/LocalDataTransfer';
+import {
+  createLocalDataExport,
+  validateLocalDataImport
+} from '../../src/shared/data/LocalDataTransfer';
 import { importLocalDataAdditively } from '../../src/shared/data/LocalDataImportService';
 import { clearAllIndexedDbData } from '../../src/shared/storage/IndexedDbRepository';
 import {
@@ -89,7 +92,9 @@ describe('additive local data import', () => {
   });
 
   it('rejects invalid data before writing records', async () => {
-    await expect(importLocalDataAdditively({ ...backup(), schemaVersion: 2 })).rejects.toThrow(/validation/i);
+    await expect(importLocalDataAdditively({ ...backup(), schemaVersion: 2 })).rejects.toThrow(
+      /validation/i
+    );
     expect(await new ProfileRepository().list()).toEqual([]);
   });
 

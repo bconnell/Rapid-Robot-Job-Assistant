@@ -972,7 +972,11 @@ function PrivacyControlsPanel({
         <button className="secondary" onClick={onClearSavedSearches} disabled={importPending}>
           Clear Saved Searches
         </button>
-        <button className="secondary" onClick={onClearSavedJobsAndSessions} disabled={importPending}>
+        <button
+          className="secondary"
+          onClick={onClearSavedJobsAndSessions}
+          disabled={importPending}
+        >
           Clear Saved Jobs and Sessions
         </button>
         <button className="secondary" onClick={onClearSavedProfiles} disabled={importPending}>
