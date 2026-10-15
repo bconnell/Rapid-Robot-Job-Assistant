@@ -309,7 +309,7 @@ export function OptionsApp() {
       link.remove();
       URL.revokeObjectURL(url);
     }, 1000);
-    setStatus('Local data export created. Do not commit exported files.');
+    setStatus('Supported record backup created. Keep the private JSON file out of shared folders.');
   }
 
   async function previewImport(file?: File) {
@@ -976,11 +976,16 @@ function PrivacyControlsPanel({
         Saved profiles, jobs, application sessions, notes, saved searches, and settings stay local
         until you delete them, clear extension data, or uninstall the extension.
       </p>
+      <p className="muted">
+        This backup includes profiles, saved searches, job postings, and application sessions.
+        It does not include resume documents, field mappings, tailoring suggestions, browser
+        settings, or the active profile selection. Review the backup scope before clearing data.
+      </p>
       <button className="secondary" onClick={onExport} disabled={importPending}>
-        Export Local Data
+        Export Supported Records
       </button>
       <label className="file-picker secondary">
-        Preview Import JSON
+        Preview Records Backup JSON
         <input
           type="file"
           accept="application/json,.json"
@@ -994,7 +999,7 @@ function PrivacyControlsPanel({
       {importPreview && <p className="muted">{importPreview}</p>}
       {canRestoreImport && (
         <button className="secondary" onClick={onRestoreImport} disabled={importPending}>
-          {importPending ? 'Importing Local Data...' : 'Restore Validated Data'}
+          {importPending ? 'Importing Records...' : 'Restore Validated Records'}
         </button>
       )}
       <div className="stack mini-card">

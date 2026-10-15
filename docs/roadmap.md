@@ -22,7 +22,8 @@
 - Field filling avoids file uploads and navigation.
 - Custom widgets are detected but manual-only. The extension does not click custom dropdowns.
 - Cross-origin iframe forms are not inspected. Users may need to open the frame directly or fill it manually.
-- Additive import restores new backup records only. Duplicate IDs cancel the entire import. Replacing existing records is not supported; exported settings and non-exported stores are not restored.
+- Additive import restores new backup records only. Duplicate IDs cancel the entire import. Replacing existing records is not supported; browser settings and non-exported stores are not restored.
+- Record export is not a complete extension backup: resume documents, field mappings, tailoring suggestions, and active-profile selection remain outside the current backup schema.
 - AI provider network calls are scaffolded but intentionally not executed.
 - Resume parsing is improved but still review-first. Users should verify every parsed field.
 - Experience fallback parsing is conservative. Inferred entries should be checked and corrected.

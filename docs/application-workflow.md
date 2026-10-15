@@ -31,7 +31,7 @@ If no profile exists, the UI says **Profile Needed Before Fill**. That is an att
 
 ## Full Assistant Tab And Side Panel
 
-The full assistant tab is for profile review, saved data, diagnostics, and fallback guidance. It is not the preferred surface for live page work.
+The full assistant tab is for profile review, saved data, diagnostics, and fallback guidance. It is not the preferred surface for live page work. The Options record backup includes profiles, searches, saved jobs, and application sessions only. Saved resume documents, field mappings, tailoring suggestions, browser settings, and the active-profile selection are not backed up by this file.
 
 Side panel support is optional. Some Chromium browsers may not support it reliably. The in-page assistant is the recommended live workflow.
 

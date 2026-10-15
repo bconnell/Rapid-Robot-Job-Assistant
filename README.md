@@ -20,6 +20,7 @@ Newest changes are listed first.
 - Import adds profiles, saved searches, jobs, and sessions in one IndexedDB transaction.
 - Existing IDs or storage failures cancel the restore without overwriting existing data.
 - Settings and active profile selection remain unchanged, and non-exported stores are untouched.
+- The backup UI explicitly lists included and excluded collections to prevent a partial record export from being mistaken for a complete extension backup.
 - Imported profiles can be selected in Options; new profiles cannot silently overwrite an unselected imported record.
 - Local builds, automated tests, and unpacked-browser QA remain required before release.
 - Reports a committed restore as successful even if the Options view must be reopened to refresh.
