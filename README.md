@@ -20,7 +20,7 @@ Newest changes are listed first.
 - Settings and active profile selection remain unchanged, and non-exported stores are untouched.
 - Imported profiles can be selected in Options; new profiles cannot silently overwrite an unselected imported record.
 - Local builds, automated tests, and unpacked-browser QA remain required before release.
-- Fixed the preview-button JSX closure and separated successful import commit from a later Options refresh failure.
+- Reports a committed restore as successful even if the Options view must be reopened to refresh.
 
 ### 2026-07-26. Session Lifecycle And Stored-Record Integrity
 

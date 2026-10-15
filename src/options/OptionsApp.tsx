@@ -377,7 +377,10 @@ export function OptionsApp() {
           ' sessions. Active profile and settings were not changed.'
       );
     } catch {
-      setStatus('The backup was imported successfully, but the options view could not refresh. Reopen Options to reload the data.');
+      setStatus(
+        'The backup was imported successfully, but the options view could not refresh. ' +
+          'Reopen Options to reload the data.'
+      );
     } finally {
       setImportPending(false);
     }

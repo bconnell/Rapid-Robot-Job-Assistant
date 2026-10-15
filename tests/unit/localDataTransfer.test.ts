@@ -51,6 +51,7 @@ describe('LocalDataTransfer', () => {
     expect(validateLocalDataImport({ schemaVersion: 2 }).valid).toBe(false);
     expect(validateLocalDataImport({ schemaVersion: 1 }).valid).toBe(false);
   });
+
   it('rejects truncated exports and unexpected imported secrets', () => {
     const safe = createLocalDataExport({
       profiles: [],
@@ -64,17 +65,16 @@ describe('LocalDataTransfer', () => {
         manualReviewRequired: true
       }
     });
-    const { profiles: _omitted, ...truncated } = safe;
+    const truncated: Partial<typeof safe> = { ...safe };
+    delete truncated.profiles;
+    const unexpectedRoot = { ...safe, apiToken: 'not allowed' };
+    const secretBearingSettings = {
+      ...safe,
+      settings: { ...safe.settings, aiEndpoint: 'https://provider.example.test' }
+    };
     expect(validateLocalDataImport(truncated).valid).toBe(false);
-    expect(
-      validateLocalDataImport({ ...safe, apiToken: 'not allowed' }).valid
-    ).toBe(false);
-    expect(
-      validateLocalDataImport({
-        ...safe,
-        settings: { ...safe.settings, aiEndpoint: 'https://provider.example.test' }
-      }).valid
-    ).toBe(false);
+    expect(validateLocalDataImport(unexpectedRoot).valid).toBe(false);
+    expect(validateLocalDataImport(secretBearingSettings).valid).toBe(false);
     expect(validateLocalDataImport(safe).valid).toBe(true);
   });
 });
