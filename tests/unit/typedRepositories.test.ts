@@ -1,9 +1,12 @@
 import 'fake-indexeddb/auto';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApplicationSession } from '../../src/shared/models/ApplicationSession';
 import type { JobPosting } from '../../src/shared/models/JobPosting';
 import type { UserProfile } from '../../src/shared/models/UserProfile';
-import { clearAllIndexedDbData } from '../../src/shared/storage/IndexedDbRepository';
+import {
+  clearAllIndexedDbData,
+  readLocalDataSnapshot
+} from '../../src/shared/storage/IndexedDbRepository';
 import {
   ApplicationSessionRepository,
   JobPostingRepository,
@@ -14,6 +17,9 @@ import { createSavedSearch } from '../../src/shared/jobs/SavedSearchService';
 
 beforeEach(async () => {
   await clearAllIndexedDbData();
+});
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('typed repositories', () => {
@@ -79,5 +85,73 @@ describe('typed repositories', () => {
 
     expect(await searchRepo.list()).toHaveLength(1);
     expect((await sessionRepo.findByPageUrl(session.pageUrl))?.notes).toBe('Fake note');
+  });
+});
+
+describe('atomic storage lifecycle', () => {
+  it('reads all exported collections from a single successful snapshot', async () => {
+    const profileRepo = new ProfileRepository();
+    const savedSearchRepo = new SavedSearchRepository();
+    await profileRepo.save({
+      id: 'snapshot-profile',
+      contact: { fullName: 'Synthetic User' },
+      skills: [],
+      experience: [],
+      education: [],
+      certifications: [],
+      projects: [],
+      desiredTitles: [],
+      updatedAt: '2026-10-15T00:00:00.000Z'
+    });
+    const search = createSavedSearch({
+      label: 'Synthetic search',
+      url: 'https://jobs.example.test/search'
+    });
+    await savedSearchRepo.save(search);
+    const snapshot = await readLocalDataSnapshot();
+    expect(snapshot.profiles.map((item) => item.id)).toEqual(['snapshot-profile']);
+    expect(snapshot.savedSearches).toEqual([search]);
+    expect(snapshot.jobPostings).toEqual([]);
+    expect(snapshot.applicationSessions).toEqual([]);
+  });
+
+  it('rolls back all cleared stores if a later clear fails', async () => {
+    const profileRepo = new ProfileRepository();
+    const searchRepo = new SavedSearchRepository();
+    const profile: UserProfile = {
+      id: 'preserve-profile',
+      contact: { fullName: 'Preserved Fake User' },
+      skills: [],
+      experience: [],
+      education: [],
+      certifications: [],
+      projects: [],
+      desiredTitles: [],
+      updatedAt: '2026-10-15T00:00:00.000Z'
+    };
+    const search = createSavedSearch({
+      label: 'Preserved fake search',
+      url: 'https://jobs.example.test/search'
+    });
+    await profileRepo.save(profile);
+    await searchRepo.save(search);
+
+    const originalClear = IDBObjectStore.prototype.clear;
+    const injected = vi.spyOn(IDBObjectStore.prototype, 'clear').mockImplementation(
+      function (this: IDBObjectStore) {
+        if (this.name === 'savedSearches') {
+          throw new DOMException('Synthetic clear failure', 'UnknownError');
+        }
+        return originalClear.call(this);
+      }
+    );
+    try {
+      await expect(clearAllIndexedDbData()).rejects.toThrow(/Synthetic clear failure/);
+    } finally {
+      injected.mockRestore();
+    }
+
+    expect(await profileRepo.get(profile.id)).toEqual(profile);
+    expect(await searchRepo.get(search.id)).toEqual(search);
   });
 });

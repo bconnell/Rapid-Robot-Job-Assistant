@@ -4,7 +4,7 @@ import {
   defaultSettings,
   type ExtensionSettings
 } from '../shared/storage/ChromeStorageRepository';
-import { clearAllIndexedDbData } from '../shared/storage/IndexedDbRepository';
+import { clearAllIndexedDbData, readLocalDataSnapshot } from '../shared/storage/IndexedDbRepository';
 import {
   ApplicationSessionRepository,
   FieldMappingRepository,
@@ -272,12 +272,8 @@ export function OptionsApp() {
       'Exported JSON may contain private profile, resume-derived, job, and application data. Keep it out of git and shared folders.'
     );
     if (!confirmed) return;
-    const [profiles, savedSearches, jobPostings, applicationSessions] = await Promise.all([
-      profileRepo.list(),
-      searchRepo.list(),
-      jobRepo.list(),
-      sessionRepo.list()
-    ]);
+    const { profiles, savedSearches, jobPostings, applicationSessions } =
+      await readLocalDataSnapshot();
     if (
       !profiles.every(isValidUserProfileRecord) ||
       !savedSearches.every(isValidSavedSearchRecord) ||
