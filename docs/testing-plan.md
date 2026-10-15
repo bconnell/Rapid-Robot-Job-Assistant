@@ -326,7 +326,9 @@ Browser automation may be useful later for controlled extension QA. It should no
 4. Cancel the confirmation and verify local data is unchanged.
 5. Confirm restore, restart the extension, and verify all exported records are present.
 6. Confirm local settings and active profile selection have not changed.
-7. Repeat the same restore and verify duplicate IDs cancel every write without overwrites.
-8. Inject a database write failure and verify all inserted records roll back.
-9. Confirm restored fill approvals require fresh form analysis before re-use.
-10. Confirm no form submission, external request, or unrelated storage deletion occurred.
+7. Choose an imported saved profile explicitly, verify it becomes active, and restart to verify persistence.
+8. Start a new profile and confirm saving it cannot replace an unselected imported profile.
+9. Repeat the same restore and verify duplicate IDs cancel every write without overwrites.
+10. Inject a database write failure and verify all inserted records roll back.
+11. Confirm restored fill approvals require fresh form analysis before re-use.
+12. Confirm no form submission, external request, or unrelated storage deletion occurred.

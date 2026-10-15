@@ -61,6 +61,7 @@ export function OptionsApp() {
   const [resumeText, setResumeText] = useState('');
   const [profile, setProfile] = useState<UserProfile>(emptyUserProfile());
   const [activeProfileId, setActiveProfileId] = useState<string | undefined>();
+  const [savedProfiles, setSavedProfiles] = useState<UserProfile[]>([]);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [searchForm, setSearchForm] = useState({
     label: '',
@@ -84,17 +85,20 @@ export function OptionsApp() {
   }, []);
 
   async function loadOptions() {
-    const [nextSettings, nextProfileId, searches] = await Promise.all([
+    const [nextSettings, nextProfileId, searches, profiles] = await Promise.all([
       settingsRepo.getSettings(),
       settingsRepo.getActiveProfileId(),
-      searchRepo.list()
+      searchRepo.list(),
+      profileRepo.list()
     ]);
     const validSearches = searches.filter(isValidSavedSearchRecord);
+    const validProfiles = profiles.filter(isValidUserProfileRecord);
     setSettings(nextSettings);
     setActiveProfileId(nextProfileId);
     setSavedSearches(validSearches);
-    if (searches.length !== validSearches.length) {
-      setStatus('One or more invalid saved searches were hidden from the options page.');
+    setSavedProfiles(validProfiles);
+    if (searches.length !== validSearches.length || profiles.length !== validProfiles.length) {
+      setStatus('Invalid saved profiles or searches were hidden from the options page.');
     }
     if (nextProfileId) {
       const active = await profileRepo.get(nextProfileId);
@@ -162,7 +166,11 @@ export function OptionsApp() {
     setProfile(nextProfile);
     setParseSummary(parsed.summary);
     setWarnings(parsed.summary.needsReview);
+    if (!activeProfileId && (await profileRepo.get(nextProfile.id))) {
+      nextProfile.id = crypto.randomUUID();
+    }
     await Promise.all([profileRepo.save(nextProfile), resumeRepo.save(resumeDocument)]);
+    setSavedProfiles((await profileRepo.list()).filter(isValidUserProfileRecord));
     await settingsRepo.setActiveProfileId(nextProfile.id);
     setActiveProfileId(nextProfile.id);
     setStatus(
@@ -178,11 +186,50 @@ export function OptionsApp() {
       setStatus('The profile contains invalid or oversized data and was not saved.');
       return;
     }
+    if (!activeProfileId && (await profileRepo.get(next.id))) {
+      setStatus('A saved profile already has this ID. Select it or start a new profile.');
+      return;
+    }
     await profileRepo.save(next);
+    setSavedProfiles((await profileRepo.list()).filter(isValidUserProfileRecord));
     await settingsRepo.setActiveProfileId(next.id);
     setProfile(next);
     setActiveProfileId(next.id);
     setStatus('Profile saved locally.');
+  }
+
+  async function activateSavedProfile(id: string) {
+    try {
+      const selected = await profileRepo.get(id);
+      if (!selected || !isValidUserProfileRecord(selected)) {
+        await loadOptions();
+        setStatus('Selected profile is unavailable or invalid.');
+        return;
+      }
+      await settingsRepo.setActiveProfileId(selected.id);
+      setActiveProfileId(selected.id);
+      setProfile(selected);
+      setParseSummary(undefined);
+      setWarnings([]);
+      setStatus('Saved profile activated locally.');
+    } catch {
+      setStatus('Saved profile could not be activated.');
+    }
+  }
+
+  async function startNewProfile() {
+    if (!window.confirm('Start a blank profile? Any unsaved profile edits will be discarded.'))
+      return;
+    try {
+      await settingsRepo.clearActiveProfileId();
+      setActiveProfileId(undefined);
+      setProfile({ ...emptyUserProfile(), id: crypto.randomUUID() });
+      setParseSummary(undefined);
+      setWarnings([]);
+      setStatus('New profile ready for review and saving.');
+    } catch {
+      setStatus('Could not start a new profile.');
+    }
   }
 
   async function createSearch() {
@@ -339,6 +386,7 @@ export function OptionsApp() {
     setSettings(defaultSettings);
     setProfile(emptyUserProfile());
     setActiveProfileId(undefined);
+    setSavedProfiles([]);
     setSavedSearches([]);
     setResumeText('');
     setWarnings([]);
@@ -390,6 +438,7 @@ export function OptionsApp() {
     await settingsRepo.clearActiveProfileId();
     setProfile(emptyUserProfile());
     setActiveProfileId(undefined);
+    setSavedProfiles([]);
     setResumeText('');
     setWarnings([]);
     setParseSummary(undefined);
@@ -412,8 +461,12 @@ export function OptionsApp() {
           <ProfileReviewPanel
             profile={profile}
             activeProfileId={activeProfileId}
+            savedProfiles={savedProfiles}
+            importPending={importPending}
             parseSummary={parseSummary}
             onProfileChange={setProfile}
+            onActivateProfile={activateSavedProfile}
+            onCreateNewProfile={startNewProfile}
             onSaveProfile={saveProfile}
           />
         </div>
@@ -560,14 +613,22 @@ function ParseSummaryCard({
 function ProfileReviewPanel({
   profile,
   activeProfileId,
+  savedProfiles,
+  importPending,
   parseSummary,
   onProfileChange,
+  onActivateProfile,
+  onCreateNewProfile,
   onSaveProfile
 }: {
   profile: UserProfile;
   activeProfileId?: string;
+  savedProfiles: UserProfile[];
+  importPending: boolean;
   parseSummary?: ResumeParseSummary;
   onProfileChange: (profile: UserProfile) => void;
+  onActivateProfile: (id: string) => void;
+  onCreateNewProfile: () => void;
   onSaveProfile: () => void;
 }) {
   function updateContact(next: Partial<UserProfile['contact']>) {
@@ -580,6 +641,43 @@ function ProfileReviewPanel({
       <p className={activeProfileId ? 'ok' : 'warn'}>
         {activeProfileId ? 'Active profile loaded.' : 'No active profile yet.'}
       </p>
+      <div className="row">
+        {savedProfiles.length > 0 && (
+          <label>
+            Saved profiles
+            <select
+              aria-label="Saved profiles"
+              value={activeProfileId ?? ''}
+              disabled={importPending}
+              onChange={(event) => {
+                const id = event.target.value;
+                if (!id) return;
+                if (
+                  !window.confirm(
+                    'Activate this saved profile? Unsaved profile edits will be discarded.'
+                  )
+                ) {
+                  event.target.value = activeProfileId ?? '';
+                  return;
+                }
+                void onActivateProfile(id);
+              }}
+            >
+              <option value="" disabled>
+                Choose a saved profile
+              </option>
+              {savedProfiles.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.contact.fullName || item.contact.email || item.id}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button className="secondary" onClick={onCreateNewProfile} disabled={importPending}>
+          New Profile
+        </button>
+      </div>
       <div className="profile-grid">
         <TextInput
           label="Full name"
@@ -845,7 +943,7 @@ function PrivacyControlsPanel({
         Saved profiles, jobs, application sessions, notes, saved searches, and settings stay local
         until you delete them, clear extension data, or uninstall the extension.
       </p>
-      <button className="secondary" onClick={onExport}>
+      <button className="secondary" onClick={onExport} disabled={importPending}>
         Export Local Data
       </button>
       <label className="file-picker secondary">
@@ -868,20 +966,20 @@ function PrivacyControlsPanel({
       )
       <div className="stack mini-card">
         <h3>Local Data Cleanup</h3>
-        <button className="secondary" onClick={onClearTargetPage}>
+        <button className="secondary" onClick={onClearTargetPage} disabled={importPending}>
           Clear Target Page
         </button>
-        <button className="secondary" onClick={onClearSavedSearches}>
+        <button className="secondary" onClick={onClearSavedSearches} disabled={importPending}>
           Clear Saved Searches
         </button>
-        <button className="secondary" onClick={onClearSavedJobsAndSessions}>
+        <button className="secondary" onClick={onClearSavedJobsAndSessions} disabled={importPending}>
           Clear Saved Jobs and Sessions
         </button>
-        <button className="secondary" onClick={onClearSavedProfiles}>
+        <button className="secondary" onClick={onClearSavedProfiles} disabled={importPending}>
           Clear Saved Profiles
         </button>
       </div>
-      <button className="danger danger-inline" onClick={onClearLocalData}>
+      <button className="danger danger-inline" onClick={onClearLocalData} disabled={importPending}>
         Clear Local Data
       </button>
       <p className="muted">
