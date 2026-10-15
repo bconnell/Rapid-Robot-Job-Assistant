@@ -10,6 +10,7 @@
     "validate:build-output": "node scripts/validate-build-output.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "validate:local": "npm run typecheck && npm test && npm run lint && npm run format && npm run build",
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:write": "prettier --write ."

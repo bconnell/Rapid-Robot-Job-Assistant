@@ -265,9 +265,11 @@ Manual checks should cover:
 13. Paste fake resume text with Freelance Software Developer and bullets, then confirm the entry is marked for review instead of missing.
 14. Confirm summary and skills text with developer-related words do not create fake experience entries.
 
-## CI
+## Local Validation And Hosted CI Availability
 
-GitHub Actions runs `npm ci`, build, tests, typecheck, lint, and format. It does not deploy or publish anything.
+Run `npm ci` and `npm run validate:local` at the exact candidate HEAD. The command runs typecheck, tests, lint, formatting, build, and build-output checks and stops on failure. Capture the exit code, commit SHA, and test summary. Do not claim these checks pass until they actually execute.
+
+GitHub Actions previously ran the same checks, but is currently unavailable because of billing. It is not an active acceptance authority. Browser extension acceptance still needs actual unpacked Chromium runtime testing with isolated fake data, and must not be inferred from a successful local Node build.
 
 ## Future Browser Automation
 

@@ -40,7 +40,7 @@
 - Profile value resolution fills only saved values and does not invent missing data.
 - Local export is implemented with a privacy warning.
 - Import validates JSON, previews record counts, and requires confirmation before atomic additive restoration. Collisions prevent all writes.
-- CI runs install, build, test, typecheck, lint, and format.
+- The previous CI definition runs install, build, test, typecheck, lint, and format, but hosted Actions are currently unavailable. The equivalent local gate is `npm run validate:local`.
 
 ## Options UI And Resume Parsing Hardening Completed
 

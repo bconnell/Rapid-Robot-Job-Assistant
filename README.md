@@ -20,6 +20,7 @@ Newest changes are listed first.
 - Settings and active profile selection remain unchanged, and non-exported stores are untouched.
 - Imported profiles can be selected in Options; new profiles cannot silently overwrite an unselected imported record.
 - Local builds, automated tests, and unpacked-browser QA remain required before release.
+- Fixed the preview-button JSX closure and separated successful import commit from a later Options refresh failure.
 
 ### 2026-07-26. Session Lifecycle And Stored-Record Integrity
 
@@ -213,13 +214,16 @@ Run tests:
 npm test
 ```
 
-Run type checking and linting:
+Run all local executable gates without GitHub Actions:
 
 ```bash
-npm run typecheck
-npm run lint
-npm run format
+npm ci
+npm run validate:local
 ```
+
+The combined gate runs typecheck, tests, lint, formatting, build, and output validation. It stops on the first failure. Use a separate isolated browser profile for unpacked extension acceptance, which is not replaced by this gate.
+
+Individual checks are also available: `npm run typecheck`, `npm run lint`, and `npm run format`.
 
 ## Load The Extension In Chrome
 

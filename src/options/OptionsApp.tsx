@@ -28,7 +28,8 @@ import {
   isValidSavedSearchRecord,
   isValidUserProfileRecord,
   validateLocalDataImport,
-  type LocalDataExport
+  type LocalDataExport,
+  type ImportPreview
 } from '../shared/data/LocalDataTransfer';
 import { importLocalDataAdditively } from '../shared/data/LocalDataImportService';
 import { clearTargetTab } from '../shared/extension/TargetPageTracker';
@@ -163,13 +164,13 @@ export function OptionsApp() {
       importedAt: new Date().toISOString(),
       warnings: parsed.warnings
     };
-    setProfile(nextProfile);
-    setParseSummary(parsed.summary);
-    setWarnings(parsed.summary.needsReview);
     if (!activeProfileId && (await profileRepo.get(nextProfile.id))) {
       nextProfile.id = crypto.randomUUID();
     }
     await Promise.all([profileRepo.save(nextProfile), resumeRepo.save(resumeDocument)]);
+    setProfile(nextProfile);
+    setParseSummary(parsed.summary);
+    setWarnings(parsed.summary.needsReview);
     setSavedProfiles((await profileRepo.list()).filter(isValidUserProfileRecord));
     await settingsRepo.setActiveProfileId(nextProfile.id);
     setActiveProfileId(nextProfile.id);
@@ -352,11 +353,22 @@ export function OptionsApp() {
       )
     ) return;
     setImportPending(true);
+    let counts: ImportPreview['counts'];
     try {
-      const counts = await importLocalDataAdditively(validatedImport);
-      ++importGeneration.current;
-      setValidatedImport(undefined);
-      setImportPreview('');
+      counts = await importLocalDataAdditively(validatedImport);
+    } catch (error) {
+      setStatus(
+        error instanceof Error
+          ? 'Import cancelled: ' + error.message
+          : 'Import failed. Existing data was preserved.'
+      );
+      setImportPending(false);
+      return;
+    }
+    ++importGeneration.current;
+    setValidatedImport(undefined);
+    setImportPreview('');
+    try {
       await loadOptions();
       setStatus(
         'Imported ' + counts.profiles + ' profiles, ' + counts.savedSearches +
@@ -364,12 +376,8 @@ export function OptionsApp() {
           counts.applicationSessions +
           ' sessions. Active profile and settings were not changed.'
       );
-    } catch (error) {
-      setStatus(
-        error instanceof Error
-          ? 'Import cancelled: ' + error.message
-          : 'Import failed. Existing data was preserved.'
-      );
+    } catch {
+      setStatus('The backup was imported successfully, but the options view could not refresh. Reopen Options to reload the data.');
     } finally {
       setImportPending(false);
     }
@@ -963,7 +971,7 @@ function PrivacyControlsPanel({
         <button className="secondary" onClick={onRestoreImport} disabled={importPending}>
           {importPending ? 'Importing Local Data...' : 'Restore Validated Data'}
         </button>
-      )
+      )}
       <div className="stack mini-card">
         <h3>Local Data Cleanup</h3>
         <button className="secondary" onClick={onClearTargetPage} disabled={importPending}>
