@@ -16,7 +16,7 @@ Newest changes are listed first.
 
 - Options previews a local JSON backup and requests separate confirmation before importing.
 - Export reads a coherent IndexedDB snapshot and verifies the import contract before offering the backup file.
-- Clearing IndexedDB data uses one transaction, so a later store clear failure rolls back earlier clears.
+- Clearing IndexedDB data uses one transaction, so a later store clear failure rolls back earlier clears. Full cleanup retains Chrome settings when that database operation fails and reports later cross-storage cleanup failures.
 - Import adds profiles, saved searches, jobs, and sessions in one IndexedDB transaction.
 - Existing IDs or storage failures cancel the restore without overwriting existing data.
 - Settings and active profile selection remain unchanged, and non-exported stores are untouched.

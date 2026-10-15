@@ -88,7 +88,7 @@ Resume parsing is local and review-first. The parser normalizes text, detects se
 
 ## Export And Import
 
-Export reads the four supported record collections in one IndexedDB snapshot before validating the exported records. Cleanup of all IndexedDB stores is transactional so a failed individual store clear rolls back the entire database clear. Browser settings clearing is separate and is not part of that database transaction.
+Export reads the four supported record collections in one IndexedDB snapshot before validating the exported records. Cleanup of all IndexedDB stores is transactional so a failed individual store clear rolls back the entire database clear. Browser settings clearing is separate and is not part of that database transaction. Full cleanup attempts the atomic database clear first to preserve browser settings and target-page state when that operation fails. If a later browser-storage operation fails, cleanup reports partial completion rather than implying all state was cleared.
 
 Export creates `rapid-robot-job-assistant-export.json`. It can contain private profile, resume-derived, job, saved search, and application session data. Do not commit exported files.
 

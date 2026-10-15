@@ -393,9 +393,29 @@ export function OptionsApp() {
       'Clear local extension settings, profiles, saved jobs, searches, and sessions?'
     );
     if (!confirmed) return;
-    await settingsRepo.clearSettings();
-    await clearTargetTab();
-    await clearAllIndexedDbData();
+    // Clear the transactional database first. On database failure, keep the
+    // independent Chrome settings and remembered target intact.
+    try {
+      await clearAllIndexedDbData();
+    } catch {
+      setStatus(
+        'Local cleanup failed. IndexedDB changes were rolled back; browser settings were preserved.'
+      );
+      return;
+    }
+
+    // Chrome storage and tab tracking are independent persistence systems.
+    // Never report the entire cleanup as complete if either step fails.
+    try {
+      await settingsRepo.clearSettings();
+      await clearTargetTab();
+    } catch {
+      setStatus(
+        'Saved database records were cleared, but some browser settings or target-page data ' +
+          'could not be cleared. Reopen Options and retry cleanup.'
+      );
+      return;
+    }
     setSettings(defaultSettings);
     setProfile(emptyUserProfile());
     setActiveProfileId(undefined);

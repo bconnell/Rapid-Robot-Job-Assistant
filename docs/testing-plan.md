@@ -286,6 +286,8 @@ Browser automation may be useful later for controlled extension QA. It should no
 6. Confirm a page with no fields does not create an empty application session.
 7. Confirm clearing profiles preserves unrelated settings.
 8. Confirm clearing all local data also clears the remembered target page.
+9. Inject a failure in a later IndexedDB clear and verify earlier clears roll back, browser settings and remembered target remain unchanged, and the UI reports a failure.
+10. Inject a Chrome settings or target-page cleanup failure after a database clear and verify the UI reports partial cleanup rather than success.
 9. Open the full assistant against a remembered target that has not loaded the content script and confirm the target is checked by id rather than compared with the assistant tab.
 
 ## Target And Data Boundary QA
