@@ -27,6 +27,7 @@ import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
 import { isMeaningfulJobPosting } from '../shared/jobs/JobPostingValidation';
 import { createLocalTailoringSuggestions } from '../shared/ai/TailoringService';
 import { isSamePageUrl, normalizePageUrl } from '../shared/extension/PageCommandIntegrity';
+import { safeSendBackgroundMessage } from '../shared/extension/SafeBackgroundCommand';
 import {
   isValidApplicationSessionRecord,
   isValidJobPostingRecord,
@@ -93,7 +94,7 @@ export function SidePanelApp() {
 
   async function loadTabStatus() {
     const requestId = ++loadSequence.current;
-    const result = (await chrome.runtime.sendMessage({
+    const result = (await safeSendBackgroundMessage({
       command: 'GET_CURRENT_TAB_STATUS'
     })) as ExtensionCommandResult<TabCapabilityResult>;
     if (requestId !== loadSequence.current) return;
@@ -158,7 +159,7 @@ export function SidePanelApp() {
   }
 
   async function analyzeJob() {
-    const result = (await chrome.runtime.sendMessage({
+    const result = (await safeSendBackgroundMessage({
       command: 'ANALYZE_CURRENT_JOB_PAGE'
     })) as ExtensionCommandResult<{ job?: JobPosting; verification?: { detected?: boolean } }>;
     if (!result.ok) {
@@ -183,7 +184,7 @@ export function SidePanelApp() {
   }
 
   async function analyzeFields() {
-    const result = (await chrome.runtime.sendMessage({
+    const result = (await safeSendBackgroundMessage({
       command: 'ANALYZE_APPLICATION_FIELDS'
     })) as ExtensionCommandResult<{
       pageUrl?: string;
@@ -311,7 +312,7 @@ export function SidePanelApp() {
       return;
     }
 
-    const result = (await chrome.runtime.sendMessage({
+    const result = (await safeSendBackgroundMessage({
       command: 'FILL_APPROVED_FIELDS',
       payload: { pageUrl, preview: requestPreview }
     })) as ExtensionCommandResult<FillApprovedFieldsResponse>;
@@ -367,7 +368,7 @@ export function SidePanelApp() {
   }
 
   async function useCurrentPage() {
-    const result = (await chrome.runtime.sendMessage({
+    const result = (await safeSendBackgroundMessage({
       command: 'USE_CURRENT_PAGE'
     })) as ExtensionCommandResult;
     setStatus(
