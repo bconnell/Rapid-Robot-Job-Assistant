@@ -198,6 +198,41 @@ describe('additive local data import', () => {
     expect(await new ApplicationSessionRepository().list()).toEqual([]);
   });
 
+  it('rolls back every earlier store if the final suggestion store fails', async () => {
+    const incoming = {
+      ...backup(),
+      tailoringSuggestions: [{
+        id: 'synthetic-suggestion',
+        originalText: '',
+        suggestedText: 'Review the saved experience section',
+        reason: 'Local suggestions must remain truthful',
+        matchedJobKeywords: [],
+        riskLevel: 'low' as const,
+        status: 'suggested' as const
+      }]
+    };
+    const originalPut = IDBObjectStore.prototype.put;
+    const injected = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(
+      function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+        if (this.name === 'tailoringSuggestions') {
+          throw new DOMException('Injected last-store failure', 'QuotaExceededError');
+        }
+        return originalPut.call(this, value, key);
+      }
+    );
+    try {
+      await expect(importLocalDataAdditively(incoming)).rejects.toThrow(
+        /Injected last-store failure/
+      );
+    } finally {
+      injected.mockRestore();
+    }
+    expect(await new ProfileRepository().list()).toEqual([]);
+    expect(await new JobPostingRepository().list()).toEqual([]);
+    expect(await new ApplicationSessionRepository().list()).toEqual([]);
+    expect(await new IndexedDbRepository('tailoringSuggestions').getAll()).toEqual([]);
+  });
+
   it('rejects a late collection ID collision without partially inserting earlier stores', async () => {
     const existingJobs = new JobPostingRepository();
     const existingJob = { ...job, title: 'Existing retained job' };
