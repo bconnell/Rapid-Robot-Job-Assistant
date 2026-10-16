@@ -317,7 +317,13 @@ export function SidePanelApp() {
       payload: { pageUrl, preview: requestPreview }
     })) as ExtensionCommandResult<FillApprovedFieldsResponse>;
     if (!result.ok) {
-      await handleCommandFailure(result);
+      // The page may have changed before the worker returned an error. A fill
+      // request is not safe to replay without fresh analysis and approval.
+      clearSessionBoundState();
+      setStatus(
+        (result.userMessage ?? 'The fill result could not be verified.') +
+          ' Inspect the form manually before analyzing it again.'
+      );
       return;
     }
 
