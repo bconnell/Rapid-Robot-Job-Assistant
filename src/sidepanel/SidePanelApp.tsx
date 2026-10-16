@@ -26,7 +26,11 @@ import {
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
 import { isMeaningfulJobPosting } from '../shared/jobs/JobPostingValidation';
 import { createLocalTailoringSuggestions } from '../shared/ai/TailoringService';
-import { isSamePageUrl, normalizePageUrl } from '../shared/extension/PageCommandIntegrity';
+import {
+  canSaveJobFromSender,
+  isSamePageUrl,
+  normalizePageUrl
+} from '../shared/extension/PageCommandIntegrity';
 import { safeSendBackgroundMessage } from '../shared/extension/SafeBackgroundCommand';
 import {
   isValidApplicationSessionRecord,
@@ -171,6 +175,14 @@ export function SidePanelApp() {
     if (!analyzed || !isValidJobPostingRecord(analyzed) || !isMeaningfulJobPosting(analyzed)) {
       setJob(undefined);
       setStatus('No reliable job data was found. Nothing was saved.');
+      return;
+    }
+    if (
+      !result.tabUrl ||
+      !canSaveJobFromSender({ tab: { url: result.tabUrl } }, analyzed.sourceUrl)
+    ) {
+      setJob(undefined);
+      setStatus('The job page changed during analysis. Nothing was saved.');
       return;
     }
     const saved = await jobRepo.saveOrUpdate({ ...analyzed, status: 'saved' });
