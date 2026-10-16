@@ -76,6 +76,30 @@ afterEach(() => {
 });
 
 describe('in-page assistant controller hardening', () => {
+  it('opens without a profile when the background profile request rejects', async () => {
+    const sendMessage = vi.fn(async (message: unknown) => {
+      const command = (message as { command?: string }).command;
+      if (command === 'GET_ACTIVE_PROFILE') {
+        throw new Error('Synthetic private worker error');
+      }
+      return { ok: true, data: undefined };
+    });
+    Object.defineProperty(globalThis, 'chrome', {
+      configurable: true,
+      value: { runtime: { id: 'test-extension', sendMessage } }
+    });
+
+    await expect(openInPageAssistant()).resolves.toMatchObject({ opened: true });
+    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    expect(shadow?.textContent).toContain('Profile needed before fill');
+    expect(shadow?.textContent).not.toContain('Synthetic private worker error');
+    expect(
+      sendMessage.mock.calls.filter(
+        ([message]) => (message as { command?: string }).command === 'GET_ACTIVE_PROFILE'
+      )
+    ).toHaveLength(1);
+  });
+
   it('restores a minimized assistant instead of leaving the panel hidden', async () => {
     await openInPageAssistant();
     const root = document.getElementById('rapid-robot-job-assistant-root');
