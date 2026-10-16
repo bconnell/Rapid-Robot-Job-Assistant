@@ -10,6 +10,7 @@ import { canOfferSitePermission, canRunPageCommand } from '../shared/extension/T
 import { ChromeStorageRepository } from '../shared/storage/ChromeStorageRepository';
 import { ProfileRepository } from '../shared/storage/TypedRepositories';
 import type { UserProfile } from '../shared/models/UserProfile';
+import { isValidUserProfileRecord } from '../shared/data/LocalDataTransfer';
 import {
   buildWorkflowState,
   compactWorkflowSteps,
@@ -30,48 +31,93 @@ export function PopupApp() {
   }, []);
 
   async function loadTabStatus() {
-    const result = (await chrome.runtime.sendMessage({
-      command: 'GET_CURRENT_TAB_STATUS'
-    })) as ExtensionCommandResult<TabCapabilityResult>;
-    setStatus(result.data ?? result.response);
+    try {
+      const result = (await chrome.runtime.sendMessage({
+        command: 'GET_CURRENT_TAB_STATUS'
+      })) as ExtensionCommandResult<TabCapabilityResult>;
+      setStatus(result.data ?? result.response);
+      if (!result.ok) setMessage(result.userMessage ?? 'Could not read the current page.');
+    } catch {
+      setStatus(undefined);
+      setMessage('Could not reach the extension background process. Reload the extension.');
+    }
   }
 
   async function loadProfileStatus() {
-    const storage = new ChromeStorageRepository();
-    const profileId = await storage.getActiveProfileId();
-    const active = profileId ? await new ProfileRepository().get(profileId) : undefined;
-    setProfile(active);
+    try {
+      const storage = new ChromeStorageRepository();
+      const profileId = await storage.getActiveProfileId();
+      const active = profileId ? await new ProfileRepository().get(profileId) : undefined;
+      if (active && !isValidUserProfileRecord(active)) {
+        setProfile(undefined);
+        setMessage('The active profile was invalid. Review saved profiles in Options.');
+        return;
+      }
+      setProfile(active);
+      if (profileId && !active) {
+        setMessage('The active profile could not be found. Choose a saved profile in Options.');
+      }
+    } catch {
+      setProfile(undefined);
+      setMessage('Could not load saved profile data. Try reopening the extension.');
+    }
   }
 
   async function openAssistant() {
-    const result = (await chrome.runtime.sendMessage({
-      command: 'OPEN_IN_PAGE_ASSISTANT'
-    })) as ExtensionCommandResult<OpenAssistantResult>;
-    const response = result.data ?? result.response;
-    setMessage(result.userMessage ?? response?.userMessage ?? 'Assistant opened on this page.');
+    try {
+      const result = (await chrome.runtime.sendMessage({
+        command: 'OPEN_IN_PAGE_ASSISTANT'
+      })) as ExtensionCommandResult<OpenAssistantResult>;
+      const response = result.data ?? result.response;
+      setMessage(
+        result.userMessage ??
+          response?.userMessage ??
+          (result.ok ? 'Assistant opened on this page.' : 'Assistant could not open on this page.')
+      );
+    } catch {
+      setMessage('Assistant could not open. Reload the extension and try again.');
+    }
   }
 
   async function openFullAssistant() {
-    const result = (await chrome.runtime.sendMessage({
-      command: 'OPEN_ASSISTANT'
-    })) as ExtensionCommandResult<OpenAssistantResult>;
-    const response = result.data ?? result.response;
-    setMessage(result.userMessage ?? response?.userMessage ?? 'Full assistant opened.');
+    try {
+      const result = (await chrome.runtime.sendMessage({
+        command: 'OPEN_ASSISTANT'
+      })) as ExtensionCommandResult<OpenAssistantResult>;
+      const response = result.data ?? result.response;
+      setMessage(
+        result.userMessage ??
+          response?.userMessage ??
+          (result.ok ? 'Full assistant opened.' : 'Full assistant could not open.')
+      );
+    } catch {
+      setMessage('Full assistant could not open. Reload the extension and try again.');
+    }
   }
 
   async function requestSitePermission() {
-    const result = (await requestCurrentSitePermissionFromUi(status)) as PermissionRequestResult;
-    setMessage(result.userMessage);
-    await loadTabStatus();
+    try {
+      const result = (await requestCurrentSitePermissionFromUi(
+        status
+      )) as PermissionRequestResult;
+      setMessage(result.userMessage);
+      await loadTabStatus();
+    } catch {
+      setMessage('Site permission request failed. Check your browser settings.');
+    }
   }
 
-  function openProfile() {
-    chrome.runtime.openOptionsPage();
-    setMessage(
-      profile
-        ? 'Review your saved profile when needed.'
-        : 'Create or import a profile before filling.'
-    );
+  async function openProfile() {
+    try {
+      await chrome.runtime.openOptionsPage();
+      setMessage(
+        profile
+          ? 'Review your saved profile when needed.'
+          : 'Create or import a profile before filling.'
+      );
+    } catch {
+      setMessage('Options could not be opened. Open it from the extension management page.');
+    }
   }
 
   const canAnalyze = canRunPageCommand(status);
