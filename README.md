@@ -186,6 +186,8 @@ Newest changes are listed first.
 
 Known limitations are documented in [docs/roadmap.md](docs/roadmap.md).
 
+The consolidated product release gate is [docs/completeness-release-gate.md](docs/completeness-release-gate.md). Manual user acceptance is deferred until the build is actually complete and independently validated.
+
 ## Public Repo Privacy Warning
 
 This repository is public. Do not commit real resumes, real profile data, real job application data, browser storage dumps, cookies, tokens, API keys, logs with private data, or generated exports. Fixtures must be fake and clearly safe for public use.
