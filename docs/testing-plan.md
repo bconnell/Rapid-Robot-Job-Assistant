@@ -13,6 +13,7 @@ Current unit and regression coverage includes:
 - Profile value resolution
 - Fill approval defaults
 - Transactional backup snapshots and atomic multi-store local cleanup with failure-injection rollback
+- Concurrent job analyses must deduplicate under one IndexedDB write lock; duplicate imported session URLs must resolve to the most recent history
 - Export size enforcement against the 5 MB import boundary; oversized files must never be downloaded as restorable backups
 - Version-two seven-store export round-trip validation (including required collection presence and duplicate IDs), legacy version-one four-store compatibility, and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write-failure rollback
 - Saved search creation and manual check status

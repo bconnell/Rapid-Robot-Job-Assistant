@@ -64,6 +64,52 @@ describe('typed repositories', () => {
     expect(await repo.list()).toHaveLength(1);
   });
 
+  it('atomically deduplicates simultaneous job saves', async () => {
+    const repo = new JobPostingRepository();
+    const job: JobPosting = {
+      id: 'competing-job-a',
+      title: 'Frontend Engineer',
+      company: 'Example Company',
+      location: 'Remote',
+      descriptionText: 'Build safe local tools.',
+      detectedKeywords: ['TypeScript'],
+      sourceUrl: 'https://jobs.example.test/456',
+      sourceSite: 'jobs.example.test',
+      dateFound: '2026-10-15T00:00:00.000Z'
+    };
+    const results = await Promise.all([
+      repo.saveOrUpdate(job),
+      repo.saveOrUpdate({ ...job, id: 'competing-job-b' })
+    ]);
+    expect(await repo.list()).toHaveLength(1);
+    expect(results.filter((result) => result.created)).toHaveLength(1);
+    expect(results[0].job.id).toBe(results[1].job.id);
+  });
+
+  it('returns the latest stored session for duplicate application page URLs', async () => {
+    const repo = new ApplicationSessionRepository();
+    const first: ApplicationSession = {
+      id: 'session-old',
+      pageUrl: 'https://apply.example.test/role',
+      startedAt: '2026-10-14T00:00:00.000Z',
+      updatedAt: '2026-10-14T00:00:00.000Z',
+      fieldPreview: [],
+      fillResults: [],
+      manualVerificationRequired: false,
+      notes: 'Older history',
+      status: 'draft',
+      submittedByUser: false
+    };
+    await repo.save(first);
+    await repo.save({
+      ...first,
+      id: 'session-new',
+      notes: 'Most recent history',
+      updatedAt: '2026-10-15T00:00:00.000Z'
+    });
+    expect((await repo.findByPageUrl(first.pageUrl))?.notes).toBe('Most recent history');
+  });
+
   it('saves searches and application sessions', async () => {
     const searchRepo = new SavedSearchRepository();
     const sessionRepo = new ApplicationSessionRepository();
