@@ -602,7 +602,15 @@ function emptyPreview(errors: string[]): ImportPreview {
   return {
     valid: false,
     errors,
-    counts: { profiles: 0, savedSearches: 0, jobPostings: 0, applicationSessions: 0 }
+    counts: {
+      profiles: 0,
+      savedSearches: 0,
+      jobPostings: 0,
+      applicationSessions: 0,
+      resumeDocuments: 0,
+      fieldMappings: 0,
+      tailoringSuggestions: 0
+    }
   };
 }
 
