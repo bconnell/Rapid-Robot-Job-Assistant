@@ -14,7 +14,7 @@ Current unit and regression coverage includes:
 - Fill approval defaults
 - Transactional backup snapshots and atomic multi-store local cleanup with failure-injection rollback
 - Export size enforcement against the 5 MB import boundary; oversized files must never be downloaded as restorable backups
-- Local export round-trip validation (including duplicate embedded IDs) and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write failure rollback
+- Seven-store export round-trip validation (including duplicate IDs), legacy four-store compatibility, and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write-failure rollback
 - Saved search creation and manual check status
 - Typed IndexedDB repositories
 - Resume text normalization for collapsed `.docx`-style text
@@ -326,11 +326,11 @@ Browser automation may be useful later for controlled extension QA. It should no
 
 ## Additive Backup Restore QA
 
-1. Export fake profiles, searches, jobs, and sessions from Options.
-2. In a fresh test browser profile, preview and confirm the exported record counts.
+1. Export fake profiles, searches, jobs, sessions, saved resume text, field mappings, and tailoring suggestions from Options.
+2. In a fresh isolated browser profile, preview and confirm counts for all seven collections. Repeat with a legacy four-collection backup.
 3. Verify invalid or oversized files cannot enable the restore action.
 4. Cancel the confirmation and verify local data is unchanged.
-5. Confirm restore, restart the extension, and verify all exported records are present.
+5. Confirm restore, restart the extension, and verify all seven exported collections are present and exact.
 6. Confirm local settings and active profile selection have not changed.
 7. Choose an imported saved profile explicitly, verify it becomes active, and restart to verify persistence.
 8. Start a new profile and confirm saving it cannot replace an unselected imported profile.

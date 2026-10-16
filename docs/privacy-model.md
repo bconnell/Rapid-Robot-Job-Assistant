@@ -88,13 +88,13 @@ Resume parsing is local and review-first. The parser normalizes text, detects se
 
 ## Export And Import
 
-Export reads the four supported record collections in one IndexedDB snapshot before validating the exported records. Cleanup of all IndexedDB stores is transactional so a failed individual store clear rolls back the entire database clear. Browser settings clearing is separate and is not part of that database transaction. Full cleanup attempts the atomic database clear first to preserve browser settings and target-page state when that operation fails. If a later browser-storage operation fails, cleanup reports partial completion rather than implying all state was cleared.
+Export reads all seven IndexedDB record collections in one consistent snapshot before validating the exported records. Cleanup of all IndexedDB stores is transactional so a failed individual store clear rolls back the entire database clear. Browser settings clearing is separate and is not part of that database transaction. Full cleanup attempts the atomic database clear first to preserve browser settings and target-page state when that operation fails. If a later browser-storage operation fails, cleanup reports partial completion rather than implying all state was cleared.
 
-The supported record backup is limited to 5 MB for both export and import. An oversized export is refused without modifying stored records. Larger backup support is still incomplete. The file is a backup of supported record collections, not a full copy of every item in extension storage. It omits local resume documents, field mappings, tailoring suggestions, browser settings, and the active profile selection. The user interface identifies this scope before export and advises against deleting excluded data on the assumption that it can be restored from this file.
+The supported record backup is limited to 5 MB for both export and import. An oversized export is refused without modifying stored records. Larger backup support is still incomplete. The file is a backup of supported record collections, not a full copy of every item in extension storage. It contains saved resume text, field mappings, and tailoring suggestions as well as profiles, searches, jobs, and application sessions. Browser settings and the active profile selection are excluded; neither is silently changed by a restore. The user interface identifies this scope before export and advises against deleting excluded data on the assumption that it can be restored from this file.
 
 Export creates `rapid-robot-job-assistant-export.json`. It can contain private profile, resume-derived, job, saved search, and application session data. Do not commit exported files.
 
-Import requires the full expected collection envelope, rejects unsupported top-level fields and provider secrets, and previews counts before a separate user confirmation. Restoration adds only new record IDs, atomically across the four exported collections. Collisions or write failures cancel the entire import. Settings and active profile selection are not applied. Non-exported resume documents, field mappings, and tailoring suggestions remain untouched. API endpoints and keys are not imported or exported.
+Import requires the full expected collection envelope, rejects unsupported top-level fields and provider secrets, and previews counts before a separate user confirmation. Restoration adds only new record IDs, atomically across all seven exported IndexedDB stores. Older four-collection backups remain supported. Collisions or write failures cancel the entire import. Settings and active profile selection are not applied. The imported resume documents, field mappings, and tailoring suggestions are validated along with the other collections before any write. Existing records remain untouched. API endpoints and keys are not imported or exported.
 
 ## Public Repo Rule
 
@@ -126,6 +126,6 @@ Until network AI providers are implemented, stored settings are normalized back 
 
 ## Stored-Record Validation
 
-Stored profiles, saved searches, jobs, and application sessions are validated before they are returned to assistant surfaces or included in an export. Invalid records are not silently treated as trusted runtime state. HTTP and HTTPS page URLs with embedded credentials or noncanonical forms are rejected.
+Stored profiles, saved searches, jobs, sessions, resume documents, field mappings, and tailoring suggestions are validated before export. Invalid records are not silently treated as trusted runtime state. HTTP and HTTPS page URLs with embedded credentials or noncanonical forms are rejected.
 
 Import previews reject unsupported record properties as well as canonicality failures. They require bounded structured profile records, supported job status values, fill results that belong to approved preview fields with matching completion states, and consistent embedded job references.

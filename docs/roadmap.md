@@ -22,8 +22,8 @@
 - Field filling avoids file uploads and navigation.
 - Custom widgets are detected but manual-only. The extension does not click custom dropdowns.
 - Cross-origin iframe forms are not inspected. Users may need to open the frame directly or fill it manually.
-- Additive import restores new backup records only. Duplicate IDs cancel the entire import. Replacing existing records is not supported; browser settings and non-exported stores are not restored.
-- Record export is not a complete extension backup: resume documents, field mappings, tailoring suggestions, and active-profile selection remain outside the current backup schema.
+- Additive import restores new backup records only. Duplicate IDs cancel the entire import. Replacing existing records is not supported; browser settings and the active-profile selection are not restored.
+- All seven IndexedDB collections are included in a consistent record backup. Browser settings and active-profile selection remain outside the backup schema by design. Older four-store backups remain compatible.
 - The backup import/export path currently supports up to 5 MB; larger backups are not yet supported.
 - AI provider network calls are scaffolded but intentionally not executed.
 - Resume parsing is improved but still review-first. Users should verify every parsed field.
@@ -40,7 +40,7 @@
 - Application sessions persist field preview, notes, manual verification state, fill results, and user-marked status.
 - Side panel has per-field edit, approve, skip, bulk-safe approval, clear approvals, and fill-result feedback.
 - Profile value resolution fills only saved values and does not invent missing data.
-- Local export is implemented with a privacy warning.
+- Local export includes all seven IndexedDB stores with a privacy warning and a 5 MB safety limit.
 - Import validates JSON, previews record counts, and requires confirmation before atomic additive restoration. Collisions prevent all writes.
 - The previous CI definition runs install, build, test, typecheck, lint, and format, but hosted Actions are currently unavailable. The equivalent local gate is `npm run validate:local`.
 

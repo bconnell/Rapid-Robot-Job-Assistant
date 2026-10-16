@@ -17,13 +17,13 @@ Newest changes are listed first.
 - Options previews a local JSON backup and requests separate confirmation before importing.
 - Export reads a coherent IndexedDB snapshot and verifies the import contract before offering the backup file.
 - Clearing IndexedDB data uses one transaction, so a later store clear failure rolls back earlier clears. Full cleanup retains Chrome settings when that database operation fails and reports later cross-storage cleanup failures.
-- Import adds profiles, saved searches, jobs, and sessions in one IndexedDB transaction.
+- Import atomically adds profiles, saved searches, jobs, sessions, saved resume text, field mappings, and tailoring suggestions in one IndexedDB transaction.
 - Existing IDs or storage failures cancel the restore without overwriting existing data.
-- Settings and active profile selection remain unchanged, and non-exported stores are untouched.
-- The backup UI explicitly lists included and excluded collections to prevent a partial record export from being mistaken for a complete extension backup.
+- Browser settings and active profile selection remain unchanged. Older four-collection backups remain importable.
+- The backup UI lists all seven included IndexedDB stores and the intentionally excluded browser settings and active-profile selection.
 - Exports larger than the current 5 MB import limit are refused instead of creating files that cannot be restored.
 - Imported profiles can be selected in Options; new profiles cannot silently overwrite an unselected imported record.
-- Local builds, automated tests, and unpacked-browser QA remain required before release.
+- Local builds, automated tests, and unpacked-browser QA remain required before release. No manual user testing is requested for an unverified candidate.
 - Reports a committed restore as successful even if the Options view must be reopened to refresh.
 
 ### 2026-07-26. Session Lifecycle And Stored-Record Integrity
@@ -171,7 +171,7 @@ Newest changes are listed first.
 - Saved searches can be created, listed, checked manually, and deleted.
 - Job page analysis saves or updates local job records.
 - Application field analysis creates local sessions with notes, manual status, fill preview, approvals, and fill results.
-- Local data export is available with a privacy warning. Import is validation-preview only for now.
+- At this initial stage, local export was available and import was limited to a validation preview. Later revisions added confirmed restoration.
 - CI validates build, tests, typecheck, lint, and formatting on GitHub.
 
 ### 2026-05-21. Project Foundation
