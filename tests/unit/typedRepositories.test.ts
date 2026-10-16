@@ -7,6 +7,7 @@ import type { ResumeDocument } from '../../src/shared/models/ResumeDocument';
 import {
   clearAllIndexedDbData,
   clearIndexedDbStores,
+  IndexedDbRepository,
   readLocalDataSnapshot,
   saveProfileWithResume
 } from '../../src/shared/storage/IndexedDbRepository';
@@ -62,6 +63,51 @@ describe('typed repositories', () => {
     await repo.saveOrUpdate(job);
     await repo.saveOrUpdate({ ...job, id: 'job-2', sourceUrl: 'https://jobs.example.test/123' });
     expect(await repo.list()).toHaveLength(1);
+  });
+
+  it('preserves malformed historical jobs without blocking valid new saves', async () => {
+    const raw = new IndexedDbRepository('jobPostings');
+    const corrupted = { id: 'broken', title: null, sourceUrl: 42 };
+    await raw.put('broken', corrupted);
+    const repo = new JobPostingRepository();
+    const fresh: JobPosting = {
+      id: 'healthy',
+      title: 'Safe Developer',
+      descriptionText: 'Synthetic job history.',
+      detectedKeywords: [],
+      sourceUrl: 'https://jobs.example.test/role/healthy',
+      sourceSite: 'jobs.example.test',
+      dateFound: '2026-10-15T00:00:00.000Z'
+    };
+    expect((await repo.saveOrUpdate(fresh)).created).toBe(true);
+    expect(await raw.get('broken')).toEqual(corrupted);
+    expect(await repo.get(fresh.id)).toBeDefined();
+  });
+
+  it('skips malformed session URLs without blocking valid session retrieval', async () => {
+    await new IndexedDbRepository('applicationSessions').put('broken', {
+      id: 'broken',
+      pageUrl: 42
+    });
+    const good: ApplicationSession = {
+      id: 'healthy',
+      pageUrl: 'https://jobs.example.test/apply/healthy',
+      startedAt: '2026-10-15T00:00:00.000Z',
+      updatedAt: '2026-10-15T00:00:00.000Z',
+      fieldPreview: [],
+      fillResults: [],
+      manualVerificationRequired: false,
+      notes: 'Synthetic healthy history',
+      status: 'draft',
+      submittedByUser: false
+    };
+    const repo = new ApplicationSessionRepository();
+    await repo.save(good);
+    expect(await repo.findByPageUrl(good.pageUrl)).toEqual(good);
+    expect(await new IndexedDbRepository('applicationSessions').get('broken')).toEqual({
+      id: 'broken',
+      pageUrl: 42
+    });
   });
 
   it('atomically deduplicates simultaneous job saves', async () => {

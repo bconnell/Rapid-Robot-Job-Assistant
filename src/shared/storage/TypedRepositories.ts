@@ -6,6 +6,7 @@ import type { SavedSearch } from '../models/SavedSearch';
 import type { UserProfile } from '../models/UserProfile';
 import { buildJobDedupeKey } from '../jobs/JobDedupeService';
 import { normalizePageUrl } from '../extension/PageCommandIntegrity';
+import { isValidJobPostingRecord } from '../data/LocalDataTransfer';
 import { getDb, IndexedDbRepository } from './IndexedDbRepository';
 
 class TypedRepository<T> {
@@ -54,7 +55,10 @@ export class JobPostingRepository extends TypedRepository<JobPosting> {
       const store = tx.objectStore('jobPostings');
       const jobs = (await store.getAll()) as JobPosting[];
       const key = buildJobDedupeKey(job);
-      const existing = jobs.find((candidate) => buildJobDedupeKey(candidate) === key);
+      // Corrupt older local records must not prevent new valid jobs being saved.
+      const existing = jobs.find(
+        (candidate) => isValidJobPostingRecord(candidate) && buildJobDedupeKey(candidate) === key
+      );
       const saved: JobPosting = {
         ...job,
         id: existing?.id ?? job.id,
@@ -85,13 +89,19 @@ export class ApplicationSessionRepository extends TypedRepository<ApplicationSes
     const normalized = normalizePageUrl(pageUrl);
     if (!normalized) return undefined;
     const matches = (await this.list()).filter(
-      (session) => normalizePageUrl(session.pageUrl) === normalized
+      (session) =>
+        session &&
+        typeof session.pageUrl === 'string' &&
+        normalizePageUrl(session.pageUrl) === normalized
     );
-    // A restored archive may contain more than one session for the same page.
-    // Choose the most recently updated instead of IndexedDB insertion order.
-    return matches.sort((left, right) =>
-      right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id)
-    )[0];
+    // Old or damaged local records must not make history lookup throw.
+    return matches.sort((left, right) => {
+      const leftTime = typeof left.updatedAt === 'string' ? left.updatedAt : '';
+      const rightTime = typeof right.updatedAt === 'string' ? right.updatedAt : '';
+      const leftId = typeof left.id === 'string' ? left.id : '';
+      const rightId = typeof right.id === 'string' ? right.id : '';
+      return rightTime.localeCompare(leftTime) || rightId.localeCompare(leftId);
+    })[0];
   }
 }
 
