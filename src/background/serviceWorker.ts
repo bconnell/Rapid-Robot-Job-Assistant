@@ -151,6 +151,15 @@ async function handleMessage(
       };
     }
     const existing = storedExisting;
+    if (
+      !existing &&
+      (payload?.status === 'submitted-by-user' || payload?.status === 'skipped')
+    ) {
+      return {
+        ok: false,
+        userMessage: 'Analyze and save an application session before marking it completed.'
+      };
+    }
     const now = new Date().toISOString();
 
     if (payload?.fieldPreview !== undefined && !isValidFillPreviewArray(payload.fieldPreview)) {

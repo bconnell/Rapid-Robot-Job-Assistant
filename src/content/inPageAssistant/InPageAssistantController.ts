@@ -41,6 +41,7 @@ interface InPageAssistantState {
   warnings: string[];
   minimized: boolean;
   manualVerificationRequired: boolean;
+  sessionSaved: boolean;
   busy: boolean;
 }
 
@@ -98,6 +99,7 @@ export async function openInPageAssistant(): Promise<{
     warnings: [],
     minimized: false,
     manualVerificationRequired: recentSession?.manualVerificationRequired ?? false,
+    sessionSaved: Boolean(recentSession),
     busy: false
   };
   render(shadow, activeState);
@@ -368,6 +370,37 @@ function bindPanelEvents(
     });
   });
 
+  for (const status of ['submitted-by-user', 'skipped'] as const) {
+    const action = status === 'submitted-by-user' ? 'mark-submitted' : 'mark-skipped';
+    panel.querySelector<HTMLButtonElement>('[data-action="' + action + '"]')
+      ?.addEventListener('click', () => {
+        void runBusy(shadow, state, async () => {
+          if (!state.sessionSaved || !isSamePageUrl(state.pageUrl, document.location.href)) {
+            state.status = 'The application page changed. No status update was saved.';
+            return;
+          }
+          if (
+            status === 'submitted-by-user' &&
+            !window.confirm(
+              'Confirm you personally submitted this application. This extension did not submit it.'
+            )
+          ) {
+            state.status = 'Submission history was not changed.';
+            return;
+          }
+          const result = await safeSendBackgroundMessage<ApplicationSession>({
+            command: 'SAVE_APPLICATION_SESSION',
+            payload: { pageUrl: state.pageUrl, status }
+          });
+          state.status = result.ok
+            ? status === 'submitted-by-user'
+              ? 'Marked as personally submitted. No form was submitted by the extension.'
+              : 'Application marked skipped locally.'
+            : result.userMessage ?? 'Application status could not be saved.';
+        });
+      });
+  }
+
   panel.querySelectorAll<HTMLButtonElement>('[data-action="copy-suggestion"]').forEach((button) => {
     button.addEventListener('click', () => {
       void runBusy(shadow, state, async () => {
@@ -434,6 +467,7 @@ function resetForPageChange(state: InPageAssistantState): void {
   state.preview = [];
   state.fillResults = [];
   state.manualVerificationRequired = false;
+  state.sessionSaved = false;
   state.warnings = [];
   state.status = 'The page changed. Analyze this page before continuing.';
 }
@@ -522,6 +556,7 @@ function buildMarkup(state: InPageAssistantState): string {
           : ''
       }
       ${buildTailoringMarkup(state)}
+      ${buildSessionCompletionMarkup(state)}
       ${
         fields
           ? `<div class="card"><h3>Field Summary</h3><p>All ${fields} detected fields are shown. ${approvals} approved.</p>
@@ -544,6 +579,18 @@ function buildMarkup(state: InPageAssistantState): string {
           : ''
       }
     </div>`;
+}
+
+function buildSessionCompletionMarkup(state: InPageAssistantState): string {
+  if (!state.sessionSaved) return '';
+  const disabled = state.busy ? 'disabled' : '';
+  return '<div class="card"><h3>Finish Manually</h3>' +
+    '<p>Only you submit an application. These actions record your decision locally.</p>' +
+    '<div class="row">' +
+    '<button class="secondary" data-action="mark-submitted" ' + disabled +
+    '>Mark Submitted By Me</button>' +
+    '<button class="secondary" data-action="mark-skipped" ' + disabled +
+    '>Mark Skipped</button></div></div>';
 }
 
 function buildTailoringMarkup(state: InPageAssistantState): string {
@@ -701,6 +748,7 @@ async function persistApplicationSession(
       ].filter(uniqueOnly);
       return false;
     }
+    state.sessionSaved = true;
     return true;
   } catch {
     state.warnings = [...state.warnings, 'The application session was not saved locally.'].filter(
