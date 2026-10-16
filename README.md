@@ -168,7 +168,7 @@ Newest changes are listed first.
 
 - `.docx` resume import is wired into Options.
 - Parsed profiles can be reviewed, edited, saved, and loaded as the active profile.
-- Saved searches can be created, listed, checked manually, and deleted.
+- Saved searches can be created, opened in a new tab, marked reviewed after manual inspection, listed, and deleted.
 - Job page analysis saves or updates local job records.
 - Application field analysis creates local sessions with notes, manual status, fill preview, approvals, and fill results.
 - At this initial stage, local export was available and import was limited to a validation preview. Later revisions added confirmed restoration.

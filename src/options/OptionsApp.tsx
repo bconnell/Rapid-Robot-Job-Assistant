@@ -17,7 +17,7 @@ import {
   parseResumeSections,
   type ResumeParseSummary
 } from '../shared/parsing/ResumeSectionParser';
-import { createSavedSearch, markSavedSearchChecked } from '../shared/jobs/SavedSearchService';
+import { createSavedSearch, markSavedSearchChecked, normalizeSavedSearchUrl } from '../shared/jobs/SavedSearchService';
 import {
   createLocalDataExport,
   isValidApplicationSessionRecord,
@@ -144,7 +144,8 @@ export function OptionsApp() {
     const parsed = parseResumeSections(text);
     const nextProfile = {
       ...parsed.profile,
-      id: profile.id || parsed.profile.id,
+      // Importing a new resume must not silently replace an existing active profile.
+      id: crypto.randomUUID(),
       updatedAt: new Date().toISOString()
     };
     if (!isValidUserProfileRecord(nextProfile)) {
@@ -159,9 +160,6 @@ export function OptionsApp() {
       importedAt: new Date().toISOString(),
       warnings: parsed.warnings
     };
-    if (!activeProfileId && (await profileRepo.get(nextProfile.id))) {
-      nextProfile.id = crypto.randomUUID();
-    }
     try {
       await saveProfileWithResume(nextProfile, resumeDocument);
     } catch {
@@ -269,20 +267,48 @@ export function OptionsApp() {
     }
   }
 
+  async function openSearch(search: SavedSearch) {
+    try {
+      const safeUrl = normalizeSavedSearchUrl(search.url);
+      if (safeUrl !== search.url) {
+        setStatus('Saved search URL failed validation. It was not opened.');
+        return;
+      }
+      await chrome.tabs.create({ url: safeUrl, active: true });
+      setStatus('Search opened in a new tab. Review the listings before marking it checked.');
+    } catch {
+      setStatus('Could not open the saved search. Check the URL or browser permissions.');
+    }
+  }
+
   async function checkSearch(search: SavedSearch) {
-    const updated = markSavedSearchChecked(
-      search,
-      'Manual check saved. Open the search URL and analyze visible results when ready.'
-    );
-    await searchRepo.save(updated);
-    setSavedSearches((await searchRepo.list()).filter(isValidSavedSearchRecord));
-    setStatus('Manual saved-search check recorded. No background crawling was run.');
+    try {
+      const latest = await searchRepo.get(search.id);
+      if (!latest || !isValidSavedSearchRecord(latest)) {
+        setStatus('Saved search was unavailable or invalid. Nothing was marked reviewed.');
+        return;
+      }
+      const updated = markSavedSearchChecked(
+        latest,
+        'Manually reviewed. No background crawling was run.'
+      );
+      await searchRepo.save(updated);
+      setSavedSearches((await searchRepo.list()).filter(isValidSavedSearchRecord));
+      setStatus('Saved search marked reviewed. No background crawling was run.');
+    } catch {
+      setStatus('Could not save the review status. Existing search history was preserved.');
+    }
   }
 
   async function deleteSearch(id: string) {
-    await searchRepo.delete(id);
-    setSavedSearches((await searchRepo.list()).filter(isValidSavedSearchRecord));
-    setStatus('Saved search deleted locally.');
+    if (!window.confirm('Delete this saved search from local storage?')) return;
+    try {
+      await searchRepo.delete(id);
+      setSavedSearches((await searchRepo.list()).filter(isValidSavedSearchRecord));
+      setStatus('Saved search deleted locally.');
+    } catch {
+      setStatus('Saved search could not be deleted.');
+    }
   }
 
   async function exportLocalData() {
@@ -575,6 +601,7 @@ export function OptionsApp() {
             savedSearches={savedSearches}
             onSearchFormChange={setSearchForm}
             onCreateSearch={createSearch}
+            onOpenSearch={openSearch}
             onCheckSearch={checkSearch}
             onDeleteSearch={deleteSearch}
           />
@@ -931,6 +958,7 @@ function SavedSearchesPanel({
   savedSearches,
   onSearchFormChange,
   onCreateSearch,
+  onOpenSearch,
   onCheckSearch,
   onDeleteSearch
 }: {
@@ -950,6 +978,7 @@ function SavedSearchesPanel({
     remoteOnly: boolean;
   }) => void;
   onCreateSearch: () => void;
+  onOpenSearch: (search: SavedSearch) => void;
   onCheckSearch: (search: SavedSearch) => void;
   onDeleteSearch: (id: string) => void;
 }) {
@@ -996,8 +1025,11 @@ function SavedSearchesPanel({
           <p className="muted">{search.url}</p>
           <p className="muted">{search.lastCheckStatus ?? 'Not checked yet.'}</p>
           <div className="row">
+            <button className="secondary" onClick={() => onOpenSearch(search)}>
+              Open Search
+            </button>
             <button className="secondary" onClick={() => onCheckSearch(search)}>
-              Record Manual Check
+              Mark Reviewed
             </button>
             <button className="danger" onClick={() => onDeleteSearch(search.id)}>
               Delete

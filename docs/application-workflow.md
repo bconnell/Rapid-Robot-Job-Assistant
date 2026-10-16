@@ -23,7 +23,7 @@ The assistant can analyze the current page, show field summaries, build a local 
 
 ## Profile Timing
 
-Saved profiles can be selected and explicitly activated in Options. Starting a new profile does not overwrite an unselected imported profile. Neither a backup restore nor a profile selection silently submits an application.
+Importing another resume creates a separate saved profile instead of silently replacing the active one. Saved profiles can be selected and explicitly activated in Options. Starting a new profile does not overwrite an unselected imported profile. Neither a backup restore nor a profile selection silently submits an application.
 
 A profile is not required to analyze a job page. A profile is needed before fill preview and filling because the assistant needs saved values to suggest field answers.
 
