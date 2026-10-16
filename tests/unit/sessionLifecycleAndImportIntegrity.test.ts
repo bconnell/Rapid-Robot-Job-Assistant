@@ -5,6 +5,7 @@ import {
   areFillResultsBoundToPreview,
   areFillResultsConsistentWithPreview,
   canAccessSessionPageFromSender,
+  canSaveJobFromSender,
   isValidFillPreviewArray,
   isVerifiedFillResponse,
   normalizePageUrl
@@ -86,6 +87,23 @@ function importEnvelope(overrides: Record<string, unknown> = {}) {
 }
 
 describe('session lifecycle and import integrity', () => {
+  it('rejects jobs saved under a different originating page URL', () => {
+    const original = 'https://jobs.example.test/role/1?utm_source=search#apply';
+    const canonical = 'https://jobs.example.test/role/1';
+    expect(canSaveJobFromSender({ tab: { url: original } }, canonical)).toBe(true);
+    expect(
+      canSaveJobFromSender({ tab: { url: 'https://jobs.example.test/role/2' } }, canonical)
+    ).toBe(false);
+    expect(
+      canSaveJobFromSender(
+        { tab: { url: 'https://other.example.test/role/1' }, url: canonical },
+        canonical
+      )
+    ).toBe(false);
+    expect(canSaveJobFromSender({ tab: {} }, canonical)).toBe(false);
+    expect(canSaveJobFromSender({}, canonical)).toBe(true);
+  });
+
   it('binds content-script session reads and writes to the exact sending page', () => {
     const page = 'https://jobs.example.test/apply/1';
     expect(canAccessSessionPageFromSender({ tab: { url: page } }, page)).toBe(true);

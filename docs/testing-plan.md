@@ -20,6 +20,7 @@ Current unit and regression coverage includes:
 - Local wording suggestions must show in both assistant surfaces, and only supported wording may be copied; unsupported claims and missing skills remain warnings
 - Manual submission status requires explicit confirmation and matching live target-page URL. Cancelled or stale attempts must leave the saved session unchanged
 - Content-script session persistence must be bound to the exact sender tab URL, rejecting cross-page and changed-target writes without altering stored history
+- In-page job saves must bind the posting source to the originating tab, permitting only the extractor's normal tracking-parameter and fragment removal
 - Verify fill responses have a matching page, valid challenge status, bounded result structure, and only approved selectors. Invalid responses must not be reported as successful and must never cause automatic fill retries.
 - Any failed fill response must invalidate the side panel's interactive preview, require a fresh analysis and approval, and warn that some page fields may already have changed.
 - In-page completion controls must update only an already saved application session; a status-only request must not invent an empty submitted or skipped session or erase fill evidence

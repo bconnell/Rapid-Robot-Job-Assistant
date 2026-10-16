@@ -151,6 +151,34 @@ export function canAccessSessionPageFromSender(
   return typeof actualUrl === 'string' && isSamePageUrl(actualUrl, pageUrl);
 }
 
+/**
+ * Job extraction intentionally strips common tracking parameters and fragments.
+ * A content script must still only save a posting for its own exact page,
+ * even after these harmless URL decorations have been removed.
+ */
+export function canSaveJobFromSender(
+  sender: { tab?: { url?: string }; url?: string },
+  jobSourceUrl: string
+): boolean {
+  if (!sender.tab) return true;
+  const senderUrl = sender.tab.url ?? sender.url;
+  if (!senderUrl) return false;
+  const normalizedSender = normalizeJobSourceUrl(senderUrl);
+  const normalizedJob = normalizeJobSourceUrl(jobSourceUrl);
+  return Boolean(normalizedSender && normalizedJob && normalizedSender === normalizedJob);
+}
+
+function normalizeJobSourceUrl(value: string): string | undefined {
+  const normalized = normalizePageUrl(value);
+  if (!normalized) return undefined;
+  const url = new URL(normalized);
+  url.hash = '';
+  for (const name of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content']) {
+    url.searchParams.delete(name);
+  }
+  return url.href;
+}
+
 export function readFillApprovedFieldsRequest(
   value: unknown
 ): FillApprovedFieldsRequest | undefined {

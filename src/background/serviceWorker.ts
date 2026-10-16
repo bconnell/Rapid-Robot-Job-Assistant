@@ -19,6 +19,7 @@ import {
   areFillResultsBoundToPreview,
   areFillResultsConsistentWithPreview,
   canAccessSessionPageFromSender,
+  canSaveJobFromSender,
   isSamePageUrl,
   isVerifiedFillResponse,
   isValidFillPreviewArray,
@@ -126,6 +127,12 @@ async function handleMessage(
       return {
         ok: false,
         userMessage: 'The page did not contain enough reliable job information to save.'
+      };
+    }
+    if (!canSaveJobFromSender(sender, job.sourceUrl)) {
+      return {
+        ok: false,
+        userMessage: 'The job page changed. No posting was saved.'
       };
     }
     const saved = await jobRepo.saveOrUpdate({ ...job, status: 'saved' });
