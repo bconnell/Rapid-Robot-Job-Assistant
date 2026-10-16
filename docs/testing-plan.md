@@ -18,6 +18,7 @@ Current unit and regression coverage includes:
 - Background worker rejection and malformed-response tests must fail closed, redact internal errors, and never retry fill or persistence automatically
 - Verify safe local wording suggestions are shown only for saved profile skills, missing skills are warned about, and copying never fills a field or sends data to an AI provider
 - Export size enforcement against the 5 MB import boundary; oversized files must never be downloaded as restorable backups
+- Inject snapshot or download creation failure: Options must show a failure and must not claim a backup exists or change stored records
 - Version-two seven-store export round-trip validation (including required collection presence and duplicate IDs), legacy version-one four-store compatibility, and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write-failure rollback
 - Saved search creation and manual check status
 - Typed IndexedDB repositories

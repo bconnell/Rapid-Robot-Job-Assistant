@@ -89,7 +89,9 @@ export function OptionsApp() {
   const [browser, setBrowser] = useState<BrowserCompatibility>();
 
   useEffect(() => {
-    void loadOptions();
+    void loadOptions().catch(() => {
+      setStatus('Could not load local data. Reopen Options to retry.');
+    });
     void detectBrowserCompatibility().then(setBrowser);
   }, []);
 
@@ -371,64 +373,71 @@ export function OptionsApp() {
       'Exported JSON may contain private profile, resume-derived, job, and application data. Keep it out of git and shared folders.'
     );
     if (!confirmed) return;
-    const {
-      profiles,
-      savedSearches,
-      jobPostings,
-      applicationSessions,
-      resumeDocuments,
-      fieldMappings,
-      tailoringSuggestions
-    } = await readLocalDataSnapshot();
-    if (
-      !profiles.every(isValidUserProfileRecord) ||
-      !savedSearches.every(isValidSavedSearchRecord) ||
-      !jobPostings.every(isValidJobPostingRecord) ||
-      !applicationSessions.every(isValidApplicationSessionRecord) ||
-      !resumeDocuments.every(isValidResumeDocumentRecord) ||
-      !fieldMappings.every(isValidStoredFieldMappingRecord) ||
-      !tailoringSuggestions.every(isValidTailoringSuggestionRecord)
-    ) {
-      setStatus('Local data contains an invalid record. Export was stopped to avoid copying it.');
-      return;
-    }
-    const data = createLocalDataExport({
-      profiles,
-      savedSearches,
-      jobPostings,
-      applicationSessions,
-      resumeDocuments,
-      fieldMappings,
-      tailoringSuggestions,
-      settings
-    });
-    if (!validateLocalDataImport(data).valid) {
+    try {
+      const {
+        profiles,
+        savedSearches,
+        jobPostings,
+        applicationSessions,
+        resumeDocuments,
+        fieldMappings,
+        tailoringSuggestions
+      } = await readLocalDataSnapshot();
+      if (
+        !profiles.every(isValidUserProfileRecord) ||
+        !savedSearches.every(isValidSavedSearchRecord) ||
+        !jobPostings.every(isValidJobPostingRecord) ||
+        !applicationSessions.every(isValidApplicationSessionRecord) ||
+        !resumeDocuments.every(isValidResumeDocumentRecord) ||
+        !fieldMappings.every(isValidStoredFieldMappingRecord) ||
+        !tailoringSuggestions.every(isValidTailoringSuggestionRecord)
+      ) {
+        setStatus('Local data contains an invalid record. Export was stopped to avoid copying it.');
+        return;
+      }
+      const data = createLocalDataExport({
+        profiles,
+        savedSearches,
+        jobPostings,
+        applicationSessions,
+        resumeDocuments,
+        fieldMappings,
+        tailoringSuggestions,
+        settings
+      });
+      if (!validateLocalDataImport(data).valid) {
+        setStatus(
+          'Export stopped: local records cannot be restored safely. Review invalid or duplicate data.'
+        );
+        return;
+      }
+      const backup = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      if (backup.size > maxImportBytes) {
+        setStatus(
+          'Backup exceeds the 5 MB restore limit and was not downloaded. Saved records are unchanged.'
+        );
+        return;
+      }
+      const url = URL.createObjectURL(backup);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'rapid-robot-job-assistant-export.json';
+      link.hidden = true;
+      document.body.append(link);
+      try {
+        link.click();
+      } finally {
+        window.setTimeout(() => {
+          link.remove();
+          URL.revokeObjectURL(url);
+        }, 1000);
+      }
       setStatus(
-        'Export stopped: local records cannot be restored safely. Review invalid or duplicate data.'
+        'Supported record backup created. Keep the private JSON file out of shared folders.'
       );
-      return;
+    } catch {
+      setStatus('Backup could not be created. Existing local records were not changed.');
     }
-    const backup = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    if (backup.size > maxImportBytes) {
-      setStatus(
-        'Backup exceeds the 5 MB restore limit and was not downloaded. Saved records are unchanged.'
-      );
-      return;
-    }
-    const url = URL.createObjectURL(backup);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'rapid-robot-job-assistant-export.json';
-    link.hidden = true;
-    document.body.append(link);
-    link.click();
-    window.setTimeout(() => {
-      link.remove();
-      URL.revokeObjectURL(url);
-    }, 1000);
-    setStatus(
-      'Supported record backup created. Keep the private JSON file out of shared folders.'
-    );
   }
 
   async function previewImport(file?: File) {
