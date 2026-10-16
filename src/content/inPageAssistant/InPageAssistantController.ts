@@ -12,6 +12,7 @@ import {
   getBraveShieldsGuidance
 } from '../../shared/extension/BrowserCompatibility';
 import type { ExtensionCommandResult } from '../../shared/extension/ExtensionMessaging';
+import { safeSendBackgroundMessage } from '../../shared/extension/SafeBackgroundCommand';
 import type { ApplicationSession } from '../../shared/models/ApplicationSession';
 import type { FillPreviewItem, FillResult } from '../../shared/models/FieldMapping';
 import type { JobPosting } from '../../shared/models/JobPosting';
@@ -293,7 +294,12 @@ function bindPanelEvents(
   panel
     .querySelector<HTMLButtonElement>('[data-action="options"]')
     ?.addEventListener('click', () => {
-      void chrome.runtime.sendMessage({ command: 'OPEN_OPTIONS' });
+      void safeSendBackgroundMessage({ command: 'OPEN_OPTIONS' }).then((result) => {
+        if (!result.ok) {
+          state.status = result.userMessage ?? 'Could not open Options.';
+          render(shadow, state);
+        }
+      });
     });
 
   panel
@@ -611,18 +617,18 @@ function updatePreviewStatusesFromResults(
 }
 
 async function loadActiveProfile(): Promise<UserProfile | undefined> {
-  const result = (await chrome.runtime.sendMessage({
+  const result = await safeSendBackgroundMessage<UserProfile | undefined>({
     command: 'GET_ACTIVE_PROFILE'
-  })) as ExtensionCommandResult<UserProfile | undefined>;
+  });
   return result.ok ? (result.data ?? result.response) : undefined;
 }
 
 async function loadRecentSession(pageUrl: string): Promise<ApplicationSession | undefined> {
   try {
-    const result = (await chrome.runtime.sendMessage({
+    const result = await safeSendBackgroundMessage<ApplicationSession | undefined>({
       command: 'GET_RECENT_SESSION_FOR_PAGE',
       payload: { pageUrl }
-    })) as ExtensionCommandResult<ApplicationSession | undefined>;
+    });
     return result.ok ? (result.data ?? result.response) : undefined;
   } catch {
     return undefined;
@@ -630,10 +636,10 @@ async function loadRecentSession(pageUrl: string): Promise<ApplicationSession | 
 }
 
 async function saveAnalyzedJob(job: JobPosting): Promise<ExtensionCommandResult<JobPosting>> {
-  return (await chrome.runtime.sendMessage({
+  return safeSendBackgroundMessage<JobPosting>({
     command: 'SAVE_ANALYZED_JOB',
     payload: job
-  })) as ExtensionCommandResult<JobPosting>;
+  });
 }
 
 async function persistApplicationSession(
@@ -657,10 +663,10 @@ async function persistApplicationSession(
       .catch(() => undefined)
       .then(
         () =>
-          chrome.runtime.sendMessage({
+          safeSendBackgroundMessage<ApplicationSession>({
             command: 'SAVE_APPLICATION_SESSION',
             payload
-          }) as Promise<ExtensionCommandResult<ApplicationSession>>
+          })
       );
     sessionWriteChain = write.then(() => undefined);
     const result = await write;
