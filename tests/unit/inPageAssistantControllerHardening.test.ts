@@ -175,6 +175,56 @@ describe('in-page assistant controller hardening', () => {
     ).toBe(false);
   });
 
+  it('records a manual skip without rewriting saved fill-preview evidence', async () => {
+    document.body.innerHTML =
+      '<main><h1>Developer Application</h1><form>' +
+      '<label for="email">Email</label><input id="email" type="email" name="email" />' +
+      '</form></main>';
+    await openInPageAssistant();
+    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')?.click();
+    await flushAsyncWork();
+
+    const button = shadow?.querySelector<HTMLButtonElement>('[data-action="mark-skipped"]');
+    expect(button).toBeTruthy();
+    button?.click();
+    await flushAsyncWork();
+
+    const statusMessages = messages.filter(
+      (message) =>
+        (message as { command?: string; payload?: { status?: string } }).command ===
+          'SAVE_APPLICATION_SESSION' &&
+        (message as { payload?: { status?: string } }).payload?.status === 'skipped'
+    );
+    expect(statusMessages).toHaveLength(1);
+    const payload = (statusMessages[0] as { payload: Record<string, unknown> }).payload;
+    expect(payload).toHaveProperty('pageUrl');
+    expect(payload).not.toHaveProperty('fieldPreview');
+    expect(payload).not.toHaveProperty('fillResults');
+  });
+
+  it('does not mark an application submitted when confirmation is declined', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    document.body.innerHTML =
+      '<main><form><label for="email">Email</label><input id="email" type="email" /></form></main>';
+    await openInPageAssistant();
+    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')?.click();
+    await flushAsyncWork();
+    expect(shadow?.querySelector('[data-action="mark-submitted"]')).toBeTruthy();
+    shadow?.querySelector<HTMLButtonElement>('[data-action="mark-submitted"]')?.click();
+    await flushAsyncWork();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(
+      messages.some(
+        (message) =>
+          (message as { command?: string; payload?: { status?: string } }).command ===
+            'SAVE_APPLICATION_SESSION' &&
+          (message as { payload?: { status?: string } }).payload?.status === 'submitted-by-user'
+      )
+    ).toBe(false);
+  });
+
   it('allows suggested values to be edited before individual approval', async () => {
     document.body.innerHTML =
       '<main><h1>Software Engineer</h1><form><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" /></form></main>';
