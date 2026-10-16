@@ -52,6 +52,63 @@ describe('LocalDataTransfer', () => {
     expect(validateLocalDataImport({ schemaVersion: 1 }).valid).toBe(false);
   });
 
+  it('rejects unsafe records in added backup stores', () => {
+    const safe = createLocalDataExport({
+      profiles: [],
+      savedSearches: [],
+      jobPostings: [],
+      applicationSessions: [],
+      settings: {
+        localOnlyMode: true,
+        aiEnabled: false,
+        aiProvider: 'manual',
+        manualReviewRequired: true
+      }
+    });
+    expect(
+      validateLocalDataImport({
+        ...safe,
+        resumeDocuments: [{
+          id: 'resume-1',
+          sourceType: 'pasted-text',
+          text: 'Synthetic resume',
+          importedAt: '2026-10-15',
+          warnings: [],
+          unexpectedCredential: 'reject'
+        }]
+      }).valid
+    ).toBe(false);
+    expect(
+      validateLocalDataImport({
+        ...safe,
+        tailoringSuggestions: [{
+          id: 'suggestion-1',
+          originalText: '',
+          suggestedText: 'Claim an unsupported degree',
+          reason: 'Not backed by the profile',
+          matchedJobKeywords: [],
+          riskLevel: 'invented',
+          status: 'suggested'
+        }]
+      }).valid
+    ).toBe(false);
+    expect(
+      validateLocalDataImport({
+        ...safe,
+        fieldMappings: [{
+          id: 'mapping-1',
+          candidate: { selector: '#fake', tagName: 'input', options: [], required: true, visible: true },
+          kind: 'email',
+          confidence: 0.9,
+          sensitive: false,
+          fillable: true,
+          requiresDirectReview: false,
+          unknownField: 'reject'
+        }]
+      }).valid
+    ).toBe(false);
+  });
+
   it('rejects exports with duplicate embedded record IDs', () => {
     const profile = {
       id: 'example-profile',

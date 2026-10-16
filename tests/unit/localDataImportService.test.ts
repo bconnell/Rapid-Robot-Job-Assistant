@@ -5,7 +5,7 @@ import {
   validateLocalDataImport
 } from '../../src/shared/data/LocalDataTransfer';
 import { importLocalDataAdditively } from '../../src/shared/data/LocalDataImportService';
-import { clearAllIndexedDbData } from '../../src/shared/storage/IndexedDbRepository';
+import { clearAllIndexedDbData, IndexedDbRepository } from '../../src/shared/storage/IndexedDbRepository';
 import {
   ApplicationSessionRepository,
   JobPostingRepository,
@@ -83,12 +83,82 @@ describe('additive local data import', () => {
       profiles: 1,
       savedSearches: 0,
       jobPostings: 1,
-      applicationSessions: 1
+      applicationSessions: 1,
+      resumeDocuments: 0,
+      fieldMappings: 0,
+      tailoringSuggestions: 0
     });
     expect(await new ProfileRepository().get(profile.id)).toEqual(profile);
     expect(await new JobPostingRepository().get(job.id)).toEqual(job);
     expect(await new ApplicationSessionRepository().get(session.id)).toEqual(session);
     expect(await searches.get(existingSearch.id)).toEqual(existingSearch);
+  });
+
+  it('round-trips saved resume text, reviewed mappings and local suggestions', async () => {
+    const resume = {
+      id: 'fake-resume-1',
+      sourceType: 'pasted-text' as const,
+      text: 'Synthetic developer resume text for test storage.',
+      importedAt: '2026-10-15T00:00:00.000Z',
+      warnings: []
+    };
+    const mapping = {
+      id: 'fake-mapping-1',
+      candidate: {
+        selector: '#email',
+        tagName: 'input',
+        inputType: 'email',
+        options: [],
+        required: true,
+        visible: true,
+        stableSelector: true
+      },
+      kind: 'email' as const,
+      confidence: 0.96,
+      sensitive: false,
+      fillable: true,
+      requiresDirectReview: false
+    };
+    const suggestion = {
+      id: 'fake-suggestion-1',
+      originalText: 'Experience with TypeScript',
+      suggestedText: 'Experience with TypeScript',
+      reason: 'Already supported by the profile',
+      matchedJobKeywords: ['TypeScript'],
+      riskLevel: 'low' as const,
+      status: 'suggested' as const
+    };
+    const incoming = {
+      ...backup(),
+      resumeDocuments: [resume],
+      fieldMappings: [mapping],
+      tailoringSuggestions: [suggestion]
+    };
+    expect(validateLocalDataImport(incoming).valid).toBe(true);
+    expect(await importLocalDataAdditively(incoming)).toMatchObject({
+      resumeDocuments: 1,
+      fieldMappings: 1,
+      tailoringSuggestions: 1
+    });
+    expect(await new IndexedDbRepository('resumeDocuments').get(resume.id)).toEqual(resume);
+    expect(await new IndexedDbRepository('fieldMappings').get(mapping.id)).toEqual(mapping);
+    expect(await new IndexedDbRepository('tailoringSuggestions').get(suggestion.id)).toEqual(
+      suggestion
+    );
+  });
+
+  it('accepts older four-collection backups without new collections', async () => {
+    const legacy = { ...backup() };
+    delete legacy.resumeDocuments;
+    delete legacy.fieldMappings;
+    delete legacy.tailoringSuggestions;
+    expect(validateLocalDataImport(legacy).valid).toBe(true);
+    expect(await importLocalDataAdditively(legacy)).toMatchObject({
+      profiles: 1,
+      resumeDocuments: 0,
+      fieldMappings: 0,
+      tailoringSuggestions: 0
+    });
   });
 
   it('rejects invalid data before writing records', async () => {
@@ -134,6 +204,22 @@ describe('additive local data import', () => {
     await existingJobs.save(existingJob);
     await expect(importLocalDataAdditively(backup())).rejects.toThrow(/same ID/i);
     expect(await existingJobs.get(job.id)).toEqual(existingJob);
+    expect(await new ProfileRepository().list()).toEqual([]);
+    expect(await new ApplicationSessionRepository().list()).toEqual([]);
+  });
+
+  it('rolls back earlier collections if a saved resume ID collides', async () => {
+    const saved = {
+      id: 'already-there',
+      sourceType: 'pasted-text',
+      text: 'Existing synthetic resume text.',
+      importedAt: '2026-10-15T00:00:00.000Z',
+      warnings: []
+    };
+    await new IndexedDbRepository('resumeDocuments').put(saved.id, saved);
+    const incoming = { ...backup(), resumeDocuments: [{ ...saved, text: 'New resume text' }] };
+    await expect(importLocalDataAdditively(incoming)).rejects.toThrow(/same ID/i);
+    expect(await new IndexedDbRepository('resumeDocuments').get(saved.id)).toEqual(saved);
     expect(await new ProfileRepository().list()).toEqual([]);
     expect(await new ApplicationSessionRepository().list()).toEqual([]);
   });
