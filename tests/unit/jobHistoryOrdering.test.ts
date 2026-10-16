@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orderSavedJobs, orderSavedSessions } from '../../src/shared/jobs/JobHistoryOrdering';
+import { filterSavedJobs, filterSavedSessions, orderSavedJobs, orderSavedSessions } from '../../src/shared/jobs/JobHistoryOrdering';
 import type { JobPosting } from '../../src/shared/models/JobPosting';
 import type { ApplicationSession } from '../../src/shared/models/ApplicationSession';
 
@@ -30,6 +30,27 @@ describe('local history ordering', () => {
     const original = [job, { ...job, id: 'new', updatedAt: '2026-10-15T00:00:00.000Z' }];
     expect(orderSavedJobs(original).map((item) => item.id)).toEqual(['new', 'old']);
     expect(original[0].id).toBe('old');
+  });
+
+  it('filters saved postings by company or status without modifying source', () => {
+    const postings: JobPosting[] = [
+      { ...job, company: 'Example Company' },
+      { ...job, id: 'remote-role', company: 'Remote Systems', remoteStatus: 'remote' }
+    ];
+    expect(filterSavedJobs(postings, ' REMOTE ')).toHaveLength(1);
+    expect(filterSavedJobs(postings, 'example')).toHaveLength(1);
+    expect(postings).toHaveLength(2);
+  });
+
+  it('filters local session history by notes or user-marked status', () => {
+    const sessions: ApplicationSession[] = [
+      session,
+      { ...session, id: 'submitted', status: 'submitted-by-user', submittedByUser: true,
+        notes: 'Follow-up requested' }
+    ];
+    expect(filterSavedSessions(sessions, 'follow-up')).toHaveLength(1);
+    expect(filterSavedSessions(sessions, 'SUBMITTED')).toHaveLength(1);
+    expect(filterSavedSessions(sessions, 'not-present')).toHaveLength(0);
   });
 
   it('puts newest application sessions first', () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChromeStorageRepository,
   defaultSettings,
@@ -37,7 +37,12 @@ import {
   type ImportPreview
 } from '../shared/data/LocalDataTransfer';
 import { importLocalDataAdditively } from '../shared/data/LocalDataImportService';
-import { orderSavedJobs, orderSavedSessions } from '../shared/jobs/JobHistoryOrdering';
+import {
+  filterSavedJobs,
+  filterSavedSessions,
+  orderSavedJobs,
+  orderSavedSessions
+} from '../shared/jobs/JobHistoryOrdering';
 import { normalizePageUrl } from '../shared/extension/PageCommandIntegrity';
 import type { JobPosting } from '../shared/models/JobPosting';
 import type { ApplicationSession } from '../shared/models/ApplicationSession';
@@ -1127,6 +1132,9 @@ function JobHistoryPanel({
   onOpenPage: (url: string) => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(50);
+  const [query, setQuery] = useState('');
+  const matchingJobs = useMemo(() => filterSavedJobs(jobs, query), [jobs, query]);
+  const matchingSessions = useMemo(() => filterSavedSessions(sessions, query), [sessions, query]);
   return (
     <section className="card stack options-card">
       <h2>Saved Jobs and Applications</h2>
@@ -1138,9 +1146,25 @@ function JobHistoryPanel({
         <span className="pill">{sessions.length} application sessions</span>
         <button className="secondary" onClick={onRefresh}>Refresh History</button>
       </div>
+      <label>
+        Filter saved history
+        <input
+          type="search"
+          aria-label="Filter saved history"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setVisibleCount(50);
+          }}
+          placeholder="Job title, company, status, or notes"
+        />
+      </label>
+      <p className="muted">
+        Showing {matchingJobs.length} matching jobs and {matchingSessions.length} matching sessions.
+      </p>
       <h3>Job Postings</h3>
-      {jobs.length === 0 && <p className="empty-state">No saved jobs yet.</p>}
-      {jobs.slice(0, visibleCount).map((job) => (
+      {matchingJobs.length === 0 && <p className="empty-state">No matching saved jobs.</p>}
+      {matchingJobs.slice(0, visibleCount).map((job) => (
         <div className="mini-card stack" key={job.id}>
           <strong>{job.title}</strong>
           <p className="muted">
@@ -1155,8 +1179,10 @@ function JobHistoryPanel({
         </div>
       ))}
       <h3>Application Sessions</h3>
-      {sessions.length === 0 && <p className="empty-state">No saved application sessions yet.</p>}
-      {sessions.slice(0, visibleCount).map((session) => (
+      {matchingSessions.length === 0 && (
+        <p className="empty-state">No matching application sessions.</p>
+      )}
+      {matchingSessions.slice(0, visibleCount).map((session) => (
         <div className="mini-card stack" key={session.id}>
           <strong>{session.job?.title || session.pageUrl}</strong>
           <p className="muted">{session.status} | Updated {session.updatedAt}</p>
@@ -1167,7 +1193,7 @@ function JobHistoryPanel({
           </button>
         </div>
       ))}
-      {(jobs.length > visibleCount || sessions.length > visibleCount) && (
+      {(matchingJobs.length > visibleCount || matchingSessions.length > visibleCount) && (
         <button className="secondary" onClick={() => setVisibleCount((count) => count + 50)}>
           Show More History
         </button>
