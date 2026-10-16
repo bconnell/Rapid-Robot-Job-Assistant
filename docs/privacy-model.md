@@ -94,7 +94,7 @@ The supported record backup is limited to 5 MB for both export and import. An ov
 
 Export creates `rapid-robot-job-assistant-export.json`. It can contain private profile, resume-derived, job, saved search, and application session data. Do not commit exported files.
 
-Import requires the full expected collection envelope, rejects unsupported top-level fields and provider secrets, and previews counts before a separate user confirmation. Restoration adds only new record IDs, atomically across all seven exported IndexedDB stores. Older four-collection backups remain supported. Collisions or write failures cancel the entire import. Settings and active profile selection are not applied. The imported resume documents, field mappings, and tailoring suggestions are validated along with the other collections before any write. Existing records remain untouched. API endpoints and keys are not imported or exported.
+Import requires the full expected collection envelope, rejects unsupported top-level fields and provider secrets, and previews counts before a separate user confirmation. Restoration adds only new record IDs, atomically across all seven exported IndexedDB stores. Version-two backups require all seven collections. Older version-one backups containing the original four collections remain supported; a truncated new backup cannot masquerade as an older one. Collisions or write failures cancel the entire import. Settings and active profile selection are not applied. The imported resume documents, field mappings, and tailoring suggestions are validated along with the other collections before any write. Existing records remain untouched. API endpoints and keys are not imported or exported.
 
 ## Public Repo Rule
 

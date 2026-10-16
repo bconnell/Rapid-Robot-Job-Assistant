@@ -20,6 +20,7 @@ describe('LocalDataTransfer', () => {
       }
     });
 
+    expect(exported.schemaVersion).toBe(2);
     expect(exported.settings.aiEnabled).toBe(false);
     expect('aiEndpoint' in exported.settings).toBe(false);
   });
@@ -50,6 +51,29 @@ describe('LocalDataTransfer', () => {
     expect(preview.counts.profiles).toBe(1);
     expect(validateLocalDataImport({ schemaVersion: 2 }).valid).toBe(false);
     expect(validateLocalDataImport({ schemaVersion: 1 }).valid).toBe(false);
+  });
+
+  it('rejects missing seven-store collections in version two but accepts legacy version one', () => {
+    const data = createLocalDataExport({
+      profiles: [],
+      savedSearches: [],
+      jobPostings: [],
+      applicationSessions: [],
+      settings: {
+        localOnlyMode: true,
+        aiEnabled: false,
+        aiProvider: 'manual',
+        manualReviewRequired: true
+      }
+    });
+    const truncated = { ...data };
+    delete truncated.resumeDocuments;
+    expect(validateLocalDataImport(truncated).valid).toBe(false);
+    const legacy = { ...truncated, schemaVersion: 1 };
+    delete legacy.fieldMappings;
+    delete legacy.tailoringSuggestions;
+    expect(validateLocalDataImport(legacy).valid).toBe(true);
+    expect(validateLocalDataImport(data).valid).toBe(true);
   });
 
   it('rejects unsafe records in added backup stores', () => {

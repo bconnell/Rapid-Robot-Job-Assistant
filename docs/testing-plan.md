@@ -14,7 +14,7 @@ Current unit and regression coverage includes:
 - Fill approval defaults
 - Transactional backup snapshots and atomic multi-store local cleanup with failure-injection rollback
 - Export size enforcement against the 5 MB import boundary; oversized files must never be downloaded as restorable backups
-- Seven-store export round-trip validation (including duplicate IDs), legacy four-store compatibility, and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write-failure rollback
+- Version-two seven-store export round-trip validation (including required collection presence and duplicate IDs), legacy version-one four-store compatibility, and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write-failure rollback
 - Saved search creation and manual check status
 - Typed IndexedDB repositories
 - Resume text normalization for collapsed `.docx`-style text

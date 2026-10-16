@@ -23,7 +23,7 @@
 - Custom widgets are detected but manual-only. The extension does not click custom dropdowns.
 - Cross-origin iframe forms are not inspected. Users may need to open the frame directly or fill it manually.
 - Additive import restores new backup records only. Duplicate IDs cancel the entire import. Replacing existing records is not supported; browser settings and the active-profile selection are not restored.
-- All seven IndexedDB collections are included in a consistent record backup. Browser settings and active-profile selection remain outside the backup schema by design. Older four-store backups remain compatible.
+- All seven IndexedDB collections are included in a consistent record backup. Browser settings and active-profile selection remain outside the backup schema by design. Older version-one four-store backups remain compatible. Version-two exports require all seven collections.
 - The backup import/export path currently supports up to 5 MB; larger backups are not yet supported.
 - AI provider network calls are scaffolded but intentionally not executed.
 - Resume parsing is improved but still review-first. Users should verify every parsed field.

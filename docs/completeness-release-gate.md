@@ -21,7 +21,7 @@ No mass submitting, CAPTCHA circumvention, authentication bypass, remote model r
 | Explicit review and approval, exact page binding, no automatic submission | Existing implementation reviewed | **Pending** |
 | Persist and resume sessions without reusing stale fill approvals | Existing implementation reviewed | **Pending** |
 | Export a consistent snapshot of all seven IndexedDB stores | Implemented; size-limited with explicit refusal | **Pending** |
-| Preview and atomically add validated records, preserve duplicates and roll back failures | Implemented; accepts older four-collection backups | **Pending** |
+| Preview and atomically add validated records, preserve duplicates and roll back failures | Implemented; accepts older version-one four-collection backups | **Pending** |
 | Atomic targeted cleanup of profiles, searches, and job history | Implemented with transaction failure handling | **Pending** |
 | Popup, side panel, Options, restricted-page fallback, error feedback | Source inspected; popup error handling hardened | **Pending** |
 

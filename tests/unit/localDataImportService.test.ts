@@ -149,6 +149,7 @@ describe('additive local data import', () => {
 
   it('accepts older four-collection backups without new collections', async () => {
     const legacy = { ...backup() };
+    legacy.schemaVersion = 1;
     delete legacy.resumeDocuments;
     delete legacy.fieldMappings;
     delete legacy.tailoringSuggestions;
@@ -162,7 +163,7 @@ describe('additive local data import', () => {
   });
 
   it('rejects invalid data before writing records', async () => {
-    await expect(importLocalDataAdditively({ ...backup(), schemaVersion: 2 })).rejects.toThrow(
+    await expect(importLocalDataAdditively({ ...backup(), schemaVersion: 3 })).rejects.toThrow(
       /validation/i
     );
     expect(await new ProfileRepository().list()).toEqual([]);
