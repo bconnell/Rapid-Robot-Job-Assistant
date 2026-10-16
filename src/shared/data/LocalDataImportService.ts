@@ -21,11 +21,34 @@ export async function importLocalDataAdditively(input: unknown): Promise<ImportP
       store: 'applicationSessions' as const,
       label: 'application session',
       records: preview.data.applicationSessions
+    },
+    {
+      store: 'resumeDocuments' as const,
+      label: 'resume document',
+      records: preview.data.resumeDocuments ?? []
+    },
+    {
+      store: 'fieldMappings' as const,
+      label: 'field mapping',
+      records: preview.data.fieldMappings ?? []
+    },
+    {
+      store: 'tailoringSuggestions' as const,
+      label: 'tailoring suggestion',
+      records: preview.data.tailoringSuggestions ?? []
     }
   ];
   const db = await getDb();
   const tx = db.transaction(
-    ['profiles', 'savedSearches', 'jobPostings', 'applicationSessions'],
+    [
+      'profiles',
+      'savedSearches',
+      'jobPostings',
+      'applicationSessions',
+      'resumeDocuments',
+      'fieldMappings',
+      'tailoringSuggestions'
+    ],
     'readwrite'
   );
 

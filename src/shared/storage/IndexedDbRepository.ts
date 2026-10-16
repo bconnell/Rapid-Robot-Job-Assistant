@@ -2,6 +2,8 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { INDEXED_DB } from './StorageKeys';
 import type { UserProfile } from '../models/UserProfile';
 import type { ResumeDocument } from '../models/ResumeDocument';
+import type { FieldMapping } from '../models/FieldMapping';
+import type { TailoringSuggestion } from '../ai/TailoringService';
 import type { SavedSearch } from '../models/SavedSearch';
 import type { JobPosting } from '../models/JobPosting';
 import type { ApplicationSession } from '../models/ApplicationSession';
@@ -61,15 +63,10 @@ export function getDb(): Promise<IDBPDatabase<RapidRobotDb>> {
   return dbPromise;
 }
 
-const exportedStores = [
-  'profiles',
-  'savedSearches',
-  'jobPostings',
-  'applicationSessions'
-] as const;
+const exportedStores = INDEXED_DB.stores;
 
 /**
- * Reads a coherent backup snapshot across all exported collections.
+ * Reads a coherent backup snapshot across all seven IndexedDB stores.
  * The caller must still validate every record before generating the backup.
  */
 export async function readLocalDataSnapshot(): Promise<{
@@ -77,21 +74,38 @@ export async function readLocalDataSnapshot(): Promise<{
   savedSearches: SavedSearch[];
   jobPostings: JobPosting[];
   applicationSessions: ApplicationSession[];
+  resumeDocuments: ResumeDocument[];
+  fieldMappings: Array<FieldMapping & { id: string }>;
+  tailoringSuggestions: TailoringSuggestion[];
 }> {
   const db = await getDb();
   const tx = db.transaction([...exportedStores], 'readonly');
-  const [profiles, savedSearches, jobPostings, applicationSessions] = await Promise.all([
+  const [
+    profiles,
+    savedSearches,
+    jobPostings,
+    applicationSessions,
+    resumeDocuments,
+    fieldMappings,
+    tailoringSuggestions
+  ] = await Promise.all([
     tx.objectStore('profiles').getAll(),
     tx.objectStore('savedSearches').getAll(),
     tx.objectStore('jobPostings').getAll(),
-    tx.objectStore('applicationSessions').getAll()
+    tx.objectStore('applicationSessions').getAll(),
+    tx.objectStore('resumeDocuments').getAll(),
+    tx.objectStore('fieldMappings').getAll(),
+    tx.objectStore('tailoringSuggestions').getAll()
   ]);
   await tx.done;
   return {
     profiles: profiles as UserProfile[],
     savedSearches: savedSearches as SavedSearch[],
     jobPostings: jobPostings as JobPosting[],
-    applicationSessions: applicationSessions as ApplicationSession[]
+    applicationSessions: applicationSessions as ApplicationSession[],
+    resumeDocuments: resumeDocuments as ResumeDocument[],
+    fieldMappings: fieldMappings as Array<FieldMapping & { id: string }>,
+    tailoringSuggestions: tailoringSuggestions as TailoringSuggestion[]
   };
 }
 
