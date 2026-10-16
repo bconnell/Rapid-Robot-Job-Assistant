@@ -18,6 +18,7 @@ import { isCompleteApprovedFill } from '../shared/fill/FillApprovalRules';
 import {
   areFillResultsBoundToPreview,
   areFillResultsConsistentWithPreview,
+  canPersistSessionFromSender,
   isSamePageUrl,
   isValidFillPreviewArray,
   isValidFillResultArray,
@@ -142,6 +143,12 @@ async function handleMessage(
       typeof payload?.pageUrl === 'string' ? normalizePageUrl(payload.pageUrl) : undefined;
     if (!pageUrl) {
       return { ok: false, userMessage: 'No valid application page was available to save.' };
+    }
+    if (!canPersistSessionFromSender(sender, pageUrl)) {
+      return {
+        ok: false,
+        userMessage: 'The application page changed. No session data was saved.'
+      };
     }
     const storedExisting = await sessionRepo.findByPageUrl(pageUrl);
     if (storedExisting && !isValidApplicationSessionRecord(storedExisting)) {

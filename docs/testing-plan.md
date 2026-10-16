@@ -19,6 +19,7 @@ Current unit and regression coverage includes:
 - Saved history UI must display valid local jobs and sessions, support text filters and pagination, and never open a page without a direct user action
 - Local wording suggestions must show in both assistant surfaces, and only supported wording may be copied; unsupported claims and missing skills remain warnings
 - Manual submission status requires explicit confirmation and matching live target-page URL. Cancelled or stale attempts must leave the saved session unchanged
+- Content-script session persistence must be bound to the exact sender tab URL, rejecting cross-page and changed-target writes without altering stored history
 - In-page completion controls must update only an already saved application session; a status-only request must not invent an empty submitted or skipped session or erase fill evidence
 - Verify safe local wording suggestions are shown only for saved profile skills, missing skills are warned about, and copying never fills a field or sends data to an AI provider
 - Export size enforcement against the 5 MB import boundary; oversized files must never be downloaded as restorable backups

@@ -138,6 +138,19 @@ export function isSamePageUrl(expected: string, actual: string): boolean {
   return Boolean(expectedUrl && actualUrl && expectedUrl === actualUrl);
 }
 
+/**
+ * Extension-owned views can edit a saved session. A content script, however,
+ * must only save a session belonging to the exact page that sent the message.
+ */
+export function canPersistSessionFromSender(
+  sender: { tab?: { url?: string }; url?: string },
+  pageUrl: string
+): boolean {
+  if (!sender.tab) return true;
+  const actualUrl = sender.tab.url ?? sender.url;
+  return typeof actualUrl === 'string' && isSamePageUrl(actualUrl, pageUrl);
+}
+
 export function readFillApprovedFieldsRequest(
   value: unknown
 ): FillApprovedFieldsRequest | undefined {

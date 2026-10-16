@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   areFillResultsBoundToPreview,
   areFillResultsConsistentWithPreview,
+  canPersistSessionFromSender,
   isValidFillPreviewArray,
   normalizePageUrl
 } from '../../src/shared/extension/PageCommandIntegrity';
@@ -84,6 +85,25 @@ function importEnvelope(overrides: Record<string, unknown> = {}) {
 }
 
 describe('session lifecycle and import integrity', () => {
+  it('binds content-script session writes to the exact sending page', () => {
+    const page = 'https://jobs.example.test/apply/1';
+    expect(canPersistSessionFromSender({ tab: { url: page } }, page)).toBe(true);
+    expect(
+      canPersistSessionFromSender(
+        { tab: { url: 'https://jobs.example.test/apply/other' } },
+        page
+      )
+    ).toBe(false);
+    expect(
+      canPersistSessionFromSender(
+        { tab: { url: 'https://other.example.test/apply/1' }, url: page },
+        page
+      )
+    ).toBe(false);
+    expect(canPersistSessionFromSender({ tab: {} }, page)).toBe(false);
+    expect(canPersistSessionFromSender({}, page)).toBe(true);
+  });
+
   it('rejects credential-bearing page URLs and binds every result to a preview selector', () => {
     expect(normalizePageUrl(' https://jobs.example.test/apply/1 ')).toBe(
       'https://jobs.example.test/apply/1'
