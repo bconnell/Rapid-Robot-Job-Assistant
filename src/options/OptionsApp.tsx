@@ -25,6 +25,9 @@ import {
   createLocalDataExport,
   isValidApplicationSessionRecord,
   isValidJobPostingRecord,
+  isValidResumeDocumentRecord,
+  isValidStoredFieldMappingRecord,
+  isValidTailoringSuggestionRecord,
   isValidSavedSearchRecord,
   isValidUserProfileRecord,
   validateLocalDataImport,
@@ -290,13 +293,18 @@ export function OptionsApp() {
       'Exported JSON may contain private profile, resume-derived, job, and application data. Keep it out of git and shared folders.'
     );
     if (!confirmed) return;
-    const { profiles, savedSearches, jobPostings, applicationSessions } =
-      await readLocalDataSnapshot();
+    const {
+      profiles, savedSearches, jobPostings, applicationSessions,
+      resumeDocuments, fieldMappings, tailoringSuggestions
+    } = await readLocalDataSnapshot();
     if (
       !profiles.every(isValidUserProfileRecord) ||
       !savedSearches.every(isValidSavedSearchRecord) ||
       !jobPostings.every(isValidJobPostingRecord) ||
-      !applicationSessions.every(isValidApplicationSessionRecord)
+      !applicationSessions.every(isValidApplicationSessionRecord) ||
+      !resumeDocuments.every(isValidResumeDocumentRecord) ||
+      !fieldMappings.every(isValidStoredFieldMappingRecord) ||
+      !tailoringSuggestions.every(isValidTailoringSuggestionRecord)
     ) {
       setStatus('Local data contains an invalid record. Export was stopped to avoid copying it.');
       return;
@@ -306,6 +314,9 @@ export function OptionsApp() {
       savedSearches,
       jobPostings,
       applicationSessions,
+      resumeDocuments,
+      fieldMappings,
+      tailoringSuggestions,
       settings
     });
     if (!validateLocalDataImport(data).valid) {
@@ -350,9 +361,15 @@ export function OptionsApp() {
       setValidatedImport(preview.data);
       setImportPreview(
         preview.valid
-          ? 'Valid import: ' + preview.counts.profiles + ' profiles, ' +
-            preview.counts.savedSearches + ' searches, ' + preview.counts.jobPostings +
-            ' jobs, ' + preview.counts.applicationSessions + ' sessions.'
+          ? [
+              preview.counts.profiles + ' profiles',
+              preview.counts.savedSearches + ' searches',
+              preview.counts.jobPostings + ' jobs',
+              preview.counts.applicationSessions + ' sessions',
+              preview.counts.resumeDocuments + ' resumes',
+              preview.counts.fieldMappings + ' mappings',
+              preview.counts.tailoringSuggestions + ' suggestions'
+            ].join(', ') + '.'
           : preview.errors.join(' ')
       );
       setStatus(
@@ -394,10 +411,15 @@ export function OptionsApp() {
     try {
       await loadOptions();
       setStatus(
-        'Imported ' + counts.profiles + ' profiles, ' + counts.savedSearches +
-          ' searches, ' + counts.jobPostings + ' jobs, and ' +
-          counts.applicationSessions +
-          ' sessions. Active profile and settings were not changed.'
+        'Imported ' + [
+          counts.profiles + ' profiles',
+          counts.savedSearches + ' searches',
+          counts.jobPostings + ' jobs',
+          counts.applicationSessions + ' sessions',
+          counts.resumeDocuments + ' resumes',
+          counts.fieldMappings + ' mappings',
+          counts.tailoringSuggestions + ' suggestions'
+        ].join(', ') + '. Active profile and settings were not changed.'
       );
     } catch {
       setStatus(
@@ -1014,15 +1036,15 @@ function PrivacyControlsPanel({
         until you delete them, clear extension data, or uninstall the extension.
       </p>
       <p className="muted">
-        This backup includes profiles, saved searches, job postings, and application sessions.
-        It does not include resume documents, field mappings, tailoring suggestions, browser
-        settings, or the active profile selection. Review the backup scope before clearing data.
+        The backup includes profiles, saved searches, jobs, application sessions, saved resume
+        text, field mappings, and tailoring suggestions. It excludes browser settings and the
+        active-profile selection. It contains private data and supports files up to 5 MB.
       </p>
       <button className="secondary" onClick={onExport} disabled={importPending}>
-        Export Supported Records
+        Export Local Record Backup
       </button>
       <label className="file-picker secondary">
-        Preview Records Backup JSON
+        Preview Local Record Backup JSON
         <input
           type="file"
           accept="application/json,.json"
