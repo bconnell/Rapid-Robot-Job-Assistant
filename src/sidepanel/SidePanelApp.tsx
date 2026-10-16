@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ApplicationSession } from '../shared/models/ApplicationSession';
 import type { FillPreviewItem, FillResult } from '../shared/models/FieldMapping';
 import type { JobPosting } from '../shared/models/JobPosting';
@@ -25,6 +25,7 @@ import {
 } from '../shared/fill/FillApprovalRules';
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
 import { isMeaningfulJobPosting } from '../shared/jobs/JobPostingValidation';
+import { createLocalTailoringSuggestions } from '../shared/ai/TailoringService';
 import { isSamePageUrl, normalizePageUrl } from '../shared/extension/PageCommandIntegrity';
 import {
   isValidApplicationSessionRecord,
@@ -555,6 +556,19 @@ export function SidePanelApp() {
   const compactSteps = compactWorkflowSteps(workflow.steps, workflow.currentStepId);
   const primaryAction = getPrimaryAction(workflow.currentStepId, blockedPage);
   const targetStatus = buildTargetStatus(pageStatus);
+  const tailoringSuggestions = useMemo(
+    () => (job && profile ? createLocalTailoringSuggestions(job, profile) : []),
+    [job, profile]
+  );
+
+  async function copyTailoredText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus('Reviewed local wording copied. Edit it to fit the application before use.');
+    } catch {
+      setStatus('Clipboard access failed. Select and copy the wording manually.');
+    }
+  }
 
   return (
     <main className="app stack">
@@ -703,6 +717,40 @@ export function SidePanelApp() {
           </p>
         </Card>
       </section>
+
+      {job && (
+        <section className="card stack">
+          <h2>Local Job Match and Wording</h2>
+          <p className="muted">
+            Suggestions use only saved profile information and analyzed job text. Nothing is
+            sent to an AI provider or inserted into an application automatically.
+          </p>
+          {!profile && (
+            <p className="warn">
+              Select a saved profile in Options to review matching skills for this job.
+            </p>
+          )}
+          {profile && tailoringSuggestions.length === 0 && (
+            <p className="muted">No supported skill matches were found for this posting.</p>
+          )}
+          {tailoringSuggestions.map((suggestion) => (
+            <div className="mini-card stack" key={suggestion.id}>
+              <p>{suggestion.suggestedText}</p>
+              <p className={suggestion.riskLevel === 'low' ? 'muted' : 'warn'}>
+                {suggestion.reason} {suggestion.truthfulnessWarning ?? ''}
+              </p>
+              {suggestion.riskLevel === 'low' && !suggestion.truthfulnessWarning && (
+                <button
+                  className="secondary"
+                  onClick={() => void copyTailoredText(suggestion.suggestedText)}
+                >
+                  Copy Reviewed Wording
+                </button>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className="card stack">
         <h2>Fill Preview</h2>

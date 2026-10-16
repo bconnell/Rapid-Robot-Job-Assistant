@@ -15,6 +15,7 @@ Current unit and regression coverage includes:
 - Transactional backup snapshots and atomic multi-store local cleanup with failure-injection rollback
 - New resume imports must fail on existing profile or resume IDs rather than overwriting, with atomic rollback of the other record
 - Concurrent job analyses must deduplicate under one IndexedDB write lock; duplicate imported session URLs must resolve to the most recent history
+- Verify safe local wording suggestions are shown only for saved profile skills, missing skills are warned about, and copying never fills a field or sends data to an AI provider
 - Export size enforcement against the 5 MB import boundary; oversized files must never be downloaded as restorable backups
 - Version-two seven-store export round-trip validation (including required collection presence and duplicate IDs), legacy version-one four-store compatibility, and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write-failure rollback
 - Saved search creation and manual check status

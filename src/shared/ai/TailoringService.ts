@@ -23,7 +23,7 @@ export function createLocalTailoringSuggestions(
   const suggestions: TailoringSuggestion[] = [];
 
   if (match.matchedSkills.length) {
-    const suggestedText = `Lead with matching skills: ${match.matchedSkills.slice(0, 6).join(', ')}.`;
+    const suggestedText = `Skills relevant to this role: ${match.matchedSkills.slice(0, 6).join(', ')}.`;
     const check = checkTruthfulness(suggestedText, sourceText);
     suggestions.push({
       id: crypto.randomUUID(),
