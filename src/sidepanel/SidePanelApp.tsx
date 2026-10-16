@@ -420,10 +420,14 @@ export function SidePanelApp() {
       !activePage.url ||
       !isSamePageUrl(activePage.url, session.pageUrl)
     ) {
+      try {
+        await loadTabStatus();
+      } catch {
+        // The original status guard still prevents a stale update.
+      }
       setStatus(
-        'The current target no longer matches this session. Refresh the target before changing status.'
+        'The current target no longer matches this session. No status change was recorded.'
       );
-      await loadTabStatus();
       return;
     }
     if (
