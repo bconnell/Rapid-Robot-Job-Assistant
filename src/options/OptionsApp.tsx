@@ -4,15 +4,15 @@ import {
   defaultSettings,
   type ExtensionSettings
 } from '../shared/storage/ChromeStorageRepository';
-import { clearAllIndexedDbData, readLocalDataSnapshot } from '../shared/storage/IndexedDbRepository';
 import {
-  ApplicationSessionRepository,
-  FieldMappingRepository,
-  JobPostingRepository,
+  clearAllIndexedDbData,
+  clearIndexedDbStores,
+  readLocalDataSnapshot,
+  saveProfileWithResume
+} from '../shared/storage/IndexedDbRepository';
+import {
   ProfileRepository,
-  ResumeDocumentRepository,
-  SavedSearchRepository,
-  TailoringSuggestionRepository
+  SavedSearchRepository
 } from '../shared/storage/TypedRepositories';
 import { extractTextFromDocx } from '../shared/parsing/DocxResumeParser';
 import { extractPlainTextFromPaste } from '../shared/parsing/ResumeTextExtractor';
@@ -49,12 +49,7 @@ import type { ResumeDocument } from '../shared/models/ResumeDocument';
 
 const settingsRepo = new ChromeStorageRepository();
 const profileRepo = new ProfileRepository();
-const resumeRepo = new ResumeDocumentRepository();
 const searchRepo = new SavedSearchRepository();
-const jobRepo = new JobPostingRepository();
-const sessionRepo = new ApplicationSessionRepository();
-const fieldMappingRepo = new FieldMappingRepository();
-const tailoringRepo = new TailoringSuggestionRepository();
 const maxImportBytes = 5 * 1024 * 1024;
 
 export function OptionsApp() {
@@ -167,18 +162,29 @@ export function OptionsApp() {
     if (!activeProfileId && (await profileRepo.get(nextProfile.id))) {
       nextProfile.id = crypto.randomUUID();
     }
-    await Promise.all([profileRepo.save(nextProfile), resumeRepo.save(resumeDocument)]);
+    try {
+      await saveProfileWithResume(nextProfile, resumeDocument);
+    } catch {
+      setStatus('Resume and profile could not be saved. Neither record was changed.');
+      return;
+    }
     setProfile(nextProfile);
     setParseSummary(parsed.summary);
     setWarnings(parsed.summary.needsReview);
     setSavedProfiles((await profileRepo.list()).filter(isValidUserProfileRecord));
-    await settingsRepo.setActiveProfileId(nextProfile.id);
-    setActiveProfileId(nextProfile.id);
-    setStatus(
-      fileName
-        ? `${fileName} imported and profile saved locally.`
-        : 'Resume parsed and profile saved locally.'
-    );
+    try {
+      await settingsRepo.setActiveProfileId(nextProfile.id);
+      setActiveProfileId(nextProfile.id);
+      setStatus(
+        fileName
+          ? `${fileName} imported and profile saved locally.`
+          : 'Resume parsed and profile saved locally.'
+      );
+    } catch {
+      setStatus(
+        'The resume and profile were saved, but activation failed. Select the saved profile to retry.'
+      );
+    }
   }
 
   async function saveProfile() {
@@ -187,16 +193,28 @@ export function OptionsApp() {
       setStatus('The profile contains invalid or oversized data and was not saved.');
       return;
     }
-    if (!activeProfileId && (await profileRepo.get(next.id))) {
-      setStatus('A saved profile already has this ID. Select it or start a new profile.');
+    if (
+      (activeProfileId && next.id !== activeProfileId) ||
+      (!activeProfileId && (await profileRepo.get(next.id)))
+    ) {
+      setStatus('This profile ID is not active or is already saved. Select it or start a new profile.');
       return;
     }
-    await profileRepo.save(next);
-    setSavedProfiles((await profileRepo.list()).filter(isValidUserProfileRecord));
-    await settingsRepo.setActiveProfileId(next.id);
+    try {
+      await profileRepo.save(next);
+    } catch {
+      setStatus('Profile storage failed. Your saved profile was not updated.');
+      return;
+    }
     setProfile(next);
-    setActiveProfileId(next.id);
-    setStatus('Profile saved locally.');
+    setSavedProfiles((await profileRepo.list()).filter(isValidUserProfileRecord));
+    try {
+      await settingsRepo.setActiveProfileId(next.id);
+      setActiveProfileId(next.id);
+      setStatus('Profile saved locally.');
+    } catch {
+      setStatus('Profile saved, but activation failed. Select the profile to retry.');
+    }
   }
 
   async function activateSavedProfile(id: string) {
@@ -440,23 +458,31 @@ export function OptionsApp() {
 
   async function clearSavedSearches() {
     if (!window.confirm('Delete all saved searches from local extension storage?')) return;
-    await Promise.all((await searchRepo.list()).map((search) => searchRepo.delete(search.id)));
-    setSavedSearches([]);
-    setStatus('Saved searches cleared locally.');
+    try {
+      await clearIndexedDbStores(['savedSearches']);
+      setSavedSearches([]);
+      setStatus('Saved searches cleared locally.');
+    } catch {
+      setStatus('Saved search cleanup failed. Existing search records were preserved.');
+    }
   }
 
   async function clearSavedJobsAndSessions() {
     if (!window.confirm('Delete saved jobs and application sessions from local extension storage?'))
       return;
-    await Promise.all([
-      ...(await jobRepo.list()).map((job) => jobRepo.delete(job.id)),
-      ...(await sessionRepo.list()).map((session) => sessionRepo.delete(session.id)),
-      ...(await fieldMappingRepo.list()).map((mapping) => fieldMappingRepo.delete(mapping.id)),
-      ...(await tailoringRepo.list()).map((suggestion) => tailoringRepo.delete(suggestion.id))
-    ]);
-    setStatus(
-      'Saved jobs, application sessions, field mappings, and tailoring suggestions cleared locally.'
-    );
+    try {
+      await clearIndexedDbStores([
+        'jobPostings',
+        'applicationSessions',
+        'fieldMappings',
+        'tailoringSuggestions'
+      ]);
+      setStatus(
+        'Saved jobs, application sessions, field mappings, and tailoring suggestions cleared locally.'
+      );
+    } catch {
+      setStatus('Job history cleanup failed. Existing records were preserved.');
+    }
   }
 
   async function clearSavedProfiles() {
@@ -466,19 +492,27 @@ export function OptionsApp() {
       )
     )
       return;
-    await Promise.all([
-      ...(await profileRepo.list()).map((savedProfile) => profileRepo.delete(savedProfile.id)),
-      ...(await resumeRepo.list()).map((resume) => resumeRepo.delete(resume.id)),
-      ...(await tailoringRepo.list()).map((suggestion) => tailoringRepo.delete(suggestion.id))
-    ]);
-    await settingsRepo.clearActiveProfileId();
+    try {
+      await clearIndexedDbStores(['profiles', 'resumeDocuments', 'tailoringSuggestions']);
+    } catch {
+      setStatus('Profile cleanup failed. Existing profiles and resume records were preserved.');
+      return;
+    }
     setProfile(emptyUserProfile());
-    setActiveProfileId(undefined);
     setSavedProfiles([]);
     setResumeText('');
     setWarnings([]);
     setParseSummary(undefined);
-    setStatus('Saved profiles and resume-derived records cleared locally.');
+    try {
+      await settingsRepo.clearActiveProfileId();
+      setActiveProfileId(undefined);
+      setStatus('Saved profiles and resume-derived records cleared locally.');
+    } catch {
+      setStatus(
+        'Profile records were cleared, but the active profile selection could not be cleared. ' +
+          'Reopen Options to retry cleanup.'
+      );
+    }
   }
 
   return (
