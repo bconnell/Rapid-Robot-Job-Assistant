@@ -324,6 +324,7 @@ Browser automation may be useful later for controlled extension QA. It should no
 - Confirm saving notes on a restored session preserves prior field previews and fill results.
 - Confirm queued in-page writes capture immutable request snapshots and remain serialized after close and reopen.
 - Confirm a completed or partial fill clears active approvals and cannot be repeated without fresh analysis.
+- Confirm Mark Submitted requires direct user confirmation and session URL still matches the current page; status changes on a stale target must be refused.
 - Confirm importing another fake resume preserves the original active profile as a separate record.
 - Confirm Open Search opens the canonical saved-search URL without logging a completed review; Mark Reviewed records the manual review only on explicit user action, and errors do not falsely report success.
 - Confirm credential-bearing page URLs and noncanonical saved-search imports are rejected.

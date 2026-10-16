@@ -410,6 +410,30 @@ export function SidePanelApp() {
       setStatus('No application session is available to update.');
       return;
     }
+    const current = await safeSendBackgroundMessage<TabCapabilityResult>({
+      command: 'GET_CURRENT_TAB_STATUS'
+    });
+    const activePage = current.data ?? current.response;
+    if (
+      !current.ok ||
+      !activePage?.ok ||
+      !activePage.url ||
+      !isSamePageUrl(activePage.url, session.pageUrl)
+    ) {
+      setStatus(
+        'The current target no longer matches this session. Refresh the target before changing status.'
+      );
+      await loadTabStatus();
+      return;
+    }
+    if (
+      nextStatus === 'submitted-by-user' &&
+      !window.confirm(
+        'Confirm you personally submitted this application. The extension has not submitted it.'
+      )
+    ) {
+      return;
+    }
     const saved = await saveSession({
       status: nextStatus,
       submittedByUser: nextStatus === 'submitted-by-user'
