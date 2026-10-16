@@ -121,8 +121,9 @@ export async function saveProfileWithResume(
   const db = await getDb();
   const tx = db.transaction(['profiles', 'resumeDocuments'], 'readwrite');
   try {
-    await tx.objectStore('profiles').put(profile, profile.id);
-    await tx.objectStore('resumeDocuments').put(resume, resume.id);
+    // A resume import creates a new profile. Never overwrite one already saved.
+    await tx.objectStore('profiles').add(profile, profile.id);
+    await tx.objectStore('resumeDocuments').add(resume, resume.id);
     await tx.done;
   } catch (error) {
     try {

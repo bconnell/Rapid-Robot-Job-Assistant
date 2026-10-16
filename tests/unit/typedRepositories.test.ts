@@ -232,6 +232,22 @@ describe('atomic profile and targeted cleanup', () => {
     expect(await new ResumeDocumentRepository().get(resume.id)).toEqual(resume);
   });
 
+  it('rejects a conflicting imported profile without changing earlier saved records', async () => {
+    const existing = { ...profile, contact: { fullName: 'Existing Profile' } };
+    await new ProfileRepository().save(existing);
+    await expect(saveProfileWithResume(profile, resume)).rejects.toThrow();
+    expect(await new ProfileRepository().get(profile.id)).toEqual(existing);
+    expect(await new ResumeDocumentRepository().get(resume.id)).toBeUndefined();
+  });
+
+  it('rejects a conflicting imported resume without replacing the stored resume', async () => {
+    const existing = { ...resume, text: 'Previous synthetic resume' };
+    await new ResumeDocumentRepository().save(existing);
+    await expect(saveProfileWithResume(profile, resume)).rejects.toThrow();
+    expect(await new ProfileRepository().get(profile.id)).toBeUndefined();
+    expect(await new ResumeDocumentRepository().get(resume.id)).toEqual(existing);
+  });
+
   it('rolls back profile writes when the resume write fails', async () => {
     const originalPut = IDBObjectStore.prototype.put;
     const failingPut = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(
