@@ -30,7 +30,7 @@ function installChromeStub(): void {
                   fullName: 'Alex Morgan',
                   email: 'alex.morgan@example.test'
                 },
-                skills: [],
+                skills: ['TypeScript'],
                 desiredTitles: [],
                 experience: [],
                 education: [],
@@ -101,6 +101,26 @@ describe('in-page assistant controller hardening', () => {
     expect(
       messages.some((message) => (message as { command?: string }).command === 'SAVE_ANALYZED_JOB')
     ).toBe(false);
+  });
+
+  it('shows local supported skill matches after analyzing an actual job-like page', async () => {
+    document.body.innerHTML =
+      '<main data-testid="job-description">' +
+      '<h1>TypeScript Developer</h1>' +
+      '<p>We are hiring candidates with TypeScript experience for a developer role. ' +
+      'Responsibilities include building accessible interfaces, testing application behavior, ' +
+      'and reviewing requirements. Applicants must verify all details before applying. ' +
+      'This position supports manual review and reliable local testing workflows.</p>' +
+      '</main>';
+    await openInPageAssistant();
+    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+
+    shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-job"]')?.click();
+    await flushAsyncWork();
+
+    expect(shadow?.textContent).toContain('Local Job Match');
+    expect(shadow?.textContent).toContain('Skills relevant to this role: TypeScript.');
+    expect(shadow?.textContent).toContain('Nothing is sent to an AI provider');
   });
 
   it('allows suggested values to be edited before individual approval', async () => {
