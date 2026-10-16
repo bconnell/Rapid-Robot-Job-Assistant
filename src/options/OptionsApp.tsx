@@ -10,10 +10,7 @@ import {
   readLocalDataSnapshot,
   saveProfileWithResume
 } from '../shared/storage/IndexedDbRepository';
-import {
-  ProfileRepository,
-  SavedSearchRepository
-} from '../shared/storage/TypedRepositories';
+import { ProfileRepository, SavedSearchRepository } from '../shared/storage/TypedRepositories';
 import { extractTextFromDocx } from '../shared/parsing/DocxResumeParser';
 import { extractPlainTextFromPaste } from '../shared/parsing/ResumeTextExtractor';
 import {
@@ -294,8 +291,13 @@ export function OptionsApp() {
     );
     if (!confirmed) return;
     const {
-      profiles, savedSearches, jobPostings, applicationSessions,
-      resumeDocuments, fieldMappings, tailoringSuggestions
+      profiles,
+      savedSearches,
+      jobPostings,
+      applicationSessions,
+      resumeDocuments,
+      fieldMappings,
+      tailoringSuggestions
     } = await readLocalDataSnapshot();
     if (
       !profiles.every(isValidUserProfileRecord) ||
@@ -327,7 +329,9 @@ export function OptionsApp() {
     }
     const backup = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     if (backup.size > maxImportBytes) {
-      setStatus('Backup exceeds the 5 MB restore limit and was not downloaded. Saved records are unchanged.');
+      setStatus(
+        'Backup exceeds the 5 MB restore limit and was not downloaded. Saved records are unchanged.'
+      );
       return;
     }
     const url = URL.createObjectURL(backup);
@@ -341,7 +345,9 @@ export function OptionsApp() {
       link.remove();
       URL.revokeObjectURL(url);
     }, 1000);
-    setStatus('Supported record backup created. Keep the private JSON file out of shared folders.');
+    setStatus(
+      'Supported record backup created. Keep the private JSON file out of shared folders.'
+    );
   }
 
   async function previewImport(file?: File) {

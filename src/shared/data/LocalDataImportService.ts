@@ -1,10 +1,11 @@
 import type { ImportPreview } from './LocalDataTransfer';
 import { validateLocalDataImport } from './LocalDataTransfer';
 import { getDb } from '../storage/IndexedDbRepository';
+import { INDEXED_DB } from '../storage/StorageKeys';
 
 /**
  * Atomically adds new backup records without replacing existing extension data.
- * Settings, active profile, and non-exported stores are not part of this operation.
+ * Browser settings and active-profile selection are not part of this operation.
  */
 export async function importLocalDataAdditively(input: unknown): Promise<ImportPreview['counts']> {
   // A previewed object may have changed before the user confirms restoration.
@@ -39,18 +40,7 @@ export async function importLocalDataAdditively(input: unknown): Promise<ImportP
     }
   ];
   const db = await getDb();
-  const tx = db.transaction(
-    [
-      'profiles',
-      'savedSearches',
-      'jobPostings',
-      'applicationSessions',
-      'resumeDocuments',
-      'fieldMappings',
-      'tailoringSuggestions'
-    ],
-    'readwrite'
-  );
+  const tx = db.transaction([...INDEXED_DB.stores], 'readwrite');
 
   try {
     // Transaction locking prevents another writer from racing the collision checks.

@@ -65,15 +65,35 @@ const exportKeys = new Set([
   'tailoringSuggestions',
   'settings'
 ]);
-const resumeDocumentKeys = new Set(['id', 'fileName', 'sourceType', 'text', 'importedAt', 'warnings']);
+const resumeDocumentKeys = new Set([
+  'id',
+  'fileName',
+  'sourceType',
+  'text',
+  'importedAt',
+  'warnings'
+]);
 const resumeWarningKeys = new Set(['section', 'message']);
 const fieldMappingKeys = new Set([
-  'id', 'candidate', 'kind', 'confidence', 'sensitive', 'fillable',
-  'requiresDirectReview', 'warning', 'explanation'
+  'id',
+  'candidate',
+  'kind',
+  'confidence',
+  'sensitive',
+  'fillable',
+  'requiresDirectReview',
+  'warning',
+  'explanation'
 ]);
 const tailoringSuggestionKeys = new Set([
-  'id', 'originalText', 'suggestedText', 'reason', 'matchedJobKeywords',
-  'truthfulnessWarning', 'riskLevel', 'status'
+  'id',
+  'originalText',
+  'suggestedText',
+  'reason',
+  'matchedJobKeywords',
+  'truthfulnessWarning',
+  'riskLevel',
+  'status'
 ]);
 const importedSettingsKeys = new Set([
   'localOnlyMode',
