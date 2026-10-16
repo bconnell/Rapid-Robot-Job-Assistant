@@ -368,6 +368,23 @@ function bindPanelEvents(
     });
   });
 
+  panel.querySelectorAll<HTMLButtonElement>('[data-action="copy-suggestion"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      void runBusy(shadow, state, async () => {
+        const index = Number(button.dataset.index);
+        if (!Number.isInteger(index) || !state.job || !state.profile) return;
+        const item = createLocalTailoringSuggestions(state.job, state.profile)[index];
+        if (!item || item.riskLevel !== 'low' || item.truthfulnessWarning) return;
+        try {
+          await navigator.clipboard.writeText(item.suggestedText);
+          state.status = 'Supported wording copied. Review and edit it before use.';
+        } catch {
+          state.status = 'Clipboard access failed. Select and copy the wording manually.';
+        }
+      });
+    });
+  });
+
   panel.querySelectorAll<HTMLButtonElement>('[data-action="skip-field"]').forEach((button) => {
     button.addEventListener('click', () => {
       void runBusy(shadow, state, async () => {
@@ -533,13 +550,19 @@ function buildTailoringMarkup(state: InPageAssistantState): string {
   if (!state.job || !state.profile) return '';
   const suggestions = createLocalTailoringSuggestions(state.job, state.profile);
   const rows = suggestions
-    .map((suggestion) => {
+    .map((suggestion, index) => {
       const warning = suggestion.truthfulnessWarning ?? '';
-      const statusClass = suggestion.riskLevel === 'low' && !warning ? '' : 'warn';
+      const safeToCopy = suggestion.riskLevel === 'low' && !warning;
+      const statusClass = safeToCopy ? '' : 'warn';
       return '<p class="' + statusClass + '">' +
         escapeHtml(suggestion.suggestedText) +
         (warning ? ' ' + escapeHtml(warning) : '') +
-        '</p>';
+        '</p>' +
+        (safeToCopy
+          ? '<button class="secondary" data-action="copy-suggestion" data-index="' +
+            String(index) + '" ' + (state.busy ? 'disabled' : '') +
+            '>Copy Reviewed Wording</button>'
+          : '');
     })
     .join('');
   return '<div class="card"><h3>Local Job Match</h3>' +

@@ -147,6 +147,34 @@ describe('in-page assistant controller hardening', () => {
     expect(shadow?.textContent).toContain('Nothing is sent to an AI provider');
   });
 
+  it('copies supported wording only after a direct click', async () => {
+    document.body.innerHTML =
+      '<main data-testid="job-description"><h1>TypeScript Developer</h1>' +
+      '<p>We are hiring candidates with TypeScript experience for this developer role. ' +
+      'Responsibilities include writing tests, reviewing requirements, and improving application ' +
+      'quality. The position requires careful manual review before any application is submitted.</p>' +
+      '</main>';
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText }
+    });
+    await openInPageAssistant();
+    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-job"]')?.click();
+    await flushAsyncWork();
+    expect(writeText).not.toHaveBeenCalled();
+    const copy = shadow?.querySelector<HTMLButtonElement>('[data-action="copy-suggestion"]');
+    expect(copy).toBeTruthy();
+    copy?.click();
+    await flushAsyncWork();
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith('Skills relevant to this role: TypeScript.');
+    expect(
+      messages.some((message) => (message as { command?: string }).command === 'FILL_APPROVED_FIELDS')
+    ).toBe(false);
+  });
+
   it('allows suggested values to be edited before individual approval', async () => {
     document.body.innerHTML =
       '<main><h1>Software Engineer</h1><form><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" /></form></main>';
