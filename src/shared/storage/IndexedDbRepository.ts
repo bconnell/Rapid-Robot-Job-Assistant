@@ -1,6 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { INDEXED_DB } from './StorageKeys';
 import type { UserProfile } from '../models/UserProfile';
+import type { ResumeDocument } from '../models/ResumeDocument';
 import type { SavedSearch } from '../models/SavedSearch';
 import type { JobPosting } from '../models/JobPosting';
 import type { ApplicationSession } from '../models/ApplicationSession';
@@ -95,14 +96,41 @@ export async function readLocalDataSnapshot(): Promise<{
 }
 
 /**
- * Clearing everything is one transaction. A failed clear must not leave an
- * arbitrary subset of collections empty while other local data survives.
+ * A profile and its imported resume must commit or roll back together.
+ * Active-profile selection lives in separate Chrome storage and is updated
+ * only after this transaction completes.
  */
-export async function clearAllIndexedDbData(): Promise<void> {
+export async function saveProfileWithResume(
+  profile: UserProfile,
+  resume: ResumeDocument
+): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction([...INDEXED_DB.stores], 'readwrite');
+  const tx = db.transaction(['profiles', 'resumeDocuments'], 'readwrite');
   try {
-    for (const store of INDEXED_DB.stores) {
+    await tx.objectStore('profiles').put(profile, profile.id);
+    await tx.objectStore('resumeDocuments').put(resume, resume.id);
+    await tx.done;
+  } catch (error) {
+    try {
+      tx.abort();
+    } catch {
+      // The browser may already have aborted a failed transaction.
+    }
+    await tx.done.catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * Each targeted cleanup is one transaction, including all of its related
+ * stores. A failed clear must not delete a subset of the requested records.
+ */
+export async function clearIndexedDbStores(stores: readonly StoreName[]): Promise<void> {
+  if (stores.length === 0) return;
+  const db = await getDb();
+  const tx = db.transaction([...stores], 'readwrite');
+  try {
+    for (const store of stores) {
       await tx.objectStore(store).clear();
     }
     await tx.done;
@@ -110,9 +138,13 @@ export async function clearAllIndexedDbData(): Promise<void> {
     try {
       tx.abort();
     } catch {
-      // A failed IndexedDB request may have already aborted this transaction.
+      // The browser may already have aborted a failed transaction.
     }
     await tx.done.catch(() => undefined);
     throw error;
   }
+}
+
+export async function clearAllIndexedDbData(): Promise<void> {
+  await clearIndexedDbStores(INDEXED_DB.stores);
 }

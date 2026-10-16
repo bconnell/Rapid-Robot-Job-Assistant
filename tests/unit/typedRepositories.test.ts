@@ -3,14 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApplicationSession } from '../../src/shared/models/ApplicationSession';
 import type { JobPosting } from '../../src/shared/models/JobPosting';
 import type { UserProfile } from '../../src/shared/models/UserProfile';
+import type { ResumeDocument } from '../../src/shared/models/ResumeDocument';
 import {
   clearAllIndexedDbData,
-  readLocalDataSnapshot
+  clearIndexedDbStores,
+  readLocalDataSnapshot,
+  saveProfileWithResume
 } from '../../src/shared/storage/IndexedDbRepository';
 import {
   ApplicationSessionRepository,
   JobPostingRepository,
   ProfileRepository,
+  ResumeDocumentRepository,
   SavedSearchRepository
 } from '../../src/shared/storage/TypedRepositories';
 import { createSavedSearch } from '../../src/shared/jobs/SavedSearchService';
@@ -153,5 +157,88 @@ describe('atomic storage lifecycle', () => {
 
     expect(await profileRepo.get(profile.id)).toEqual(profile);
     expect(await searchRepo.get(search.id)).toEqual(search);
+  });
+});
+
+describe('atomic profile and targeted cleanup', () => {
+  const profile: UserProfile = {
+    id: 'save-profile',
+    contact: { fullName: 'Example Applicant' },
+    skills: [],
+    experience: [],
+    education: [],
+    certifications: [],
+    projects: [],
+    desiredTitles: [],
+    updatedAt: '2026-10-15T00:00:00.000Z'
+  };
+  const resume: ResumeDocument = {
+    id: 'save-resume',
+    sourceType: 'pasted-text',
+    text: 'Synthetic resume content',
+    importedAt: '2026-10-15T00:00:00.000Z',
+    warnings: []
+  };
+
+  it('commits a matching profile and resume together', async () => {
+    await saveProfileWithResume(profile, resume);
+    expect(await new ProfileRepository().get(profile.id)).toEqual(profile);
+    expect(await new ResumeDocumentRepository().get(resume.id)).toEqual(resume);
+  });
+
+  it('rolls back profile writes when the resume write fails', async () => {
+    const originalPut = IDBObjectStore.prototype.put;
+    const failingPut = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(
+      function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+        if (this.name === 'resumeDocuments') {
+          throw new DOMException('Injected resume storage failure', 'QuotaExceededError');
+        }
+        return originalPut.call(this, value, key);
+      }
+    );
+    try {
+      await expect(saveProfileWithResume(profile, resume)).rejects.toThrow(
+        /Injected resume storage failure/
+      );
+    } finally {
+      failingPut.mockRestore();
+    }
+    expect(await new ProfileRepository().get(profile.id)).toBeUndefined();
+    expect(await new ResumeDocumentRepository().get(resume.id)).toBeUndefined();
+  });
+
+  it('preserves unrelated data during targeted cleanup', async () => {
+    await saveProfileWithResume(profile, resume);
+    const savedSearch = createSavedSearch({
+      label: 'Preserved search',
+      url: 'https://jobs.example.test/search'
+    });
+    await new SavedSearchRepository().save(savedSearch);
+    await clearIndexedDbStores(['profiles', 'resumeDocuments']);
+    expect(await new ProfileRepository().list()).toEqual([]);
+    expect(await new ResumeDocumentRepository().list()).toEqual([]);
+    expect(await new SavedSearchRepository().get(savedSearch.id)).toEqual(savedSearch);
+  });
+
+  it('rolls back a failed targeted cleanup of related stores', async () => {
+    await saveProfileWithResume(profile, resume);
+    const originalClear = IDBObjectStore.prototype.clear;
+    const failingClear = vi.spyOn(IDBObjectStore.prototype, 'clear').mockImplementation(
+      function (this: IDBObjectStore) {
+        if (this.name === 'resumeDocuments') {
+          throw new DOMException('Injected targeted cleanup failure', 'UnknownError');
+        }
+        return originalClear.call(this);
+      }
+    );
+    try {
+      await expect(clearIndexedDbStores(['profiles', 'resumeDocuments'])).rejects.toThrow(
+        /Injected targeted cleanup failure/
+      );
+    } finally {
+      failingClear.mockRestore();
+    }
+    expect(await new ProfileRepository().get(profile.id)).toEqual(profile);
+    expect(await new ResumeDocumentRepository().get(resume.id)).toEqual(resume);
   });
 });
