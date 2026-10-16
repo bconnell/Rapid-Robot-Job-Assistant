@@ -12,6 +12,16 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-10-15. Connected Workflow Completion Candidate
+
+- Saved searches now open safely on direct user request. Recording a manual review is a separate action.
+- New resume imports create separate profiles rather than overwriting the active profile.
+- Options exposes searchable local saved jobs and application-session history, with explicit links back to saved pages.
+- Job deduplication is now transactional across concurrent job analyses; duplicate session URLs resolve to the most recently updated session.
+- Local job-skill matching and truthfulness-checked wording are surfaced in the side panel and in-page assistant. Supported wording can be copied only by a user action; missing qualifications remain warnings.
+- Background worker errors fail closed, with no automatic retry of fill actions. Marking an application submitted requires a fresh target-page check and explicit user confirmation.
+- Browser acceptance, npm validation, and release verification are not inferred from these source changes.
+
 ### 2026-10-15. Additive Backup Restore Candidate
 
 - Options previews a local JSON backup and requests separate confirmation before importing.

@@ -16,6 +16,9 @@ Current unit and regression coverage includes:
 - New resume imports must fail on existing profile or resume IDs rather than overwriting, with atomic rollback of the other record
 - Concurrent job analyses must deduplicate under one IndexedDB write lock; duplicate imported session URLs must resolve to the most recent history
 - Background worker rejection and malformed-response tests must fail closed, redact internal errors, and never retry fill or persistence automatically
+- Saved history UI must display valid local jobs and sessions, support text filters and pagination, and never open a page without a direct user action
+- Local wording suggestions must show in both assistant surfaces, and only supported wording may be copied; unsupported claims and missing skills remain warnings
+- Manual submission status requires explicit confirmation and matching live target-page URL. Cancelled or stale attempts must leave the saved session unchanged
 - Verify safe local wording suggestions are shown only for saved profile skills, missing skills are warned about, and copying never fills a field or sends data to an AI provider
 - Export size enforcement against the 5 MB import boundary; oversized files must never be downloaded as restorable backups
 - Inject snapshot or download creation failure: Options must show a failure and must not claim a backup exists or change stored records

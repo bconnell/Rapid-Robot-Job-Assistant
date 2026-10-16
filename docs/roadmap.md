@@ -30,6 +30,16 @@
 - Experience fallback parsing is conservative. Inferred entries should be checked and corrected.
 - Chrome Web Store packaging and publishing are future work.
 
+## Connected Workflow Completion Candidate
+
+- Options contains a searchable, locally paginated view of saved jobs and application sessions, with direct user-triggered opening of saved pages.
+- Saved searches can be opened in a browser tab and separately marked manually reviewed.
+- Importing a new resume creates a distinct profile. New profile/resume writes fail on collisions without overwriting existing data.
+- Saved job deduplication is atomic under concurrent writes and session history lookup chooses the latest updated matching record.
+- Local skills matching and truthfulness-checked wording are connected to the side panel and the in-page assistant without network AI calls.
+- Background messaging failures are returned as explicit errors rather than uncaught rejections, and manual submission status requires a current target and confirmation.
+- All of these changes still require local automated tests and real-browser evidence before being marked released.
+
 ## Completed Workflow Wiring
 
 - `.docx` resume import is wired into Options.
