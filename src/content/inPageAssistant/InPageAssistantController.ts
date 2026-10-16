@@ -17,6 +17,7 @@ import type { FillPreviewItem, FillResult } from '../../shared/models/FieldMappi
 import type { JobPosting } from '../../shared/models/JobPosting';
 import type { UserProfile } from '../../shared/models/UserProfile';
 import { isMeaningfulJobPosting } from '../../shared/jobs/JobPostingValidation';
+import { createLocalTailoringSuggestions } from '../../shared/ai/TailoringService';
 import { isSamePageUrl, maxFillItems } from '../../shared/extension/PageCommandIntegrity';
 import { detectCaptchaAndBotCheck } from '../../shared/security/CaptchaAndBotCheckRules';
 import { fillApprovedFields } from '../formFiller';
@@ -497,6 +498,7 @@ function buildMarkup(state: InPageAssistantState): string {
             )}</p></div>`
           : ''
       }
+      ${buildTailoringMarkup(state)}
       ${
         fields
           ? `<div class="card"><h3>Field Summary</h3><p>All ${fields} detected fields are shown. ${approvals} approved.</p>
@@ -519,6 +521,26 @@ function buildMarkup(state: InPageAssistantState): string {
           : ''
       }
     </div>`;
+}
+
+function buildTailoringMarkup(state: InPageAssistantState): string {
+  if (!state.job || !state.profile) return '';
+  const suggestions = createLocalTailoringSuggestions(state.job, state.profile);
+  const rows = suggestions
+    .map((suggestion) => {
+      const warning = suggestion.truthfulnessWarning ?? '';
+      const statusClass = suggestion.riskLevel === 'low' && !warning ? '' : 'warn';
+      return '<p class="' + statusClass + '">' +
+        escapeHtml(suggestion.suggestedText) +
+        (warning ? ' ' + escapeHtml(warning) : '') +
+        '</p>';
+    })
+    .join('');
+  return '<div class="card"><h3>Local Job Match</h3>' +
+    '<p>These suggestions use only saved profile skills and job text. ' +
+    'Review them manually. Nothing is sent to an AI provider or filled automatically.</p>' +
+    (rows || '<p>No supported skill matches were found.</p>') +
+    '</div>';
 }
 
 function fieldMarkup(item: FillPreviewItem, index: number, busy: boolean): string {
