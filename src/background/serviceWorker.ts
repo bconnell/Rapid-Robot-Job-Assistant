@@ -18,7 +18,7 @@ import { isCompleteApprovedFill } from '../shared/fill/FillApprovalRules';
 import {
   areFillResultsBoundToPreview,
   areFillResultsConsistentWithPreview,
-  canPersistSessionFromSender,
+  canAccessSessionPageFromSender,
   isSamePageUrl,
   isValidFillPreviewArray,
   isValidFillResultArray,
@@ -144,7 +144,7 @@ async function handleMessage(
     if (!pageUrl) {
       return { ok: false, userMessage: 'No valid application page was available to save.' };
     }
-    if (!canPersistSessionFromSender(sender, pageUrl)) {
+    if (!canAccessSessionPageFromSender(sender, pageUrl)) {
       return {
         ok: false,
         userMessage: 'The application page changed. No session data was saved.'
@@ -265,7 +265,13 @@ async function handleMessage(
   if (message.command === 'GET_RECENT_SESSION_FOR_PAGE') {
     const rawPageUrl = (message.payload as { pageUrl?: string } | undefined)?.pageUrl;
     const pageUrl = typeof rawPageUrl === 'string' ? normalizePageUrl(rawPageUrl) : undefined;
-    const storedSession = pageUrl ? await sessionRepo.findByPageUrl(pageUrl) : undefined;
+    if (!pageUrl || !canAccessSessionPageFromSender(sender, pageUrl)) {
+      return {
+        ok: false,
+        userMessage: 'The application page changed. Session history was not exposed.'
+      };
+    }
+    const storedSession = await sessionRepo.findByPageUrl(pageUrl);
     const session =
       storedSession && isValidApplicationSessionRecord(storedSession) ? storedSession : undefined;
     return {
@@ -291,6 +297,9 @@ async function handleMessage(
       typeof payload?.pageUrl === 'string' ? normalizePageUrl(payload.pageUrl) : undefined;
     if (!pageUrl) {
       return { ok: false, userMessage: 'No valid application page was selected.' };
+    }
+    if (!canAccessSessionPageFromSender(sender, pageUrl)) {
+      return { ok: false, userMessage: 'The application page changed. Notes were not saved.' };
     }
     if (payload?.notes !== undefined && typeof payload.notes !== 'string') {
       return { ok: false, userMessage: 'The application notes were invalid.' };
