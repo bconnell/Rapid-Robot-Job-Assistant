@@ -160,6 +160,38 @@ export function readFillApprovedFieldsRequest(
   return { pageUrl, preview: value.preview };
 }
 
+/**
+ * The content-script response is untrusted until it is tied to the requested
+ * page and every reported fill is tied to an explicitly approved selector.
+ * The page may already have changed even when a response is malformed, so
+ * callers must not blindly retry a fill.
+ */
+export function isVerifiedFillResponse(
+  value: unknown,
+  pageUrl: string,
+  approvedPreview: FillPreviewItem[]
+): boolean {
+  if (
+    !isRecord(value) ||
+    value.pageMatched !== true ||
+    typeof value.pageUrl !== 'string' ||
+    !isSamePageUrl(value.pageUrl, pageUrl) ||
+    !isRecord(value.verification) ||
+    typeof value.verification.detected !== 'boolean' ||
+    !Array.isArray(value.verification.reasons) ||
+    !value.verification.reasons.every(
+      (reason: unknown) => typeof reason === 'string' && reason.length <= 4000
+    ) ||
+    !isValidFillResultArray(value.results)
+  ) {
+    return false;
+  }
+  const approved = new Set(
+    approvedPreview.filter((item) => item.approved).map((item) => item.candidate.selector)
+  );
+  return value.results.every((result: FillResult) => approved.has(result.selector));
+}
+
 export function isValidFillPreviewArray(value: unknown): value is FillPreviewItem[] {
   return (
     Array.isArray(value) &&

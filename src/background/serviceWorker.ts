@@ -20,6 +20,7 @@ import {
   areFillResultsConsistentWithPreview,
   canAccessSessionPageFromSender,
   isSamePageUrl,
+  isVerifiedFillResponse,
   isValidFillPreviewArray,
   isValidFillResultArray,
   normalizePageUrl,
@@ -506,6 +507,20 @@ async function sendToActiveContent(
           tabUrl: fillResponse?.pageUrl ?? capability.url,
           originPattern: capability.originPattern,
           reason: 'tab-changed'
+        };
+      }
+      if (
+        !fillRequest ||
+        !isVerifiedFillResponse(fillResponse, capability.url, fillRequest.preview)
+      ) {
+        return {
+          ok: false,
+          userMessage:
+            'The fill response could not be verified. Some fields may already have changed. ' +
+            'Inspect the form manually and analyze again before trying another fill.',
+          tabUrl: capability.url,
+          originPattern: capability.originPattern,
+          reason: 'fill-response-invalid'
         };
       }
     }

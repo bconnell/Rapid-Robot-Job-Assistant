@@ -6,6 +6,7 @@ import {
   areFillResultsConsistentWithPreview,
   canAccessSessionPageFromSender,
   isValidFillPreviewArray,
+  isVerifiedFillResponse,
   normalizePageUrl
 } from '../../src/shared/extension/PageCommandIntegrity';
 import { validateLocalDataImport } from '../../src/shared/data/LocalDataTransfer';
@@ -102,6 +103,35 @@ describe('session lifecycle and import integrity', () => {
     ).toBe(false);
     expect(canAccessSessionPageFromSender({ tab: {} }, page)).toBe(false);
     expect(canAccessSessionPageFromSender({}, page)).toBe(true);
+  });
+
+  it('rejects unverified fill responses and results for unapproved selectors', () => {
+    const pageUrl = 'https://jobs.example.test/apply/1';
+    const approved = preview();
+    const valid = {
+      pageUrl,
+      pageMatched: true,
+      verification: { detected: false, reasons: [] },
+      results: [{ selector: '#email', ok: true, message: 'Filled' }]
+    };
+    expect(isVerifiedFillResponse(valid, pageUrl, [approved])).toBe(true);
+    expect(isVerifiedFillResponse({ ...valid, verification: undefined }, pageUrl, [approved])).toBe(
+      false
+    );
+    expect(
+      isVerifiedFillResponse({ ...valid, pageUrl: 'https://jobs.example.test/apply/2' },
+        pageUrl, [approved])
+    ).toBe(false);
+    expect(
+      isVerifiedFillResponse(valid, pageUrl, [{ ...approved, approved: false }])
+    ).toBe(false);
+    expect(
+      isVerifiedFillResponse(
+        { ...valid, results: [{ selector: '#unapproved', ok: true, message: 'Filled' }] },
+        pageUrl,
+        [approved]
+      )
+    ).toBe(false);
   });
 
   it('rejects credential-bearing page URLs and binds every result to a preview selector', () => {
