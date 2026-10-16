@@ -17,13 +17,13 @@ import { isCompleteApprovedFill } from '../fill/FillApprovalRules';
 import { normalizeSavedSearchUrl } from '../jobs/SavedSearchService';
 
 export interface LocalDataExport {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   exportedAt: string;
   profiles: UserProfile[];
   savedSearches: SavedSearch[];
   jobPostings: JobPosting[];
   applicationSessions: ApplicationSession[];
-  /** Added to the existing version-one envelope without breaking older backups. */
+  /** Required for version-two files; optional only for legacy version-one backups. */
   resumeDocuments?: ResumeDocument[];
   fieldMappings?: Array<FieldMapping & { id: string }>;
   tailoringSuggestions?: TailoringSuggestion[];
@@ -191,7 +191,7 @@ export function createLocalDataExport(input: LocalDataExportInput): LocalDataExp
     manualReviewRequired: true
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     exportedAt: new Date().toISOString(),
     profiles: input.profiles,
     savedSearches: input.savedSearches,
@@ -209,7 +209,9 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
   if (!isRecord(value)) {
     return emptyPreview(['Import file must contain a JSON object.']);
   }
-  if (value.schemaVersion !== 1) errors.push('Unsupported or missing schemaVersion.');
+  if (value.schemaVersion !== 1 && value.schemaVersion !== 2) {
+    errors.push('Unsupported or missing schemaVersion.');
+  }
   if (!hasOnlyAllowedKeys(value, exportKeys)) {
     errors.push('Import contains unsupported top-level fields.');
   }
@@ -218,10 +220,11 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
   const savedSearches = readArray(value.savedSearches, 'savedSearches', errors);
   const jobPostings = readArray(value.jobPostings, 'jobPostings', errors);
   const applicationSessions = readArray(value.applicationSessions, 'applicationSessions', errors);
-  // An older version-one backup legitimately lacks these newer collections.
-  const resumeDocuments = readOptionalArray(value.resumeDocuments, 'resumeDocuments', errors);
-  const fieldMappings = readOptionalArray(value.fieldMappings, 'fieldMappings', errors);
-  const tailoringSuggestions = readOptionalArray(
+  // Version two requires all seven collections. Legacy version one has four.
+  const readAdditional = value.schemaVersion === 2 ? readArray : readOptionalArray;
+  const resumeDocuments = readAdditional(value.resumeDocuments, 'resumeDocuments', errors);
+  const fieldMappings = readAdditional(value.fieldMappings, 'fieldMappings', errors);
+  const tailoringSuggestions = readAdditional(
     value.tailoringSuggestions,
     'tailoringSuggestions',
     errors
@@ -255,7 +258,7 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
   const data = errors.length
     ? undefined
     : ({
-        schemaVersion: 1,
+        schemaVersion: 2,
         exportedAt:
           typeof value.exportedAt === 'string' && value.exportedAt.length <= 100
             ? value.exportedAt
