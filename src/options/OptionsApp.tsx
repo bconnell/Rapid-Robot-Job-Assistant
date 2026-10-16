@@ -10,7 +10,12 @@ import {
   readLocalDataSnapshot,
   saveProfileWithResume
 } from '../shared/storage/IndexedDbRepository';
-import { ProfileRepository, SavedSearchRepository } from '../shared/storage/TypedRepositories';
+import {
+  ApplicationSessionRepository,
+  JobPostingRepository,
+  ProfileRepository,
+  SavedSearchRepository
+} from '../shared/storage/TypedRepositories';
 import { extractTextFromDocx } from '../shared/parsing/DocxResumeParser';
 import { extractPlainTextFromPaste } from '../shared/parsing/ResumeTextExtractor';
 import {
@@ -32,6 +37,10 @@ import {
   type ImportPreview
 } from '../shared/data/LocalDataTransfer';
 import { importLocalDataAdditively } from '../shared/data/LocalDataImportService';
+import { orderSavedJobs, orderSavedSessions } from '../shared/jobs/JobHistoryOrdering';
+import { normalizePageUrl } from '../shared/extension/PageCommandIntegrity';
+import type { JobPosting } from '../shared/models/JobPosting';
+import type { ApplicationSession } from '../shared/models/ApplicationSession';
 import { clearTargetTab } from '../shared/extension/TargetPageTracker';
 import {
   browserLabel,
@@ -50,6 +59,8 @@ import type { ResumeDocument } from '../shared/models/ResumeDocument';
 const settingsRepo = new ChromeStorageRepository();
 const profileRepo = new ProfileRepository();
 const searchRepo = new SavedSearchRepository();
+const jobRepo = new JobPostingRepository();
+const sessionRepo = new ApplicationSessionRepository();
 const maxImportBytes = 5 * 1024 * 1024;
 
 export function OptionsApp() {
@@ -59,6 +70,8 @@ export function OptionsApp() {
   const [activeProfileId, setActiveProfileId] = useState<string | undefined>();
   const [savedProfiles, setSavedProfiles] = useState<UserProfile[]>([]);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [savedJobs, setSavedJobs] = useState<JobPosting[]>([]);
+  const [savedSessions, setSavedSessions] = useState<ApplicationSession[]>([]);
   const [searchForm, setSearchForm] = useState({
     label: '',
     url: '',
@@ -81,20 +94,31 @@ export function OptionsApp() {
   }, []);
 
   async function loadOptions() {
-    const [nextSettings, nextProfileId, searches, profiles] = await Promise.all([
+    const [nextSettings, nextProfileId, searches, profiles, jobs, sessions] = await Promise.all([
       settingsRepo.getSettings(),
       settingsRepo.getActiveProfileId(),
       searchRepo.list(),
-      profileRepo.list()
+      profileRepo.list(),
+      jobRepo.list(),
+      sessionRepo.list()
     ]);
     const validSearches = searches.filter(isValidSavedSearchRecord);
     const validProfiles = profiles.filter(isValidUserProfileRecord);
+    const validJobs = jobs.filter(isValidJobPostingRecord);
+    const validSessions = sessions.filter(isValidApplicationSessionRecord);
+    setSavedJobs(orderSavedJobs(validJobs));
+    setSavedSessions(orderSavedSessions(validSessions));
     setSettings(nextSettings);
     setActiveProfileId(nextProfileId);
     setSavedSearches(validSearches);
     setSavedProfiles(validProfiles);
-    if (searches.length !== validSearches.length || profiles.length !== validProfiles.length) {
-      setStatus('Invalid saved profiles or searches were hidden from the options page.');
+    if (
+      searches.length !== validSearches.length ||
+      profiles.length !== validProfiles.length ||
+      jobs.length !== validJobs.length ||
+      sessions.length !== validSessions.length
+    ) {
+      setStatus('Invalid saved records were hidden from the options page.');
     }
     if (nextProfileId) {
       const active = await profileRepo.get(nextProfileId);
@@ -264,6 +288,37 @@ export function OptionsApp() {
       setStatus('Saved search stored locally.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Saved search could not be created.');
+    }
+  }
+
+  async function refreshHistory() {
+    try {
+      const [jobs, sessions] = await Promise.all([jobRepo.list(), sessionRepo.list()]);
+      const validJobs = jobs.filter(isValidJobPostingRecord);
+      const validSessions = sessions.filter(isValidApplicationSessionRecord);
+      setSavedJobs(orderSavedJobs(validJobs));
+      setSavedSessions(orderSavedSessions(validSessions));
+      setStatus(
+        jobs.length === validJobs.length && sessions.length === validSessions.length
+          ? 'Local job and application history refreshed.'
+          : 'History refreshed. Invalid stored records were hidden.'
+      );
+    } catch {
+      setStatus('Local history could not be refreshed. Existing records were not changed.');
+    }
+  }
+
+  async function openSavedHistoryPage(url: string) {
+    const safeUrl = normalizePageUrl(url);
+    if (!safeUrl || safeUrl !== url) {
+      setStatus('Saved page URL was invalid. No tab was opened.');
+      return;
+    }
+    try {
+      await chrome.tabs.create({ url: safeUrl, active: true });
+      setStatus('Saved page opened in a new tab. Review it before taking any action.');
+    } catch {
+      setStatus('Could not open the saved page. Check the browser permissions.');
     }
   }
 
@@ -496,6 +551,8 @@ export function OptionsApp() {
     setActiveProfileId(undefined);
     setSavedProfiles([]);
     setSavedSearches([]);
+    setSavedJobs([]);
+    setSavedSessions([]);
     setResumeText('');
     setWarnings([]);
     setParseSummary(undefined);
@@ -531,6 +588,8 @@ export function OptionsApp() {
         'fieldMappings',
         'tailoringSuggestions'
       ]);
+      setSavedJobs([]);
+      setSavedSessions([]);
       setStatus(
         'Saved jobs, application sessions, field mappings, and tailoring suggestions cleared locally.'
       );
@@ -592,6 +651,12 @@ export function OptionsApp() {
             onActivateProfile={activateSavedProfile}
             onCreateNewProfile={startNewProfile}
             onSaveProfile={saveProfile}
+          />
+          <JobHistoryPanel
+            jobs={savedJobs}
+            sessions={savedSessions}
+            onRefresh={refreshHistory}
+            onOpenPage={openSavedHistoryPage}
           />
         </div>
         <aside className="options-sidebar stack">
@@ -1037,6 +1102,67 @@ function SavedSearchesPanel({
           </div>
         </div>
       ))}
+    </section>
+  );
+}
+
+function JobHistoryPanel({
+  jobs,
+  sessions,
+  onRefresh,
+  onOpenPage
+}: {
+  jobs: JobPosting[];
+  sessions: ApplicationSession[];
+  onRefresh: () => void;
+  onOpenPage: (url: string) => void;
+}) {
+  const [visibleCount, setVisibleCount] = useState(50);
+  return (
+    <section className="card stack options-card">
+      <h2>Saved Jobs and Applications</h2>
+      <p className="muted">
+        These are local records, not automatic applications. You control whether to submit.
+      </p>
+      <div className="row">
+        <span className="pill">{jobs.length} saved jobs</span>
+        <span className="pill">{sessions.length} application sessions</span>
+        <button className="secondary" onClick={onRefresh}>Refresh History</button>
+      </div>
+      <h3>Job Postings</h3>
+      {jobs.length === 0 && <p className="empty-state">No saved jobs yet.</p>}
+      {jobs.slice(0, visibleCount).map((job) => (
+        <div className="mini-card stack" key={job.id}>
+          <strong>{job.title}</strong>
+          <p className="muted">
+            {[job.company, job.location, job.remoteStatus, job.status]
+              .filter(Boolean)
+              .join(' | ')}
+          </p>
+          <p className="muted">{job.sourceUrl}</p>
+          <button className="secondary" onClick={() => onOpenPage(job.sourceUrl)}>
+            Open Job Posting
+          </button>
+        </div>
+      ))}
+      <h3>Application Sessions</h3>
+      {sessions.length === 0 && <p className="empty-state">No saved application sessions yet.</p>}
+      {sessions.slice(0, visibleCount).map((session) => (
+        <div className="mini-card stack" key={session.id}>
+          <strong>{session.job?.title || session.pageUrl}</strong>
+          <p className="muted">{session.status} | Updated {session.updatedAt}</p>
+          {session.manualVerificationRequired && <p className="warn">Manual verification needed.</p>}
+          {session.notes && <p className="muted">{session.notes.slice(0, 300)}</p>}
+          <button className="secondary" onClick={() => onOpenPage(session.pageUrl)}>
+            Open Application Page
+          </button>
+        </div>
+      ))}
+      {(jobs.length > visibleCount || sessions.length > visibleCount) && (
+        <button className="secondary" onClick={() => setVisibleCount((count) => count + 50)}>
+          Show More History
+        </button>
+      )}
     </section>
   );
 }
