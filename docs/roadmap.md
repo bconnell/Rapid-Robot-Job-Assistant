@@ -23,8 +23,8 @@
 - Custom widgets are detected but manual-only. The extension does not click custom dropdowns.
 - Cross-origin iframe forms are not inspected. Users may need to open the frame directly or fill it manually.
 - Additive import restores new backup records only. Duplicate IDs cancel the entire import. Replacing existing records is not supported; browser settings and the active-profile selection are not restored.
-- All seven IndexedDB collections are included in a consistent record backup. Browser settings and active-profile selection remain outside the backup schema by design. Older version-one four-store backups remain compatible. Version-two exports require all seven collections.
-- The backup import/export path currently supports up to 5 MB; larger backups are not yet supported.
+- All seven IndexedDB collections are included in a consistent record backup. Actual browser settings and active-profile selection are not transferred; the JSON contains only fixed local-only schema markers. Older version-one four-store backups remain compatible. Version-two exports require all seven collections.
+- Backups support up to 16 MiB and 5,000 records per collection; larger exports and imports are refused with a clear capacity message.
 - AI provider network calls are scaffolded but intentionally not executed.
 - Resume parsing is improved but still review-first. Users should verify every parsed field.
 - Experience fallback parsing is conservative. Inferred entries should be checked and corrected.
@@ -50,7 +50,7 @@
 - Application sessions persist field preview, notes, manual verification state, fill results, and user-marked status.
 - Side panel has per-field edit, approve, skip, bulk-safe approval, clear approvals, and fill-result feedback.
 - Profile value resolution fills only saved values and does not invent missing data.
-- Local export includes all seven IndexedDB stores with a privacy warning and a 5 MB safety limit.
+- Local export includes all seven IndexedDB stores with a privacy warning, a 16 MiB byte limit, and a 5,000-record per-collection limit.
 - Import validates JSON, previews record counts, and requires confirmation before atomic additive restoration. Collisions prevent all writes.
 - The previous CI definition runs install, build, test, typecheck, lint, and format, but hosted Actions are currently unavailable. The equivalent local gate is `npm run validate:local`.
 

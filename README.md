@@ -29,9 +29,9 @@ Newest changes are listed first.
 - Clearing IndexedDB data uses one transaction, so a later store clear failure rolls back earlier clears. Full cleanup retains Chrome settings when that database operation fails and reports later cross-storage cleanup failures.
 - Import atomically adds profiles, saved searches, jobs, sessions, saved resume text, field mappings, and tailoring suggestions in one IndexedDB transaction.
 - Existing IDs or storage failures cancel the restore without overwriting existing data.
-- Browser settings and active profile selection remain unchanged. Older four-collection backups remain importable.
+- The backup contains only fixed local-only settings markers; actual browser settings and active profile selection remain unchanged. Older four-collection backups remain importable.
 - The backup UI lists all seven included IndexedDB stores and the intentionally excluded browser settings and active-profile selection.
-- Exports larger than the current 5 MB import limit are refused instead of creating files that cannot be restored.
+- Backups are capped at 16 MiB and 5,000 records per collection; larger snapshots are refused before a file is created.
 - Imported profiles can be selected in Options; new profiles cannot silently overwrite an unselected imported record.
 - Local builds, automated tests, and unpacked-browser QA remain required before release. No manual user testing is requested for an unverified candidate.
 - Reports a committed restore as successful even if the Options view must be reopened to refresh.
@@ -190,8 +190,8 @@ Newest changes are listed first.
 - Strict TypeScript, React, Vite, Vitest, ESLint, and Prettier setup.
 - Local storage wrappers for Chrome storage and IndexedDB.
 - Deterministic job-page extraction, form-field detection, CAPTCHA and bot-check detection, sensitive-field rules, field mapping, and safe fill preview/fill execution.
-- Local resume text parsing and initial `.docx` extraction support through `mammoth`.
-- AI provider interfaces with a manual local fallback. AI requests require explicit review before anything is sent.
+- Local resume text parsing and bounded `.docx` extraction from the Word document part.
+- AI provider interfaces are placeholders; this build does not send data to AI providers.
 - Fake-only fixtures and unit tests for core logic.
 
 Known limitations are documented in [docs/roadmap.md](docs/roadmap.md).
@@ -293,10 +293,15 @@ Tests and examples use fake data only. Do not copy real job applications, resume
 - Vite for local development and extension bundling.
 - TypeScript for typed models and message contracts.
 - `idb` for a small IndexedDB wrapper.
-- `mammoth` for initial `.docx` resume text extraction.
+- `jszip` for bounded access to the selected `.docx` Word document part.
 - Vitest and jsdom for unit tests.
 - ESLint and Prettier for baseline project hygiene.
+
+DOCX import accepts files up to 10 MiB, limits the main Word XML part to 2 MiB, and rejects
+archives with more than 2,048 entries. The parser does not resolve external relationships or
+fetch remote content.
 
 ## License
 
 Rapid Robot Job Assistant is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+Third-party license texts are packaged at `dist/THIRD-PARTY-NOTICES.txt` and exposed in Options.

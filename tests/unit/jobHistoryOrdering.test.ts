@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { filterSavedJobs, filterSavedSessions, orderSavedJobs, orderSavedSessions } from '../../src/shared/jobs/JobHistoryOrdering';
+import {
+  filterSavedJobs,
+  filterSavedSessions,
+  orderSavedJobs,
+  orderSavedSessions
+} from '../../src/shared/jobs/JobHistoryOrdering';
 import type { JobPosting } from '../../src/shared/models/JobPosting';
 import type { ApplicationSession } from '../../src/shared/models/ApplicationSession';
 
@@ -38,15 +43,20 @@ describe('local history ordering', () => {
       { ...job, id: 'remote-role', company: 'Remote Systems', remoteStatus: 'remote' }
     ];
     expect(filterSavedJobs(postings, ' REMOTE ')).toHaveLength(1);
-    expect(filterSavedJobs(postings, 'example')).toHaveLength(1);
+    expect(filterSavedJobs(postings, 'example company')).toHaveLength(1);
     expect(postings).toHaveLength(2);
   });
 
   it('filters local session history by notes or user-marked status', () => {
     const sessions: ApplicationSession[] = [
       session,
-      { ...session, id: 'submitted', status: 'submitted-by-user', submittedByUser: true,
-        notes: 'Follow-up requested' }
+      {
+        ...session,
+        id: 'submitted',
+        status: 'submitted-by-user',
+        submittedByUser: true,
+        notes: 'Follow-up requested'
+      }
     ];
     expect(filterSavedSessions(sessions, 'follow-up')).toHaveLength(1);
     expect(filterSavedSessions(sessions, 'SUBMITTED')).toHaveLength(1);

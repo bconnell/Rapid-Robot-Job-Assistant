@@ -300,6 +300,12 @@ function getManualOnlyReason(
   if (candidate.controlFamily === 'native-multi-select') {
     return 'Multiple-choice select detected. Review and fill manually.';
   }
+  if (candidate.controlFamily === 'native-select' && candidate.optionListComplete === false) {
+    return 'The select option list is incomplete. Review and fill manually.';
+  }
+  if (candidate.classificationContextComplete !== true) {
+    return 'Field context is incomplete. Review this field and enter it manually.';
+  }
   if (candidate.controlFamily === 'aria-combobox' || candidate.controlFamily === 'custom-select') {
     return 'Custom dropdown detected. Review and fill manually.';
   }

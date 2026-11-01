@@ -95,6 +95,8 @@ const candidateKeys = new Set([
   'ariaLabel',
   'ariaDescribedBy',
   'ariaLabelledBy',
+  'formContext',
+  'domIdentity',
   'placeholder',
   'name',
   'id',
@@ -107,6 +109,10 @@ const candidateKeys = new Set([
   'fieldsetLegend',
   'options',
   'optionValues',
+  'optionCount',
+  'optionListComplete',
+  'groupMemberCount',
+  'groupMemberIdentities',
   'required',
   'visible',
   'disabled',
@@ -115,7 +121,8 @@ const candidateKeys = new Set([
   'controlFamily',
   'candidateSource',
   'frameWarning',
-  'stableSelector'
+  'stableSelector',
+  'classificationContextComplete'
 ]);
 const fillResultKeys = new Set(['selector', 'ok', 'message']);
 
@@ -288,12 +295,31 @@ function isValidFillPreviewItem(value: unknown): value is FillPreviewItem {
         candidate.optionValues.every((option) =>
           isBoundedString(option, maxOptionLength, true)
         ))) &&
+    (candidate.groupMemberCount === undefined ||
+      (Number.isInteger(candidate.groupMemberCount) &&
+        candidate.groupMemberCount >= 1 &&
+        candidate.groupMemberCount <= 101)) &&
+    (candidate.optionCount === undefined ||
+      (Number.isInteger(candidate.optionCount) &&
+        candidate.optionCount >= 0 &&
+        candidate.optionCount <= 101)) &&
+    (candidate.optionListComplete === undefined ||
+      typeof candidate.optionListComplete === 'boolean') &&
+    (candidate.domIdentity === undefined ||
+      (Number.isSafeInteger(candidate.domIdentity) && candidate.domIdentity >= 1)) &&
+    (candidate.groupMemberIdentities === undefined ||
+      (Array.isArray(candidate.groupMemberIdentities) &&
+        candidate.groupMemberIdentities.length <= 100 &&
+        candidate.groupMemberIdentities.every(
+          (identity) => Number.isSafeInteger(identity) && identity >= 1
+        ))) &&
     everyOptionalStringBounded(candidate, [
       'inputType',
       'labelText',
       'ariaLabel',
       'ariaDescribedBy',
       'ariaLabelledBy',
+      'formContext',
       'placeholder',
       'name',
       'id',
@@ -314,6 +340,7 @@ function isValidFillPreviewItem(value: unknown): value is FillPreviewItem {
     optionalBoolean(candidate.disabled) &&
     optionalBoolean(candidate.readOnly) &&
     optionalBoolean(candidate.stableSelector) &&
+    optionalBoolean(candidate.classificationContextComplete) &&
     typeof value.kind === 'string' &&
     fieldMappingKinds.has(value.kind as FieldMappingKind) &&
     typeof value.confidence === 'number' &&

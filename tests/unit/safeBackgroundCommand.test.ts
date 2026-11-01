@@ -30,8 +30,8 @@ describe('safe background messaging', () => {
     vi.stubGlobal('chrome', {
       runtime: { sendMessage: vi.fn().mockResolvedValue({ ok: 'true' }) }
     });
-    expect(
-      (await safeSendBackgroundMessage({ command: 'ANALYZE_CURRENT_JOB_PAGE' })).ok
-    ).toBe(false);
+    expect((await safeSendBackgroundMessage({ command: 'ANALYZE_CURRENT_JOB_PAGE' })).ok).toBe(
+      false
+    );
   });
 });

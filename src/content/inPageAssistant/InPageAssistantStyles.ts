@@ -37,6 +37,7 @@ export const inPageAssistantStyles = `
     border-bottom: 1px solid var(--rrja-line);
   }
   .body {
+    min-width: 0;
     padding: 12px;
     max-height: calc(100vh - 120px);
     overflow: auto;
@@ -44,7 +45,7 @@ export const inPageAssistantStyles = `
   h2, h3, p { margin: 0; }
   h2 { font-size: 16px; color: var(--rrja-text); }
   h3 { font-size: 13px; color: var(--rrja-text); }
-  p, li { color: var(--rrja-muted); font-size: 12px; line-height: 1.4; }
+  p, li { color: var(--rrja-muted); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
   button {
     border: 0;
     border-radius: 11px;
@@ -76,6 +77,7 @@ export const inPageAssistantStyles = `
   .ok { color: var(--rrja-ok); border-color: rgba(114,230,172,.55); }
   .warn { color: var(--rrja-warn); border-color: rgba(255,209,102,.55); }
   .card {
+    min-width: 0;
     display: grid;
     gap: 8px;
     border: 1px solid var(--rrja-line);

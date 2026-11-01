@@ -137,12 +137,11 @@ describe('session lifecycle and import integrity', () => {
       false
     );
     expect(
-      isVerifiedFillResponse({ ...valid, pageUrl: 'https://jobs.example.test/apply/2' },
-        pageUrl, [approved])
+      isVerifiedFillResponse({ ...valid, pageUrl: 'https://jobs.example.test/apply/2' }, pageUrl, [
+        approved
+      ])
     ).toBe(false);
-    expect(
-      isVerifiedFillResponse(valid, pageUrl, [{ ...approved, approved: false }])
-    ).toBe(false);
+    expect(isVerifiedFillResponse(valid, pageUrl, [{ ...approved, approved: false }])).toBe(false);
     expect(
       isVerifiedFillResponse(
         { ...valid, results: [{ selector: '#unapproved', ok: true, message: 'Filled' }] },
@@ -304,7 +303,9 @@ describe('session lifecycle and import integrity', () => {
     expect(source).toMatch(/disabled=\{!previewInteractive \|\| item\.status === 'manual-only'\}/);
     expect(source).toContain('patch.fillResults ?? session?.fillResults ?? fillResults');
     expect(source).toContain('isValidApplicationSessionRecord(next)');
-    expect(source).toContain('canSaveJobFromSender({ tab: { url: result.tabUrl } }, analyzed.sourceUrl)');
+    expect(source).toContain(
+      'canSaveJobFromSender({ tab: { url: result.tabUrl } }, analyzed.sourceUrl)'
+    );
     expect(source).toContain('fillResults.length > 0');
   });
 

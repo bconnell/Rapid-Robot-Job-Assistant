@@ -65,6 +65,37 @@ afterEach(async () => {
 });
 
 describe('Options local job and application history', () => {
+  it('gives every Options form control an accessible name', async () => {
+    root = createRoot(mount);
+    await act(async () => {
+      root?.render(createElement(OptionsApp));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+
+    const addExperience = [...mount.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Add Experience')
+    );
+    expect(addExperience).toBeTruthy();
+    await act(async () => {
+      addExperience?.click();
+      await Promise.resolve();
+    });
+
+    const unnamed = [
+      ...mount.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+        'input, select, textarea'
+      )
+    ]
+      .filter(
+        (control) =>
+          !control.labels?.length &&
+          !control.getAttribute('aria-label') &&
+          !control.getAttribute('aria-labelledby')
+      )
+      .map((control) => `${control.tagName.toLowerCase()}.${control.className}`);
+    expect(unnamed).toEqual([]);
+  });
+
   it('shows saved records and opens them only when the user clicks', async () => {
     await new JobPostingRepository().save(job);
     await new ApplicationSessionRepository().save(session);
@@ -79,8 +110,8 @@ describe('Options local job and application history', () => {
     expect(mount.textContent).toContain('Synthetic note');
     expect(openTab).not.toHaveBeenCalled();
 
-    const openPosting = [...mount.querySelectorAll('button')].find(
-      (button) => button.textContent?.includes('Open Job Posting')
+    const openPosting = [...mount.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Open Job Posting')
     );
     expect(openPosting).toBeTruthy();
     await act(async () => {

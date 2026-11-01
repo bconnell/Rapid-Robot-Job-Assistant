@@ -24,14 +24,9 @@ export function filterSavedJobs(jobs: JobPosting[], query: string): JobPosting[]
   const term = normalizedQuery(query);
   if (!term) return jobs;
   return jobs.filter((job) =>
-    [
-      job.title,
-      job.company,
-      job.location,
-      job.sourceUrl,
-      job.status,
-      job.remoteStatus
-    ].some((value) => value?.toLocaleLowerCase().includes(term))
+    [job.title, job.company, job.location, job.sourceUrl, job.status, job.remoteStatus].some(
+      (value) => value?.toLocaleLowerCase().includes(term)
+    )
   );
 }
 
@@ -42,12 +37,8 @@ export function filterSavedSessions(
   const term = normalizedQuery(query);
   if (!term) return sessions;
   return sessions.filter((session) =>
-    [
-      session.job?.title,
-      session.job?.company,
-      session.pageUrl,
-      session.notes,
-      session.status
-    ].some((value) => value?.toLocaleLowerCase().includes(term))
+    [session.job?.title, session.job?.company, session.pageUrl, session.notes, session.status].some(
+      (value) => value?.toLocaleLowerCase().includes(term)
+    )
   );
 }

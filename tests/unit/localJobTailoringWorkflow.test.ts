@@ -28,9 +28,7 @@ const profile: UserProfile = {
 describe('review-first local job wording', () => {
   it('suggests only supported skill matches as copyable wording', () => {
     const suggestions = createLocalTailoringSuggestions(job, profile);
-    const low = suggestions.filter(
-      (item) => item.riskLevel === 'low' && !item.truthfulnessWarning
-    );
+    const low = suggestions.filter((item) => item.riskLevel === 'low' && !item.truthfulnessWarning);
     expect(low).toHaveLength(1);
     expect(low[0].suggestedText).toContain('TypeScript');
     expect(low[0].suggestedText).not.toContain('Python');

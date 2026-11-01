@@ -1,7 +1,4 @@
-import type {
-  BackgroundMessage,
-  ExtensionCommandResult
-} from './ExtensionMessaging';
+import type { BackgroundMessage, ExtensionCommandResult } from './ExtensionMessaging';
 
 /**
  * User-triggered extension messages can reject while the MV3 service worker
@@ -29,7 +26,8 @@ export async function safeSendBackgroundMessage<T = unknown>(
   } catch {
     return {
       ok: false,
-      userMessage: 'The extension background process is unavailable. Reopen the extension and try again.'
+      userMessage:
+        'The extension background process is unavailable. Reopen the extension and try again.'
     };
   }
 }

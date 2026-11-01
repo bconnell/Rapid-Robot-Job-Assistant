@@ -19,7 +19,6 @@
 
 body {
   margin: 0;
-  min-width: 360px;
   background:
     radial-gradient(circle at top right, rgba(61, 165, 255, 0.24), transparent 32rem),
     linear-gradient(145deg, #07111f 0%, #0a1627 52%, #07111f 100%);
@@ -241,7 +240,7 @@ textarea {
 .workflow-rail {
   display: flex;
   gap: 0.35rem;
-  overflow-x: auto;
+  flex-wrap: wrap;
   padding-bottom: 0.1rem;
 }
 

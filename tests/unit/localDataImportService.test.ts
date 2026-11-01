@@ -5,7 +5,10 @@ import {
   validateLocalDataImport
 } from '../../src/shared/data/LocalDataTransfer';
 import { importLocalDataAdditively } from '../../src/shared/data/LocalDataImportService';
-import { clearAllIndexedDbData, IndexedDbRepository } from '../../src/shared/storage/IndexedDbRepository';
+import {
+  clearAllIndexedDbData,
+  IndexedDbRepository
+} from '../../src/shared/storage/IndexedDbRepository';
 import {
   ApplicationSessionRepository,
   JobPostingRepository,
@@ -181,14 +184,16 @@ describe('additive local data import', () => {
 
   it('rolls back earlier inserts when a later store write fails', async () => {
     const originalPut = IDBObjectStore.prototype.put;
-    const simulatedFailure = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(
-      function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
-        if (this.name === 'jobPostings') {
-          throw new DOMException('Synthetic quota exhaustion', 'QuotaExceededError');
-        }
-        return originalPut.call(this, value, key);
+    const simulatedFailure = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+      this: IDBObjectStore,
+      value: unknown,
+      key?: IDBValidKey
+    ) {
+      if (this.name === 'jobPostings') {
+        throw new DOMException('Synthetic quota exhaustion', 'QuotaExceededError');
       }
-    );
+      return originalPut.call(this, value, key);
+    });
     try {
       await expect(importLocalDataAdditively(backup())).rejects.toThrow(/quota/i);
     } finally {
@@ -202,25 +207,29 @@ describe('additive local data import', () => {
   it('rolls back every earlier store if the final suggestion store fails', async () => {
     const incoming = {
       ...backup(),
-      tailoringSuggestions: [{
-        id: 'synthetic-suggestion',
-        originalText: '',
-        suggestedText: 'Review the saved experience section',
-        reason: 'Local suggestions must remain truthful',
-        matchedJobKeywords: [],
-        riskLevel: 'low' as const,
-        status: 'suggested' as const
-      }]
+      tailoringSuggestions: [
+        {
+          id: 'synthetic-suggestion',
+          originalText: '',
+          suggestedText: 'Review the saved experience section',
+          reason: 'Local suggestions must remain truthful',
+          matchedJobKeywords: [],
+          riskLevel: 'low' as const,
+          status: 'suggested' as const
+        }
+      ]
     };
     const originalPut = IDBObjectStore.prototype.put;
-    const injected = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(
-      function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
-        if (this.name === 'tailoringSuggestions') {
-          throw new DOMException('Injected last-store failure', 'QuotaExceededError');
-        }
-        return originalPut.call(this, value, key);
+    const injected = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+      this: IDBObjectStore,
+      value: unknown,
+      key?: IDBValidKey
+    ) {
+      if (this.name === 'tailoringSuggestions') {
+        throw new DOMException('Injected last-store failure', 'QuotaExceededError');
       }
-    );
+      return originalPut.call(this, value, key);
+    });
     try {
       await expect(importLocalDataAdditively(incoming)).rejects.toThrow(
         /Injected last-store failure/

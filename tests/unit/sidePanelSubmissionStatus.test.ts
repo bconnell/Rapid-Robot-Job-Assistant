@@ -81,8 +81,8 @@ async function renderPanel(): Promise<void> {
 }
 
 function findSubmittedButton(): HTMLButtonElement | undefined {
-  return [...mount.querySelectorAll('button')].find(
-    (button) => button.textContent?.includes('Mark Submitted')
+  return [...mount.querySelectorAll('button')].find((button) =>
+    button.textContent?.includes('Mark Submitted')
   );
 }
 

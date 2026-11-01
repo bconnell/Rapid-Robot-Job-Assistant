@@ -7,6 +7,8 @@ import type { TailoringSuggestion } from '../ai/TailoringService';
 import type { SavedSearch } from '../models/SavedSearch';
 import type { JobPosting } from '../models/JobPosting';
 import type { ApplicationSession } from '../models/ApplicationSession';
+import { maxRecordsPerCollection } from '../data/LocalDataLimits';
+import { measureJsonUtf8BytesWithinLimit } from '../data/BoundedJsonSize';
 
 interface RapidRobotDb extends DBSchema {
   profiles: { key: string; value: unknown };
@@ -69,7 +71,7 @@ const exportedStores = INDEXED_DB.stores;
  * Reads a coherent backup snapshot across all seven IndexedDB stores.
  * The caller must still validate every record before generating the backup.
  */
-export async function readLocalDataSnapshot(): Promise<{
+export async function readLocalDataSnapshot(limits?: { maxSerializedBytes?: number }): Promise<{
   profiles: UserProfile[];
   savedSearches: SavedSearch[];
   jobPostings: JobPosting[];
@@ -80,6 +82,69 @@ export async function readLocalDataSnapshot(): Promise<{
 }> {
   const db = await getDb();
   const tx = db.transaction([...exportedStores], 'readonly');
+  const maxSerializedBytes = limits?.maxSerializedBytes;
+  if (maxSerializedBytes !== undefined) {
+    let totalSerializedBytes = 0;
+    const readStoreWithinLimits = async (storeName: StoreName): Promise<unknown[]> => {
+      const values: unknown[] = [];
+      let cursor = await tx.objectStore(storeName).openCursor();
+      while (cursor) {
+        if (values.length >= maxRecordsPerCollection) {
+          throw new Error('LOCAL_DATA_BACKUP_RECORD_LIMIT_EXCEEDED');
+        }
+        const measured = measureJsonUtf8BytesWithinLimit(
+          cursor.value,
+          maxSerializedBytes - totalSerializedBytes - 1
+        );
+        if (!measured.ok) {
+          throw new Error(
+            measured.reason === 'too-large'
+              ? 'LOCAL_DATA_BACKUP_SIZE_LIMIT_EXCEEDED'
+              : 'LOCAL_DATA_BACKUP_SERIALIZATION_FAILED'
+          );
+        }
+        const serializedBytes = measured.bytes + 1;
+        totalSerializedBytes += serializedBytes;
+        if (totalSerializedBytes > maxSerializedBytes) {
+          throw new Error('LOCAL_DATA_BACKUP_SIZE_LIMIT_EXCEEDED');
+        }
+        values.push(cursor.value);
+        cursor = await cursor.continue();
+      }
+      return values;
+    };
+
+    try {
+      const collections = await Promise.all(exportedStores.map(readStoreWithinLimits));
+      await tx.done;
+      const [
+        profiles,
+        resumeDocuments,
+        jobPostings,
+        applicationSessions,
+        fieldMappings,
+        savedSearches,
+        tailoringSuggestions
+      ] = collections;
+      return {
+        profiles: profiles as UserProfile[],
+        savedSearches: savedSearches as SavedSearch[],
+        jobPostings: jobPostings as JobPosting[],
+        applicationSessions: applicationSessions as ApplicationSession[],
+        resumeDocuments: resumeDocuments as ResumeDocument[],
+        fieldMappings: fieldMappings as Array<FieldMapping & { id: string }>,
+        tailoringSuggestions: tailoringSuggestions as TailoringSuggestion[]
+      };
+    } catch (error) {
+      try {
+        tx.abort();
+      } catch {
+        // A failed cursor request may already have aborted the transaction.
+      }
+      await tx.done.catch(() => undefined);
+      throw error;
+    }
+  }
   const [
     profiles,
     savedSearches,

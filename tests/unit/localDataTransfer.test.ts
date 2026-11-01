@@ -5,6 +5,41 @@ import {
 } from '../../src/shared/data/LocalDataTransfer';
 
 describe('LocalDataTransfer', () => {
+  it('accepts 5,000 records per collection and rejects the next record', () => {
+    const base = createLocalDataExport({
+      profiles: [],
+      savedSearches: [],
+      jobPostings: [],
+      applicationSessions: [],
+      settings: {
+        localOnlyMode: true,
+        aiEnabled: false,
+        aiProvider: 'manual',
+        manualReviewRequired: true
+      }
+    });
+    const profiles = Array.from({ length: 5000 }, (_, index) => ({
+      id: `profile-${index}`,
+      contact: {},
+      skills: [],
+      experience: [],
+      education: [],
+      certifications: [],
+      projects: [],
+      desiredTitles: [],
+      updatedAt: 'now'
+    }));
+
+    expect(validateLocalDataImport({ ...base, profiles }).valid).toBe(true);
+
+    const overLimit = validateLocalDataImport({
+      ...base,
+      profiles: [...profiles, { ...profiles[0], id: 'profile-5000' }]
+    });
+    expect(overLimit.valid).toBe(false);
+    expect(overLimit.errors).toContain('profiles contains too many records.');
+  });
+
   it('exports safe settings without API endpoints', () => {
     const exported = createLocalDataExport({
       profiles: [],
@@ -92,43 +127,55 @@ describe('LocalDataTransfer', () => {
     expect(
       validateLocalDataImport({
         ...safe,
-        resumeDocuments: [{
-          id: 'resume-1',
-          sourceType: 'pasted-text',
-          text: 'Synthetic resume',
-          importedAt: '2026-10-15',
-          warnings: [],
-          unexpectedCredential: 'reject'
-        }]
+        resumeDocuments: [
+          {
+            id: 'resume-1',
+            sourceType: 'pasted-text',
+            text: 'Synthetic resume',
+            importedAt: '2026-10-15',
+            warnings: [],
+            unexpectedCredential: 'reject'
+          }
+        ]
       }).valid
     ).toBe(false);
     expect(
       validateLocalDataImport({
         ...safe,
-        tailoringSuggestions: [{
-          id: 'suggestion-1',
-          originalText: '',
-          suggestedText: 'Claim an unsupported degree',
-          reason: 'Not backed by the profile',
-          matchedJobKeywords: [],
-          riskLevel: 'invented',
-          status: 'suggested'
-        }]
+        tailoringSuggestions: [
+          {
+            id: 'suggestion-1',
+            originalText: '',
+            suggestedText: 'Claim an unsupported degree',
+            reason: 'Not backed by the profile',
+            matchedJobKeywords: [],
+            riskLevel: 'invented',
+            status: 'suggested'
+          }
+        ]
       }).valid
     ).toBe(false);
     expect(
       validateLocalDataImport({
         ...safe,
-        fieldMappings: [{
-          id: 'mapping-1',
-          candidate: { selector: '#fake', tagName: 'input', options: [], required: true, visible: true },
-          kind: 'email',
-          confidence: 0.9,
-          sensitive: false,
-          fillable: true,
-          requiresDirectReview: false,
-          unknownField: 'reject'
-        }]
+        fieldMappings: [
+          {
+            id: 'mapping-1',
+            candidate: {
+              selector: '#fake',
+              tagName: 'input',
+              options: [],
+              required: true,
+              visible: true
+            },
+            kind: 'email',
+            confidence: 0.9,
+            sensitive: false,
+            fillable: true,
+            requiresDirectReview: false,
+            unknownField: 'reject'
+          }
+        ]
       }).valid
     ).toBe(false);
   });

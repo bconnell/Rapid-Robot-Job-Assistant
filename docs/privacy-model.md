@@ -26,15 +26,15 @@ Saved profiles, resume-derived profile fields, saved jobs, application sessions,
 - Original uploaded `.docx` file blobs
 - Raw full page HTML from real job sites
 - Raw real application form snapshots
-- CAPTCHA, login, MFA, or bot-check details
+- Raw CAPTCHA text, passwords, or MFA responses. The extension may store that a verification challenge was detected and local field metadata for the session.
 - Console logs with private values
-- API keys, unless a reviewed optional provider setup is added later
+- API keys. This build has no provider setup or key storage.
 
 ## AI Requests
 
-AI is disabled by default. If a provider is configured later, the user must review what would be sent before any request leaves the browser. Redaction is applied where possible, but review is still required.
+AI is disabled in this build. The provider classes are inactive scaffolding, and there is no remote AI request path. The extension does not send private profile, resume, job, application, or form data to remote AI providers.
 
-No resume data, job page text, application answers, field values, or provider requests are uploaded to AI providers by default. There are no background AI calls.
+There are no background AI calls, analytics, or telemetry requests in the current source. After the user approves filling, the target page receives the values in its form controls and its own page scripts may observe or transmit them.
 
 ## Never Sent Automatically
 
@@ -50,15 +50,15 @@ No resume data, job page text, application answers, field values, or provider re
 
 ## Site Permissions
 
-The extension uses `activeTab` for one-off analysis from user-triggered buttons on normal web pages. This lets the extension inspect the current page only when the user asks.
+The extension uses `activeTab` for one-off analysis from user-triggered buttons on normal web pages. This lets the extension inspect the current page only when the user asks. The manifest also declares optional HTTP and HTTPS host patterns so users can grant persistent access to a chosen site; the current UI requests only the active page's origin and does not request access to all sites.
 
 Optional persistent site permission is a fallback for pages where Chrome blocks one-off script injection, or a convenience for smoother access. The permission request is for the current site origin only, not all sites.
 
-Granting site permission does not submit applications, click CAPTCHA or bot checks, send data to AI, or upload profile data. Page analysis remains user-triggered and stays local unless the user later reviews and approves an AI request.
+Granting site permission does not submit applications, click CAPTCHA or bot checks, send data to AI, or upload profile data. Page analysis remains user-triggered and local.
 
 ## In-Page Assistant
 
-The in-page assistant is user-triggered. It does not run automatically on page load. It creates only its own branded extension UI on the current page and can be closed or minimized.
+The in-page assistant is user-triggered. It does not run automatically on page load. Its branded UI uses a closed shadow root so page scripts cannot inspect the profile-derived preview or invoke its controls. When the user approves filling, values are written into the current page's form controls, where that site's scripts can observe them. The assistant can be closed or minimized.
 
 The in-page assistant does not send data externally, does not store raw page HTML, does not store uploaded `.docx` blobs, and does not bypass browser protections. Brave Shields and other browser privacy features are not changed by the extension.
 
@@ -90,7 +90,7 @@ Resume parsing is local and review-first. The parser normalizes text, detects se
 
 Export reads all seven IndexedDB record collections in one consistent snapshot before validating the exported records. Cleanup of all IndexedDB stores is transactional so a failed individual store clear rolls back the entire database clear. Browser settings clearing is separate and is not part of that database transaction. Full cleanup attempts the atomic database clear first to preserve browser settings and target-page state when that operation fails. If a later browser-storage operation fails, cleanup reports partial completion rather than implying all state was cleared.
 
-The supported record backup is limited to 5 MB for both export and import. An oversized export is refused without modifying stored records. Larger backup support is still incomplete. The file is a backup of supported record collections, not a full copy of every item in extension storage. It contains saved resume text, field mappings, and tailoring suggestions as well as profiles, searches, jobs, and application sessions. Browser settings and the active profile selection are excluded; neither is silently changed by a restore. The user interface identifies this scope before export and advises against deleting excluded data on the assumption that it can be restored from this file.
+The supported record backup is limited to 16 MiB and 5,000 records per collection. The byte limit bounds file parsing and serialized payload allocation; the independent record limit also bounds object-count validation and per-record IndexedDB work, since many tiny JSON objects can consume substantially more memory and transaction work than their text size suggests. Tests exercise the exact 5,000/5,001 record boundary for import validation and export snapshots. Export reads the seven stores in one read-only transaction and stops once either bound is exceeded; its JSON is compact, and the final file size is checked before download. An oversized export is refused without modifying stored records. Import checks file size before reading it into memory. This bounded format supports large histories while keeping file parsing and snapshot allocation finite. The file is a backup of supported record collections, not a full copy of every item in extension storage. It contains saved resume text, field mappings, and tailoring suggestions as well as profiles, searches, jobs, and application sessions. It includes a fixed safe settings object for the backup schema; actual browser settings, provider configuration, and active-profile selection are excluded and are not applied by restore. The user interface identifies this scope before export and advises against deleting excluded data on the assumption that it can be restored from this file.
 
 Export creates `rapid-robot-job-assistant-export.json`. It can contain private profile, resume-derived, job, saved search, and application session data. Do not commit exported files.
 
@@ -102,7 +102,7 @@ Do not commit real user data. Fixtures, examples, tests, screenshots, and docs m
 
 ## In-Page Assistant Persistence
 
-Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA details, login details, MFA details, and bot-check details are not stored.
+Fill previews, user-edited values, approval decisions, and fill results created in the in-page assistant are stored locally as part of the application session. Raw real page HTML, uploaded `.docx` file blobs, CAPTCHA challenge text, passwords, and MFA responses are not stored by these workflows. Sessions may retain a challenge-detected flag and field metadata, but not values read from ordinary page input controls.
 
 ## Job Text And Session Minimization
 

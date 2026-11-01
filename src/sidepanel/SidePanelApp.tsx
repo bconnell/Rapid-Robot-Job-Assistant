@@ -769,8 +769,8 @@ export function SidePanelApp() {
         <section className="card stack">
           <h2>Local Job Match and Wording</h2>
           <p className="muted">
-            Suggestions use only saved profile information and analyzed job text. Nothing is
-            sent to an AI provider or inserted into an application automatically.
+            Suggestions use only saved profile information and analyzed job text. Nothing is sent to
+            an AI provider or inserted into an application automatically.
           </p>
           {!profile && (
             <p className="warn">
@@ -861,7 +861,8 @@ export function SidePanelApp() {
                     !item.candidate.visible ||
                     item.candidate.disabled ||
                     item.candidate.readOnly ||
-                    item.candidate.stableSelector === false
+                    item.candidate.stableSelector === false ||
+                    item.candidate.classificationContextComplete !== true
                   }
                   onChange={(event) =>
                     updatePreview(item.candidate.selector, {

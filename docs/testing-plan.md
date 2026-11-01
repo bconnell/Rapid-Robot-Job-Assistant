@@ -25,7 +25,7 @@ Current unit and regression coverage includes:
 - Any failed fill response must invalidate the side panel's interactive preview, require a fresh analysis and approval, and warn that some page fields may already have changed.
 - In-page completion controls must update only an already saved application session; a status-only request must not invent an empty submitted or skipped session or erase fill evidence
 - Verify safe local wording suggestions are shown only for saved profile skills, missing skills are warned about, and copying never fills a field or sends data to an AI provider
-- Export size enforcement against the 5 MB import boundary; oversized files must never be downloaded as restorable backups
+- Export/import size enforcement at 16 MiB and 5,000 records per collection; oversized backups must be refused without changing stored records
 - Inject snapshot or download creation failure: Options must show a failure and must not claim a backup exists or change stored records
 - Version-two seven-store export round-trip validation (including required collection presence and duplicate IDs), legacy version-one four-store compatibility, and additive restore with schema completeness, unsupported-field rejection, collision rejection (including later collections), competing imports, commit-time revalidation, and simulated write-failure rollback
 - Saved search creation and manual check status
@@ -41,6 +41,8 @@ Current unit and regression coverage includes:
 - Experience parser regression coverage for Additional Experience, Work History, Employment, Professional Background, fallback project blocks, freelance entries, and no-experience cases
 - Active tab permission preflight, restricted URL detection, injection failure classification, and current-origin permission patterns
 - Application form detection for native labels, ARIA references, fieldset legends, grouped radio/checkbox controls, select options, disabled fields, read-only fields, hidden fields, custom widgets, and iframe warnings
+- Truncated native, referenced ARIA, group, nearby, heading, and option context must be marked incomplete; incomplete or legacy field previews cannot be bulk-approved, individually approved, or filled
+- A suffix-only sensitive label change beyond the captured text bound must invalidate prior approval without changing the input value
 - Field mapping false-positive prevention, manual-only rules, sensitive direct-review rules, and page-level analysis summary counts
 - Approved-only filling for React-style text inputs, native selects, radio groups, checkbox groups, and unsafe/manual-only fields
 - Content script readiness checks, PING messaging, content-message failure classification, tab-change detection, and standalone content-script build validation
@@ -60,7 +62,7 @@ Manual checks should cover:
 
 - Loading `dist` as an unpacked extension.
 - Opening the popup and the in-page assistant.
-- Analyzing a fake or safe public job page.
+- Analyzing a synthetic local job page.
 - Detecting fields on a test form.
 - Confirming CAPTCHA detection pauses filling.
 - Clearing local data from options.
@@ -74,13 +76,13 @@ Manual checks should cover:
 ## Manual QA Checklist
 
 1. Build extension.
-2. Load `dist` folder unpacked in Chrome.
+2. Load `dist` unpacked in a fresh disposable Chrome for Testing profile running in the background.
 3. Open Options.
 4. Import fake pasted resume.
 5. Import fake `.docx` resume.
 6. Review and edit profile.
 7. Save profile.
-8. Open fake or real job page.
+8. Open a synthetic local job page.
 9. Analyze job page.
 10. Confirm job saved locally.
 11. Open fake application form fixture or test page.
@@ -102,7 +104,7 @@ Manual checks should cover:
 3. Open `chrome://extensions`.
 4. Click Analyze.
 5. Confirm the extension says Chrome blocks internal pages.
-6. Open a normal job page or test page.
+6. Open a synthetic localhost job page or test page.
 7. Without clicking **Allow This Site**, click **Open Assistant On This Page** from the popup.
 8. Confirm it either analyzes successfully or gives a specific host-access-denied message.
 9. If host-access-denied appears, click **Allow This Site**.
@@ -116,7 +118,7 @@ Manual checks should cover:
 17. Confirm no submit buttons are clicked.
 18. Confirm no CAPTCHA or bot checks are bypassed.
 19. Confirm local-only privacy language remains visible.
-20. Deny the current-site permission request on a normal page and confirm the UI explains one-off analysis can still be tried.
+20. Deny the current-site permission request on a synthetic localhost page and confirm the UI explains one-off analysis can still be tried.
 
 ## Application Form QA
 
@@ -141,6 +143,8 @@ Manual checks should cover:
 19. Confirm iframe warnings appear when fields may be inside an iframe.
 20. Confirm no empty session is saved on failed analysis.
 21. Confirm no private files appear in git status.
+22. Use synthetic localhost forms to verify that long labels, referenced ARIA descriptions, group labels, and option text beyond safe context limits remain manual-only and cannot be approved or filled.
+23. Approve a complete field, append a sensitive label suffix beyond the captured bound, and verify Fill refuses without changing the input.
 
 ## Content Script Runtime QA
 
@@ -260,7 +264,7 @@ Manual checks should cover:
 6. Confirm Docs is a compact list.
 7. Confirm raw resume text area has a sensible height.
 8. Resize to roughly 390px, 768px, 1280px, 1920px, and an ultra-wide width.
-9. Confirm the layout remains readable at each width.
+9. Confirm the layout remains readable at each width without page-level horizontal scrolling; workflow status chips wrap in narrow panels.
 10. Confirm popup, side panel, and Options are styled when loaded from the built `dist` folder.
 
 ## Parser QA
@@ -284,7 +288,7 @@ Manual checks should cover:
 
 Run `npm ci` and `npm run validate:local` at the exact candidate HEAD. The command runs typecheck, tests, lint, formatting, build, and build-output checks and stops on failure. Capture the exit code, commit SHA, and test summary. Do not claim these checks pass until they actually execute.
 
-GitHub Actions previously ran the same checks, but is currently unavailable because of billing. It is not an active acceptance authority. Browser extension acceptance still needs actual unpacked Chromium runtime testing with isolated fake data, and must not be inferred from a successful local Node build.
+Hosted workflow status is candidate-specific. A successful run on an older main revision does not validate the current candidate. After a branch is pushed, inspect the exact workflow runs and checks attached to the candidate head and current base; distinguish runner admission and skipped steps from executed tests. Do not infer that hosted CI is available or unavailable from historical account or billing notes. Browser extension acceptance still needs actual unpacked Chromium runtime testing with isolated fake data, and must not be inferred from a successful local Node build.
 
 ## Future Browser Automation
 
@@ -302,7 +306,7 @@ Browser automation may be useful later for controlled extension QA. It should no
 8. Confirm clearing all local data also clears the remembered target page.
 9. Inject a failure in a later IndexedDB clear and verify earlier clears roll back, browser settings and remembered target remain unchanged, and the UI reports a failure.
 10. Inject a Chrome settings or target-page cleanup failure after a database clear and verify the UI reports partial cleanup rather than success.
-9. Open the full assistant against a remembered target that has not loaded the content script and confirm the target is checked by id rather than compared with the assistant tab.
+11. Open the full assistant against a remembered target that has not loaded the content script and confirm the target is checked by id rather than compared with the assistant tab.
 
 ## Target And Data Boundary QA
 

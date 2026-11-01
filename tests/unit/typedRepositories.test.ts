@@ -7,6 +7,7 @@ import type { ResumeDocument } from '../../src/shared/models/ResumeDocument';
 import {
   clearAllIndexedDbData,
   clearIndexedDbStores,
+  getDb,
   IndexedDbRepository,
   readLocalDataSnapshot,
   saveProfileWithResume
@@ -185,6 +186,37 @@ describe('typed repositories', () => {
 });
 
 describe('atomic storage lifecycle', () => {
+  it('exports the 5,000-record collection limit and rejects the next stored row', async () => {
+    const db = await getDb();
+    const tx = db.transaction(['profiles'], 'readwrite');
+    const profiles = tx.objectStore('profiles');
+    for (let index = 0; index <= 5000; index += 1) {
+      await profiles.put(
+        {
+          id: `bounded-profile-${index}`,
+          contact: {},
+          skills: [],
+          experience: [],
+          education: [],
+          certifications: [],
+          projects: [],
+          desiredTitles: [],
+          updatedAt: 'now'
+        },
+        `bounded-profile-${index}`
+      );
+    }
+    await tx.done;
+
+    await expect(readLocalDataSnapshot({ maxSerializedBytes: 16 * 1024 * 1024 })).rejects.toThrow(
+      'LOCAL_DATA_BACKUP_RECORD_LIMIT_EXCEEDED'
+    );
+
+    await db.delete('profiles', 'bounded-profile-5000');
+    const snapshot = await readLocalDataSnapshot({ maxSerializedBytes: 16 * 1024 * 1024 });
+    expect(snapshot.profiles).toHaveLength(5000);
+  });
+
   it('reads all exported collections from a single successful snapshot', async () => {
     const profileRepo = new ProfileRepository();
     const savedSearchRepo = new SavedSearchRepository();
@@ -211,6 +243,46 @@ describe('atomic storage lifecycle', () => {
     expect(snapshot.applicationSessions).toEqual([]);
   });
 
+  it('stops a backup snapshot at its byte bound without changing stored records', async () => {
+    const profileRepo = new ProfileRepository();
+    const profile: UserProfile = {
+      id: 'bounded-snapshot-profile',
+      contact: { fullName: 'Synthetic User' },
+      skills: [],
+      experience: [],
+      education: [],
+      certifications: [],
+      projects: [],
+      desiredTitles: [],
+      updatedAt: '2026-10-15T00:00:00.000Z'
+    };
+    await profileRepo.save(profile);
+
+    await expect(readLocalDataSnapshot({ maxSerializedBytes: 1 })).rejects.toThrow(
+      'LOCAL_DATA_BACKUP_SIZE_LIMIT_EXCEEDED'
+    );
+    expect(await profileRepo.get(profile.id)).toEqual(profile);
+  });
+
+  it('checks an oversized stored row before JSON serialization and preserves it', async () => {
+    const rawProfiles = new IndexedDbRepository('profiles');
+    const oversized = { id: 'oversized-local-record', summary: 'x'.repeat(17 * 1024 * 1024) };
+    await rawProfiles.put(oversized.id, oversized);
+    const stringify = vi.spyOn(JSON, 'stringify');
+
+    await expect(readLocalDataSnapshot({ maxSerializedBytes: 1024 })).rejects.toThrow(
+      'LOCAL_DATA_BACKUP_SIZE_LIMIT_EXCEEDED'
+    );
+
+    const attemptedLargeRecordSerialization = stringify.mock.calls.some(
+      ([value]) => typeof value === 'object' && value !== null && 'summary' in value
+    );
+    stringify.mockRestore();
+    expect(attemptedLargeRecordSerialization).toBe(false);
+    const preserved = (await rawProfiles.get(oversized.id)) as { summary: string } | undefined;
+    expect(preserved?.summary).toHaveLength(17 * 1024 * 1024);
+  });
+
   it('rolls back all cleared stores if a later clear fails', async () => {
     const profileRepo = new ProfileRepository();
     const searchRepo = new SavedSearchRepository();
@@ -233,14 +305,14 @@ describe('atomic storage lifecycle', () => {
     await searchRepo.save(search);
 
     const originalClear = IDBObjectStore.prototype.clear;
-    const injected = vi.spyOn(IDBObjectStore.prototype, 'clear').mockImplementation(
-      function (this: IDBObjectStore) {
-        if (this.name === 'savedSearches') {
-          throw new DOMException('Synthetic clear failure', 'UnknownError');
-        }
-        return originalClear.call(this);
+    const injected = vi.spyOn(IDBObjectStore.prototype, 'clear').mockImplementation(function (
+      this: IDBObjectStore
+    ) {
+      if (this.name === 'savedSearches') {
+        throw new DOMException('Synthetic clear failure', 'UnknownError');
       }
-    );
+      return originalClear.call(this);
+    });
     try {
       await expect(clearAllIndexedDbData()).rejects.toThrow(/Synthetic clear failure/);
     } finally {
@@ -295,21 +367,23 @@ describe('atomic profile and targeted cleanup', () => {
   });
 
   it('rolls back profile writes when the resume write fails', async () => {
-    const originalPut = IDBObjectStore.prototype.put;
-    const failingPut = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(
-      function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
-        if (this.name === 'resumeDocuments') {
-          throw new DOMException('Injected resume storage failure', 'QuotaExceededError');
-        }
-        return originalPut.call(this, value, key);
+    const originalAdd = IDBObjectStore.prototype.add;
+    const failingAdd = vi.spyOn(IDBObjectStore.prototype, 'add').mockImplementation(function (
+      this: IDBObjectStore,
+      value: unknown,
+      key?: IDBValidKey
+    ) {
+      if (this.name === 'resumeDocuments') {
+        throw new DOMException('Injected resume storage failure', 'QuotaExceededError');
       }
-    );
+      return originalAdd.call(this, value, key);
+    });
     try {
       await expect(saveProfileWithResume(profile, resume)).rejects.toThrow(
         /Injected resume storage failure/
       );
     } finally {
-      failingPut.mockRestore();
+      failingAdd.mockRestore();
     }
     expect(await new ProfileRepository().get(profile.id)).toBeUndefined();
     expect(await new ResumeDocumentRepository().get(resume.id)).toBeUndefined();
@@ -331,14 +405,14 @@ describe('atomic profile and targeted cleanup', () => {
   it('rolls back a failed targeted cleanup of related stores', async () => {
     await saveProfileWithResume(profile, resume);
     const originalClear = IDBObjectStore.prototype.clear;
-    const failingClear = vi.spyOn(IDBObjectStore.prototype, 'clear').mockImplementation(
-      function (this: IDBObjectStore) {
-        if (this.name === 'resumeDocuments') {
-          throw new DOMException('Injected targeted cleanup failure', 'UnknownError');
-        }
-        return originalClear.call(this);
+    const failingClear = vi.spyOn(IDBObjectStore.prototype, 'clear').mockImplementation(function (
+      this: IDBObjectStore
+    ) {
+      if (this.name === 'resumeDocuments') {
+        throw new DOMException('Injected targeted cleanup failure', 'UnknownError');
       }
-    );
+      return originalClear.call(this);
+    });
     try {
       await expect(clearIndexedDbStores(['profiles', 'resumeDocuments'])).rejects.toThrow(
         /Injected targeted cleanup failure/

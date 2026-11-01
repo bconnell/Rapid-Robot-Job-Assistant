@@ -5,6 +5,11 @@ import {
 } from '../../src/content/inPageAssistant/InPageAssistantController';
 
 const messages: unknown[] = [];
+let assistantShadowForTests: ShadowRoot | undefined;
+
+function getAssistantShadow(): ShadowRoot | undefined {
+  return assistantShadowForTests;
+}
 
 async function flushAsyncWork(): Promise<void> {
   await Promise.resolve();
@@ -64,8 +69,17 @@ function installCryptoStub(): void {
 
 beforeEach(() => {
   messages.length = 0;
+  assistantShadowForTests = undefined;
   closeInPageAssistant();
   document.documentElement.innerHTML = '<head><title></title></head><body></body>';
+  const attachShadow = HTMLElement.prototype.attachShadow;
+  vi.spyOn(HTMLElement.prototype, 'attachShadow').mockImplementation(function (
+    this: HTMLElement,
+    init: ShadowRootInit
+  ) {
+    assistantShadowForTests = attachShadow.call(this, init);
+    return assistantShadowForTests;
+  });
   installChromeStub();
   installCryptoStub();
 });
@@ -90,7 +104,7 @@ describe('in-page assistant controller hardening', () => {
     });
 
     await expect(openInPageAssistant()).resolves.toMatchObject({ opened: true });
-    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    const shadow = getAssistantShadow();
     expect(shadow?.textContent).toContain('Profile needed before fill');
     expect(shadow?.textContent).not.toContain('Synthetic private worker error');
     expect(
@@ -102,23 +116,21 @@ describe('in-page assistant controller hardening', () => {
 
   it('restores a minimized assistant instead of leaving the panel hidden', async () => {
     await openInPageAssistant();
-    const root = document.getElementById('rapid-robot-job-assistant-root');
-    const shadow = root?.shadowRoot;
+    const shadow = getAssistantShadow();
     expect(shadow?.querySelector('.panel')).toBeTruthy();
 
     shadow?.querySelector<HTMLButtonElement>('[data-action="minimize"]')?.click();
     expect(shadow?.querySelector('.panel')?.classList.contains('minimized')).toBe(true);
 
     await openInPageAssistant();
-    expect(root?.shadowRoot?.querySelector('.panel')?.classList.contains('minimized')).toBe(false);
+    expect(getAssistantShadow()?.querySelector('.panel')?.classList.contains('minimized')).toBe(
+      false
+    );
   });
 
   it('does not save a weak empty page as a real analyzed job', async () => {
     await openInPageAssistant();
-    document
-      .getElementById('rapid-robot-job-assistant-root')
-      ?.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="analyze-job"]')
-      ?.click();
+    getAssistantShadow()?.querySelector<HTMLButtonElement>('[data-action="analyze-job"]')?.click();
 
     await flushAsyncWork();
 
@@ -137,7 +149,7 @@ describe('in-page assistant controller hardening', () => {
       'This position supports manual review and reliable local testing workflows.</p>' +
       '</main>';
     await openInPageAssistant();
-    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    const shadow = getAssistantShadow();
 
     shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-job"]')?.click();
     await flushAsyncWork();
@@ -160,7 +172,7 @@ describe('in-page assistant controller hardening', () => {
       value: { writeText }
     });
     await openInPageAssistant();
-    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    const shadow = getAssistantShadow();
     shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-job"]')?.click();
     await flushAsyncWork();
     expect(writeText).not.toHaveBeenCalled();
@@ -171,7 +183,9 @@ describe('in-page assistant controller hardening', () => {
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledWith('Skills relevant to this role: TypeScript.');
     expect(
-      messages.some((message) => (message as { command?: string }).command === 'FILL_APPROVED_FIELDS')
+      messages.some(
+        (message) => (message as { command?: string }).command === 'FILL_APPROVED_FIELDS'
+      )
     ).toBe(false);
   });
 
@@ -181,7 +195,7 @@ describe('in-page assistant controller hardening', () => {
       '<label for="email">Email</label><input id="email" type="email" name="email" />' +
       '</form></main>';
     await openInPageAssistant();
-    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    const shadow = getAssistantShadow();
     shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')?.click();
     await flushAsyncWork();
 
@@ -208,7 +222,7 @@ describe('in-page assistant controller hardening', () => {
     document.body.innerHTML =
       '<main><form><label for="email">Email</label><input id="email" type="email" /></form></main>';
     await openInPageAssistant();
-    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    const shadow = getAssistantShadow();
     shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')?.click();
     await flushAsyncWork();
     expect(shadow?.querySelector('[data-action="mark-submitted"]')).toBeTruthy();
@@ -229,7 +243,7 @@ describe('in-page assistant controller hardening', () => {
     document.body.innerHTML =
       '<main><h1>Software Engineer</h1><form><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" /></form></main>';
     await openInPageAssistant();
-    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    const shadow = getAssistantShadow();
 
     shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')?.click();
     await flushAsyncWork();
@@ -238,5 +252,45 @@ describe('in-page assistant controller hardening', () => {
     expect(valueInput).toBeTruthy();
     expect(valueInput?.disabled).toBe(false);
     expect(valueInput?.value).toBe('alex.morgan@example.test');
+  });
+
+  it('keeps a field manual-only when its label context was truncated', async () => {
+    document.body.innerHTML = `<main><form><label for="email">Email ${'x'.repeat(180)} Social Security Number</label><input id="email" name="email" type="email" autocomplete="email" /></form></main>`;
+    await openInPageAssistant();
+    const shadow = getAssistantShadow();
+
+    shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')?.click();
+    await flushAsyncWork();
+
+    expect(
+      shadow?.querySelector<HTMLButtonElement>('[data-action="approve-field"]')?.disabled
+    ).toBe(true);
+    expect(shadow?.querySelector<HTMLButtonElement>('[data-action="approve-safe"]')?.disabled).toBe(
+      true
+    );
+    expect(shadow?.textContent).toContain('context is incomplete');
+    expect(shadow?.textContent?.match(/Field context is incomplete/g)).toHaveLength(1);
+    expect(shadow?.querySelector('style')?.textContent).toContain('overflow-wrap: anywhere');
+  });
+
+  it('keeps profile previews and approval controls inaccessible to page scripts', async () => {
+    document.body.innerHTML =
+      '<main><form><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" /></form></main>';
+    await openInPageAssistant();
+
+    const host = document.getElementById('rapid-robot-job-assistant-root');
+    expect(host?.shadowRoot).toBeNull();
+    expect(host?.querySelector('[data-action="analyze-fields"]')).toBeNull();
+
+    const shadow = getAssistantShadow();
+    shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')?.click();
+    await flushAsyncWork();
+
+    expect(shadow?.querySelector<HTMLInputElement>('[data-field-value]')?.value).toBe(
+      'alex.morgan@example.test'
+    );
+    expect(host?.textContent).not.toContain('alex.morgan@example.test');
+    expect(host?.querySelector('[data-action="approve-safe"]')).toBeNull();
+    expect(host?.querySelector('[data-action="fill"]')).toBeNull();
   });
 });

@@ -22,7 +22,11 @@ import {
   parseResumeSections,
   type ResumeParseSummary
 } from '../shared/parsing/ResumeSectionParser';
-import { createSavedSearch, markSavedSearchChecked, normalizeSavedSearchUrl } from '../shared/jobs/SavedSearchService';
+import {
+  createSavedSearch,
+  markSavedSearchChecked,
+  normalizeSavedSearchUrl
+} from '../shared/jobs/SavedSearchService';
 import {
   createLocalDataExport,
   isValidApplicationSessionRecord,
@@ -60,13 +64,14 @@ import {
 } from '../shared/models/UserProfile';
 import type { SavedSearch } from '../shared/models/SavedSearch';
 import type { ResumeDocument } from '../shared/models/ResumeDocument';
+import { maxBackupBytes } from '../shared/data/LocalDataLimits';
+import { measureJsonUtf8BytesWithinLimit } from '../shared/data/BoundedJsonSize';
 
 const settingsRepo = new ChromeStorageRepository();
 const profileRepo = new ProfileRepository();
 const searchRepo = new SavedSearchRepository();
 const jobRepo = new JobPostingRepository();
 const sessionRepo = new ApplicationSessionRepository();
-const maxImportBytes = 5 * 1024 * 1024;
 
 export function OptionsApp() {
   const [settings, setSettings] = useState<ExtensionSettings>(defaultSettings);
@@ -226,7 +231,9 @@ export function OptionsApp() {
       (activeProfileId && next.id !== activeProfileId) ||
       (!activeProfileId && (await profileRepo.get(next.id)))
     ) {
-      setStatus('This profile ID is not active or is already saved. Select it or start a new profile.');
+      setStatus(
+        'This profile ID is not active or is already saved. Select it or start a new profile.'
+      );
       return;
     }
     try {
@@ -387,7 +394,7 @@ export function OptionsApp() {
         resumeDocuments,
         fieldMappings,
         tailoringSuggestions
-      } = await readLocalDataSnapshot();
+      } = await readLocalDataSnapshot({ maxSerializedBytes: maxBackupBytes });
       if (
         !profiles.every(isValidUserProfileRecord) ||
         !savedSearches.every(isValidSavedSearchRecord) ||
@@ -416,10 +423,17 @@ export function OptionsApp() {
         );
         return;
       }
-      const backup = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      if (backup.size > maxImportBytes) {
+      const serializedSize = measureJsonUtf8BytesWithinLimit(data, maxBackupBytes);
+      if (!serializedSize.ok) {
         setStatus(
-          'Backup exceeds the 5 MB restore limit and was not downloaded. Saved records are unchanged.'
+          'Backup exceeds the 16 MiB restore limit and was not downloaded. Saved records are unchanged.'
+        );
+        return;
+      }
+      const backup = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      if (backup.size > maxBackupBytes) {
+        setStatus(
+          'Backup exceeds the 16 MiB restore limit and was not downloaded. Saved records are unchanged.'
         );
         return;
       }
@@ -440,8 +454,21 @@ export function OptionsApp() {
       setStatus(
         'Supported record backup created. Keep the private JSON file out of shared folders.'
       );
-    } catch {
-      setStatus('Backup could not be created. Existing local records were not changed.');
+    } catch (error) {
+      if (error instanceof Error && error.message === 'LOCAL_DATA_BACKUP_RECORD_LIMIT_EXCEEDED') {
+        setStatus(
+          'Backup exceeds the supported limit of 5,000 records in a collection. Existing local records were not changed.'
+        );
+      } else if (
+        error instanceof Error &&
+        error.message === 'LOCAL_DATA_BACKUP_SIZE_LIMIT_EXCEEDED'
+      ) {
+        setStatus(
+          'Backup exceeds the 16 MiB restore limit and was not downloaded. Saved records are unchanged.'
+        );
+      } else {
+        setStatus('Backup could not be created. Existing local records were not changed.');
+      }
     }
   }
 
@@ -450,8 +477,8 @@ export function OptionsApp() {
     setValidatedImport(undefined);
     setImportPreview('');
     if (!file) return;
-    if (file.size > maxImportBytes) {
-      setImportPreview('Import file is too large. Keep JSON exports under 5 MB.');
+    if (file.size > maxBackupBytes) {
+      setImportPreview('Import file is too large. Keep JSON exports at or below 16 MiB.');
       setStatus('Import file did not validate.');
       return;
     }
@@ -492,7 +519,8 @@ export function OptionsApp() {
         'Add the validated backup records to this browser? Existing records are not replaced. ' +
           'If any record ID already exists, the entire import will be cancelled.'
       )
-    ) return;
+    )
+      return;
     setImportPending(true);
     let counts: ImportPreview['counts'];
     try {
@@ -512,15 +540,17 @@ export function OptionsApp() {
     try {
       await loadOptions();
       setStatus(
-        'Imported ' + [
-          counts.profiles + ' profiles',
-          counts.savedSearches + ' searches',
-          counts.jobPostings + ' jobs',
-          counts.applicationSessions + ' sessions',
-          counts.resumeDocuments + ' resumes',
-          counts.fieldMappings + ' mappings',
-          counts.tailoringSuggestions + ' suggestions'
-        ].join(', ') + '. Active profile and settings were not changed.'
+        'Imported ' +
+          [
+            counts.profiles + ' profiles',
+            counts.savedSearches + ' searches',
+            counts.jobPostings + ' jobs',
+            counts.applicationSessions + ' sessions',
+            counts.resumeDocuments + ' resumes',
+            counts.fieldMappings + ' mappings',
+            counts.tailoringSuggestions + ' suggestions'
+          ].join(', ') +
+          '. Active profile and settings were not changed.'
       );
     } catch {
       setStatus(
@@ -534,7 +564,9 @@ export function OptionsApp() {
 
   async function clearLocalData() {
     const confirmed = window.confirm(
-      'Clear local extension settings, profiles, saved jobs, searches, and sessions?'
+      'Clear all local extension data from this browser? This removes profiles, resume documents, ' +
+        'saved jobs, application sessions, saved searches, field mappings, tailoring suggestions, ' +
+        'extension settings, and the remembered target page.'
     );
     if (!confirmed) return;
     // Clear the transactional database first. On database failure, keep the
@@ -759,7 +791,11 @@ function ResumeImportPanel({
       <p className="muted">
         Pasted text and `.docx` files are parsed locally. The original file blob is not stored.
       </p>
+      <label className="muted" htmlFor="resume-source">
+        Resume text to parse
+      </label>
       <textarea
+        id="resume-source"
         className="resume-source"
         value={resumeText}
         onChange={(event) => onResumeTextChange(event.target.value)}
@@ -1021,9 +1057,9 @@ function AiProviderSettingsPanel() {
       <label>
         <input type="checkbox" checked={false} readOnly disabled /> Network AI provider
       </label>
-      <select value="manual" disabled>
-        <option value="manual">Manual local rules</option>
-      </select>
+      <p className="muted">
+        Current provider mode: <strong>Manual local rules</strong>
+      </p>
       <p className="muted">
         Network AI providers are not implemented in this build. No resume, job-page, application,
         field, or prompt data is sent to an AI provider.
@@ -1094,6 +1130,10 @@ function SavedSearchesPanel({
         />{' '}
         Remote only
       </label>
+      <p className="muted">
+        Keywords, location, and remote preference are saved as notes for this URL. Opening a search
+        uses the URL as saved; listings are not crawled and filters are not rewritten.
+      </p>
       <button className="secondary" onClick={onCreateSearch}>
         Save Search URL
       </button>
@@ -1102,6 +1142,12 @@ function SavedSearchesPanel({
         <div className="mini-card" key={search.id}>
           <strong>{search.label}</strong>
           <p className="muted">{search.url}</p>
+          <p className="muted">
+            Keywords: {search.keywords?.length ? search.keywords.join(', ') : 'None recorded'}
+          </p>
+          <p className="muted">
+            Location: {search.location || 'Any'} · Remote only: {search.remoteOnly ? 'Yes' : 'No'}
+          </p>
           <p className="muted">{search.lastCheckStatus ?? 'Not checked yet.'}</p>
           <div className="row">
             <button className="secondary" onClick={() => onOpenSearch(search)}>
@@ -1144,7 +1190,9 @@ function JobHistoryPanel({
       <div className="row">
         <span className="pill">{jobs.length} saved jobs</span>
         <span className="pill">{sessions.length} application sessions</span>
-        <button className="secondary" onClick={onRefresh}>Refresh History</button>
+        <button className="secondary" onClick={onRefresh}>
+          Refresh History
+        </button>
       </div>
       <label>
         Filter saved history
@@ -1168,9 +1216,7 @@ function JobHistoryPanel({
         <div className="mini-card stack" key={job.id}>
           <strong>{job.title}</strong>
           <p className="muted">
-            {[job.company, job.location, job.remoteStatus, job.status]
-              .filter(Boolean)
-              .join(' | ')}
+            {[job.company, job.location, job.remoteStatus, job.status].filter(Boolean).join(' | ')}
           </p>
           <p className="muted">{job.sourceUrl}</p>
           <button className="secondary" onClick={() => onOpenPage(job.sourceUrl)}>
@@ -1185,8 +1231,12 @@ function JobHistoryPanel({
       {matchingSessions.slice(0, visibleCount).map((session) => (
         <div className="mini-card stack" key={session.id}>
           <strong>{session.job?.title || session.pageUrl}</strong>
-          <p className="muted">{session.status} | Updated {session.updatedAt}</p>
-          {session.manualVerificationRequired && <p className="warn">Manual verification needed.</p>}
+          <p className="muted">
+            {session.status} | Updated {session.updatedAt}
+          </p>
+          {session.manualVerificationRequired && (
+            <p className="warn">Manual verification needed.</p>
+          )}
           {session.notes && <p className="muted">{session.notes.slice(0, 300)}</p>}
           <button className="secondary" onClick={() => onOpenPage(session.pageUrl)}>
             Open Application Page
@@ -1235,9 +1285,15 @@ function PrivacyControlsPanel({
         until you delete them, clear extension data, or uninstall the extension.
       </p>
       <p className="muted">
-        The backup includes profiles, saved searches, jobs, application sessions, saved resume
-        text, field mappings, and tailoring suggestions. It excludes browser settings and the
-        active-profile selection. It contains private data and supports files up to 5 MB.
+        The backup includes profiles, saved searches, jobs, application sessions, saved resume text,
+        field mappings, and tailoring suggestions. It contains fixed local-only settings markers,
+        but not actual browser settings, provider configuration, or the active-profile selection. It
+        contains private data and supports files up to 16 MiB and 5,000 records per collection.
+      </p>
+      <p>
+        <a href="../THIRD-PARTY-NOTICES.txt" target="_blank" rel="noreferrer">
+          Third-party notices
+        </a>
       </p>
       <button className="secondary" onClick={onExport} disabled={importPending}>
         Export Local Record Backup
@@ -1378,7 +1434,11 @@ function EditableExperience({
             value={item.employer}
             onChange={(value) => update(index, { ...item, employer: value })}
           />
+          <label className="muted" htmlFor={`experience-highlights-${index}`}>
+            Highlights (one per line)
+          </label>
           <textarea
+            id={`experience-highlights-${index}`}
             value={item.highlights.join('\n')}
             onChange={(event) =>
               update(index, { ...item, highlights: event.target.value.split('\n').filter(Boolean) })

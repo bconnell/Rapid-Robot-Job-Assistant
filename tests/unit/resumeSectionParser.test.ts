@@ -14,6 +14,16 @@ describe('parseResumeSections', () => {
     expect(parsed.profile.education[0].school).toBe('Example State University');
   });
 
+  it('preserves complete LinkedIn and GitHub URLs from plain-text resumes', () => {
+    const text = readFileSync(resolve('tests/fixtures/resumes/fake-basic-resume.txt'), 'utf8');
+    const parsed = parseResumeSections(text);
+
+    expect(parsed.profile.contact.linkedInUrl).toBe(
+      'https://www.linkedin.com/in/alex-rivera-example'
+    );
+    expect(parsed.profile.contact.githubUrl).toBe('https://github.com/alex-example');
+  });
+
   it('handles section aliases and collapsed docx-style contact text', () => {
     const parsed = parseResumeSections(`
 Alex Morgan

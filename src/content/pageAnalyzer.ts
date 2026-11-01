@@ -39,9 +39,9 @@ export function analyzeApplicationFields() {
   const mappings = mapFieldCandidates(fields);
   const iframeWarnings = detectApplicationIframeWarnings(document);
   const limitWarnings =
-    detectedFields.length > maxFillItems
+    detectedFields.length > maxFillItems || detectedFields.truncated
       ? [
-          `Only the first ${maxFillItems} detected fields are included. Review the remaining fields manually.`
+          'Page analysis reached its field limit. Some fields may be omitted; review the page manually.'
         ]
       : [];
   const manualOnlyCount = mappings.filter(

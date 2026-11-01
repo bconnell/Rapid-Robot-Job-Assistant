@@ -6,6 +6,8 @@ export interface FormFieldCandidate {
   ariaLabel?: string;
   ariaDescribedBy?: string;
   ariaLabelledBy?: string;
+  formContext?: string;
+  domIdentity?: number;
   placeholder?: string;
   name?: string;
   id?: string;
@@ -18,6 +20,10 @@ export interface FormFieldCandidate {
   fieldsetLegend?: string;
   options: string[];
   optionValues?: string[];
+  optionCount?: number;
+  optionListComplete?: boolean;
+  groupMemberCount?: number;
+  groupMemberIdentities?: number[];
   required: boolean;
   visible: boolean;
   disabled?: boolean;
@@ -37,4 +43,6 @@ export interface FormFieldCandidate {
   candidateSource?: 'native-control' | 'aria-widget' | 'grouped-control';
   frameWarning?: string;
   stableSelector?: boolean;
+  /** False or absent means classifier-relevant DOM context may be incomplete. */
+  classificationContextComplete?: boolean;
 }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   closeInPageAssistant,
   getInPageAssistantStatus,
@@ -6,16 +6,35 @@ import {
   toggleInPageAssistant
 } from '../../src/content/inPageAssistant/InPageAssistantController';
 
+let assistantShadowForTests: ShadowRoot | undefined;
+
+function getAssistantShadow(): ShadowRoot | undefined {
+  return assistantShadowForTests;
+}
+
 describe('InPageAssistantController', () => {
   beforeEach(() => {
+    assistantShadowForTests = undefined;
     document.body.innerHTML = '';
     document.documentElement.querySelector('#rapid-robot-job-assistant-root')?.remove();
+    const attachShadow = HTMLElement.prototype.attachShadow;
+    vi.spyOn(HTMLElement.prototype, 'attachShadow').mockImplementation(function (
+      this: HTMLElement,
+      init: ShadowRootInit
+    ) {
+      assistantShadowForTests = attachShadow.call(this, init);
+      return assistantShadowForTests;
+    });
     vi.stubGlobal('chrome', {
       runtime: {
         id: 'fake-extension',
         sendMessage: vi.fn().mockResolvedValue({ ok: true, data: undefined })
       }
     });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('opens one floating assistant and restores existing widget without duplicates', async () => {
@@ -38,7 +57,9 @@ describe('InPageAssistantController', () => {
   it('renders safety and primary action copy', async () => {
     await openInPageAssistant();
     const root = document.getElementById('rapid-robot-job-assistant-root');
-    const text = root?.shadowRoot?.textContent ?? '';
+    const text = getAssistantShadow()?.textContent ?? '';
+
+    expect(root?.shadowRoot).toBeNull();
 
     expect(text).toContain('Rapid Robot Job Assistant');
     expect(text).toContain('Analyze Job');

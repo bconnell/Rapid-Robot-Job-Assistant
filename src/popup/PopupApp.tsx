@@ -97,9 +97,7 @@ export function PopupApp() {
 
   async function requestSitePermission() {
     try {
-      const result = (await requestCurrentSitePermissionFromUi(
-        status
-      )) as PermissionRequestResult;
+      const result = (await requestCurrentSitePermissionFromUi(status)) as PermissionRequestResult;
       setMessage(result.userMessage);
       await loadTabStatus();
     } catch {

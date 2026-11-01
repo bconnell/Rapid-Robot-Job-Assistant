@@ -11,6 +11,7 @@ export function approveSafeHighConfidence(items: FillPreviewItem[]): FillPreview
       !item.candidate.disabled &&
       !item.candidate.readOnly &&
       item.candidate.stableSelector !== false &&
+      item.candidate.classificationContextComplete === true &&
       item.status !== 'manual-only' &&
       !getManualOnlyReason(item) &&
       Boolean(item.value?.trim());

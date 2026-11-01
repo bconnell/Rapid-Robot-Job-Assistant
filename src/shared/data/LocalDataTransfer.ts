@@ -15,6 +15,7 @@ import {
 import type { ExtensionSettings } from '../storage/ChromeStorageRepository';
 import { isCompleteApprovedFill } from '../fill/FillApprovalRules';
 import { normalizeSavedSearchUrl } from '../jobs/SavedSearchService';
+import { maxRecordsPerCollection } from './LocalDataLimits';
 
 export interface LocalDataExport {
   schemaVersion: 1 | 2;
@@ -52,7 +53,6 @@ export interface ImportPreview {
   data?: LocalDataExport;
 }
 
-const maxRecordsPerCollection = 5000;
 const exportKeys = new Set([
   'schemaVersion',
   'exportedAt',
@@ -248,10 +248,7 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
     errors
   );
 
-  if (
-    !isRecord(value.settings) ||
-    !hasOnlyAllowedKeys(value.settings, importedSettingsKeys)
-  ) {
+  if (!isRecord(value.settings) || !hasOnlyAllowedKeys(value.settings, importedSettingsKeys)) {
     errors.push('settings must be a supported object without provider endpoints or secrets.');
   }
 
@@ -334,11 +331,7 @@ export function isValidResumeDocumentRecord(value: unknown): value is ResumeDocu
 export function isValidStoredFieldMappingRecord(
   value: unknown
 ): value is FieldMapping & { id: string } {
-  if (
-    !isRecord(value) ||
-    !isSafeId(value.id) ||
-    !hasOnlyAllowedKeys(value, fieldMappingKeys)
-  ) {
+  if (!isRecord(value) || !isSafeId(value.id) || !hasOnlyAllowedKeys(value, fieldMappingKeys)) {
     return false;
   }
   const mapping = { ...value };
