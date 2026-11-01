@@ -2,7 +2,7 @@
   "name": "rapid-robot-job-assistant",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-first Chrome extension foundation for reviewed job search, application analysis, and safe form filling.",
+  "description": "Local-first Chromium extension for reviewed job search and safe application assistance.",
   "type": "module",
   "scripts": {
     "dev": "vite",

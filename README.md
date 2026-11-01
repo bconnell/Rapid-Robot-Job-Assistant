@@ -12,6 +12,13 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-10-31. Local Release Candidate Acceptance
+
+- Connected profile and resume import, saved-search management, job analysis, local job matching, application-field review, explicitly approved filling, durable application history, and seven-store backup/restore into the supported local workflow.
+- `npm run validate:local` passed TypeScript, 41 test files / 232 tests, ESLint, Prettier, both production builds, and packaged-output checks. `npm audit --audit-level=low` reported no vulnerabilities; the production dependency tree resolved the four declared runtime packages.
+- Chrome for Testing 156.0.8078.47 exercised the production extension in disposable headless profiles with synthetic localhost pages and records. The workflow covered import, analysis, saved searches, field approval/filling, history, backup/restore, and failure recovery. Screenshots of the popup, in-page assistant, side panel, and Options at narrow and wide layouts were inspected.
+- The unmodified manifest was checked for its no-required-host-permission behavior and blocked-page fallback. A separate temporary test copy added only localhost access for the interaction run. The native optional-origin consent dialog was **NOT RUN to completion**; no optional origin was granted. No real job sites or applications were used, and no application was submitted.
+
 ### 2026-10-15. Connected Workflow Completion Candidate
 
 - Saved searches now open safely on direct user request. Recording a manual review is a separate action.
@@ -196,7 +203,7 @@ Newest changes are listed first.
 
 Known limitations are documented in [docs/roadmap.md](docs/roadmap.md).
 
-The consolidated product release gate is [docs/completeness-release-gate.md](docs/completeness-release-gate.md). Manual user acceptance is deferred until the build is actually complete and independently validated.
+The consolidated local product acceptance and its remaining proof boundaries are recorded in [docs/completeness-release-gate.md](docs/completeness-release-gate.md). Owner review is separate from the internal synthetic acceptance evidence.
 
 ## Public Repo Privacy Warning
 

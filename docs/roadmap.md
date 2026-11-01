@@ -30,7 +30,7 @@
 - Experience fallback parsing is conservative. Inferred entries should be checked and corrected.
 - Chrome Web Store packaging and publishing are future work.
 
-## Connected Workflow Completion Candidate
+## Verified Connected Workflows (2026-10-31)
 
 - Options contains a searchable, locally paginated view of saved jobs and application sessions, with direct user-triggered opening of saved pages.
 - Saved searches can be opened in a browser tab and separately marked manually reviewed.
@@ -38,7 +38,7 @@
 - Saved job deduplication is atomic under concurrent writes and session history lookup chooses the latest updated matching record.
 - Local skills matching and truthfulness-checked wording are connected to the side panel and the in-page assistant without network AI calls.
 - Background messaging failures are returned as explicit errors rather than uncaught rejections, and manual submission status requires a current target and confirmation.
-- All of these changes still require local automated tests and real-browser evidence before being marked released.
+- The connected workflows passed the documented local validation and synthetic Chrome for Testing acceptance. The exact commands, browser scope, screenshots, and remaining NOT RUN consent step are recorded in `docs/completeness-release-gate.md`.
 
 ## Completed Workflow Wiring
 
@@ -159,9 +159,5 @@
 - Add more application form fixture coverage.
 - Continue improving resume parsing for unusual layouts after real browser QA.
 - Add visible search-result extraction for controlled fake fixtures and current-page only.
-- Add richer application session history.
 - Add optional site permission management.
 - Add a small permissions view for reviewing and removing granted sites.
-- Add Chrome Web Store readiness checklist.
-- Add stronger manual QA pages for extension testing.
-- Add controlled browser QA fixtures.

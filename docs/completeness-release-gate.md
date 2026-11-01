@@ -12,36 +12,36 @@ No mass submitting, CAPTCHA circumvention, authentication bypass, remote model r
 
 ## Product completeness matrix
 
-| End-to-end workflow                                                                      | Source candidate                                                    | Executable acceptance              |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------- |
-| Paste or import DOCX, parse and review profile, save, activate, switch                   | Implemented; profile and resume saves use one IndexedDB transaction | **PASS (2026-10-31 working tree)** |
-| Analyze a real job page, reject false or empty detections, store and dedupe              | Existing implementation reviewed                                    | **PASS (2026-10-31 working tree)** |
-| Save and manually check job-search URLs, preserve URL safety                             | Existing implementation reviewed                                    | **PASS (2026-10-31 working tree)** |
-| Detect fields, map only supported values, identify sensitive or unknown fields           | Existing implementation reviewed                                    | **PASS (2026-10-31 working tree)** |
-| Explicit review and approval, exact page binding, no automatic submission                | Existing implementation reviewed                                    | **PASS (2026-10-31 working tree)** |
-| Persist and resume sessions without reusing stale fill approvals                         | Existing implementation reviewed                                    | **PASS (2026-10-31 working tree)** |
-| Export a consistent snapshot of all seven IndexedDB stores                               | Implemented; size-limited with explicit refusal                     | **PASS (2026-10-31 working tree)** |
-| Preview and atomically add validated records, preserve duplicates and roll back failures | Implemented; accepts older version-one four-collection backups      | **PASS (2026-10-31 working tree)** |
-| Atomic targeted cleanup of profiles, searches, and job history                           | Implemented with transaction failure handling                       | **PASS (2026-10-31 working tree)** |
-| Popup, side panel, Options, restricted-page fallback, error feedback                     | Source inspected; popup error handling hardened                     | **PASS (2026-10-31 working tree)** |
+| End-to-end workflow                                                                      | Source candidate                                                    | Executable acceptance                |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
+| Paste or import DOCX, parse and review profile, save, activate, switch                   | Implemented; profile and resume saves use one IndexedDB transaction | **PASS (synthetic CFT, 2026-10-31)** |
+| Analyze a job page, reject false or empty detections, store and dedupe                   | Existing implementation reviewed                                    | **PASS (synthetic CFT, 2026-10-31)** |
+| Match the selected profile to a job and offer truthful, reviewable wording               | Local-only matches and supported wording in both assistant surfaces | **PASS (synthetic CFT, 2026-10-31)** |
+| Save and manually check job-search URLs, preserve URL safety                             | Existing implementation reviewed                                    | **PASS (synthetic CFT, 2026-10-31)** |
+| Detect fields, map supported values, identify sensitive or unknown fields                | Existing implementation reviewed                                    | **PASS (synthetic CFT, 2026-10-31)** |
+| Explicit review and approval, exact page binding, no automatic submission                | Existing implementation reviewed                                    | **PASS (synthetic CFT, 2026-10-31)** |
+| Persist and resume sessions without reusing stale fill approvals                         | Existing implementation reviewed                                    | **PASS (synthetic CFT, 2026-10-31)** |
+| Export a consistent snapshot of all seven IndexedDB stores                               | Implemented; size-limited with explicit refusal                     | **PASS (synthetic CFT, 2026-10-31)** |
+| Preview and atomically add validated records, preserve duplicates and roll back failures | Implemented; accepts version-one four-collection backups            | **PASS (synthetic CFT, 2026-10-31)** |
+| Atomic targeted cleanup of profiles, searches, and job history                           | Implemented with transaction failure handling                       | **PASS (synthetic CFT, 2026-10-31)** |
+| Popup, side panel, Options, restricted-page fallback, error feedback                     | Error handling and rendered UI states exercised                     | **PASS (synthetic CFT, 2026-10-31)** |
 
-**Source candidate** means the code exists and was inspected. It does not mean the behavior passed executable validation.
-
-The matrix results above describe the synthetic acceptance run on the pre-commit working tree based on 89ff06a. They are not hosted CI evidence. The exact committed candidate must still pass the numbered owner gates below before merge.
+**Source candidate** means the code exists and was inspected. The PASS results above additionally require executable synthetic acceptance; they are not hosted CI evidence. The source behavior recorded here is the committed `c8a77f2` candidate. A follow-up documentation and package-description commit must pass the exact-candidate gate below before integration.
 
 ## Mandatory local owner gates
 
 Run against the **exact Git commit to be merged** in an isolated checkout, with synthetic fixtures and without production application data:
 
 1. Capture the exact commit SHA, disk free space, Node/npm/Chromium versions, and working-tree cleanliness.
-2. Run `npm ci` and `npm run validate:local` and record the exit codes. This includes TypeScript, Vitest, ESLint, Prettier, Vite builds, and built extension output checks. Fail the candidate if any step fails.
+2. Run `npm ci` and `npm run validate:local` and record the exit codes. This includes TypeScript, Vitest, ESLint, Prettier, Vite builds, and built extension output checks. The 2026-10-31 local run passed TypeScript, 41 test files / 232 tests, ESLint, Prettier, both production builds, and packaged-output validation. Rerun this gate on the final commit after the documentation update; fail the candidate if any step fails.
 3. Inject database failures and conflicting IDs; assert preservation of every unaffected store and lack of partial writes. Run competing-restore regression.
 4. Load `dist` as an unpacked extension in a **disposable** Chromium browser profile. Use only repository fake fixtures and fake profile records. Confirm manifest permissions and that browser-restricted pages fail closed.
 5. Exercise profile import/save/select, job analysis, manual saved searches, form analysis, individual approvals, bulk-safe approvals, rejected/unknown/sensitive fields, partial-fill recovery, and explicit user-marked completion. Do **not** submit a real application.
 6. Run export and import between two **isolated** disposable browser profiles. Compare records across all seven IndexedDB stores, including resume text, mappings, suggestions, and session evidence. Test older four-store backups, collisions, oversized files, malformed imports, and interrupted storage.
 7. Inspect actual screenshots from the running extension at narrow popup width, regular Options, wide Options, side panel, and in-page assistant. Check overflow, focus states, keyboard access, readable text, and warning visibility. Static authoring screenshots do not substitute for this.
 8. Confirm absence of uncontrolled network requests, sensitive logging, bundled remote scripts, automatic submissions, credential leakage, and accidental export to the repository. Confirm bundled third-party license notices are present and reachable from Options.
-9. Rerun the full gate after the last change and record the candidate SHA and proof. Never merge, push a release tag, or claim completeness after a failing or unexecuted gate.
+9. Exercise a near-limit synthetic version-two restore in disposable headless CFT: 5,000 records in a collection and a JSON file close to 16 MiB. Record elapsed time, peak JavaScript heap, and minimum system memory. Confirm successful persistence and preservation of pre-existing records; reject 5,001 records and files above 16 MiB without changing storage.
+10. Rerun the full gate after the last change and record the candidate SHA and proof. The release-candidate source diff received a completed Codex Security review (scan `86cb1b45-5868-4a0c-bf0b-7aa693a82b63`): 31 changed-source/config review items, zero reportable findings. Never merge, push a release tag, or claim completeness after a failing or unexecuted gate.
 
 ## Recorded packaged-browser evidence
 
