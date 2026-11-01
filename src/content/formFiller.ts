@@ -1,11 +1,16 @@
 import type { FillPreviewItem, FillResult } from '../shared/models/FieldMapping';
+import type { FormFieldCandidate } from '../shared/models/FormFieldCandidate';
 import { normalizeWhitespace } from '../shared/utils/Validation';
+import { detectCurrentFormFieldCandidate } from './formDetector';
 
 export function fillApprovedFields(
   preview: FillPreviewItem[],
   doc: Document = document
 ): FillResult[] {
-  return preview.filter((item) => item.approved).map((item) => fillField(item, doc));
+  const approved = preview.filter((item) => item.approved);
+  if (!approved.length) return [];
+
+  return approved.map((item) => fillField(item, doc));
 }
 
 function fillField(item: FillPreviewItem, doc: Document): FillResult {
@@ -16,8 +21,11 @@ function fillField(item: FillPreviewItem, doc: Document): FillResult {
   if (!item.candidate.visible) return fail(item, 'Hidden fields are not filled.');
   if (item.candidate.disabled) return fail(item, 'Disabled fields are not filled.');
   if (item.candidate.readOnly) return fail(item, 'Read-only fields are not filled.');
-  if (item.candidate.stableSelector === false) {
+  if (item.candidate.stableSelector !== true) {
     return fail(item, 'Field needs manual review because a stable selector was not found.');
+  }
+  if (item.candidate.classificationContextComplete !== true) {
+    return fail(item, 'Field context is incomplete. Review manually; this value was not filled.');
   }
   if (
     item.candidate.controlFamily === 'aria-combobox' ||
@@ -28,11 +36,12 @@ function fillField(item: FillPreviewItem, doc: Document): FillResult {
     return fail(item, 'Custom widgets are manual-only in this version.');
   }
 
-  const element = safeQuerySelector(doc, item.candidate.selector);
-  if (!element) return fail(item, 'Field not found.');
-  if (!matchesCandidateIdentity(item, element)) {
+  if (!matchesCurrentCandidate(item.candidate, doc)) {
     return fail(item, 'Field identity changed after analysis. Analyze fields again.');
   }
+
+  const element = safeQuerySelector(doc, item.candidate.selector);
+  if (!element) return fail(item, 'Field not found.');
   if (!isElementVisibleNow(element)) {
     return fail(item, 'Field is currently hidden. Analyze fields again.');
   }
@@ -63,6 +72,13 @@ function fillField(item: FillPreviewItem, doc: Document): FillResult {
 function fillSelect(item: FillPreviewItem, element: HTMLSelectElement): FillResult {
   if (element.multiple) {
     return fail(item, 'Multiple-choice select fields require manual review.');
+  }
+  if (
+    element.options.length > 100 ||
+    item.candidate.optionCount !== element.options.length ||
+    item.candidate.optionListComplete !== true
+  ) {
+    return fail(item, 'The select options changed or are incomplete. Review manually.');
   }
   const option = findMatchingOption(Array.from(element.options), item.value ?? '');
   if (!option) return fail(item, 'No editable matching select option. Review this field manually.');
@@ -189,25 +205,60 @@ function safeQuerySelectorAll(doc: Document, selector: string): HTMLElement[] {
   }
 }
 
-function matchesCandidateIdentity(
-  item: FillPreviewItem,
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-): boolean {
-  const candidate = item.candidate;
-  if (candidate.tagName && element.tagName.toLowerCase() !== candidate.tagName) return false;
-  if (candidate.inputType && isInput(element) && element.type !== candidate.inputType) return false;
-  if (candidate.id && element.id !== candidate.id) return false;
-  if (candidate.name && element.getAttribute('name') !== candidate.name) return false;
-  if (candidate.autocomplete && element.getAttribute('autocomplete') !== candidate.autocomplete) {
-    return false;
-  }
-  if (candidate.ariaLabel && element.getAttribute('aria-label') !== candidate.ariaLabel) {
-    return false;
-  }
-  if (candidate.dataTestId && getDataTestId(element) !== candidate.dataTestId) {
-    return false;
-  }
-  return true;
+function matchesCurrentCandidate(candidate: FormFieldCandidate, doc: Document): boolean {
+  const isChoiceGroup =
+    candidate.controlFamily === 'radio-group' || candidate.controlFamily === 'checkbox-group';
+  const expectedElementCount = isChoiceGroup ? candidate.groupMemberCount : 1;
+  if (expectedElementCount === undefined || expectedElementCount > 100) return false;
+  const current = detectCurrentFormFieldCandidate(
+    doc,
+    candidate.selector,
+    isChoiceGroup,
+    expectedElementCount
+  );
+  return Boolean(current && candidateFingerprint(current) === candidateFingerprint(candidate));
+}
+
+function candidateFingerprint(candidate: FormFieldCandidate): string {
+  return (
+    JSON.stringify([
+      candidate.selector,
+      candidate.stableSelector ?? null,
+      candidate.classificationContextComplete ?? null,
+      candidate.inputType ?? null,
+      candidate.tagName,
+      candidate.labelText ?? null,
+      candidate.ariaLabel ?? null,
+      candidate.ariaDescribedBy ?? null,
+      candidate.ariaLabelledBy ?? null,
+      candidate.formContext ?? null,
+      candidate.placeholder ?? null,
+      candidate.name ?? null,
+      candidate.id ?? null,
+      candidate.autocomplete ?? null,
+      candidate.dataTestId ?? null,
+      candidate.nearbyText ?? null,
+      candidate.sectionHeading ?? null,
+      candidate.groupName ?? null,
+      candidate.groupLabel ?? null,
+      candidate.fieldsetLegend ?? null,
+      candidate.options,
+      candidate.optionValues ?? [],
+      candidate.optionCount ?? null,
+      candidate.optionListComplete ?? null,
+      candidate.groupMemberCount ?? null,
+      candidate.groupMemberIdentities ?? [],
+      candidate.domIdentity ?? null,
+      candidate.required,
+      candidate.visible,
+      candidate.disabled ?? false,
+      candidate.readOnly ?? false,
+      candidate.role ?? null,
+      candidate.controlFamily ?? null,
+      candidate.candidateSource ?? null,
+      candidate.frameWarning ?? null
+    ]) ?? ''
+  );
 }
 
 function setNativeProperty(
@@ -254,6 +305,7 @@ function isElementVisibleNow(element: HTMLElement): boolean {
       current.hasAttribute('inert') ||
       current.getAttribute('aria-hidden') === 'true' ||
       style?.display === 'none' ||
+      Number.parseFloat(style?.opacity ?? '1') <= 0 ||
       style?.visibility === 'hidden' ||
       style?.visibility === 'collapse'
     ) {
@@ -261,7 +313,8 @@ function isElementVisibleNow(element: HTMLElement): boolean {
     }
     current = current.parentElement;
   }
-  return true;
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
 }
 
 function isEditableChoice(element: HTMLInputElement): boolean {
@@ -287,15 +340,6 @@ function isTextArea(element: Element | null): element is HTMLTextAreaElement {
 
 function isSelect(element: Element | null): element is HTMLSelectElement {
   return element?.tagName.toLowerCase() === 'select';
-}
-
-function getDataTestId(element: Element): string | undefined {
-  return (
-    element.getAttribute('data-testid') ||
-    element.getAttribute('data-test') ||
-    element.getAttribute('data-qa') ||
-    undefined
-  );
 }
 
 function splitRequestedValues(value: string): string[] {

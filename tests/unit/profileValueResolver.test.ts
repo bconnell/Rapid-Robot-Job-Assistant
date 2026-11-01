@@ -32,7 +32,8 @@ const emailMapping: FieldMapping = {
     labelText: 'Email',
     options: [],
     required: true,
-    visible: true
+    visible: true,
+    classificationContextComplete: true
   },
   kind: 'email',
   confidence: 0.96,

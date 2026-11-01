@@ -23,13 +23,15 @@ The assistant can analyze the current page, show field summaries, build a local 
 
 ## Profile Timing
 
+Importing another resume creates a separate saved profile instead of silently replacing the active one. Saved profiles can be selected and explicitly activated in Options. Starting a new profile does not overwrite an unselected imported profile. Neither a backup restore nor a profile selection silently submits an application.
+
 A profile is not required to analyze a job page. A profile is needed before fill preview and filling because the assistant needs saved values to suggest field answers.
 
 If no profile exists, the UI says **Profile Needed Before Fill**. That is an attention state, not an error.
 
 ## Full Assistant Tab And Side Panel
 
-The full assistant tab is for profile review, saved data, diagnostics, and fallback guidance. It is not the preferred surface for live page work.
+After field analysis is saved, the in-page assistant also allows the user to mark the current session personally submitted or skipped. It requires the same current page, and a submitted status requires explicit confirmation. It updates the existing stored session status without replacing prior fill previews or results. After analyzing a job, the side panel offers local profile-skill matches and guarded wording suggestions. Unsupported qualifications are warnings, not claims to paste. Only supported low-risk wording has a copy action, and nothing is inserted automatically. Options also lists saved jobs and application sessions, ordered by last update. Opening a saved posting or application is user-triggered and never submits anything. The full assistant tab is for profile review, saved data, diagnostics, and fallback guidance. It is not the preferred surface for live page work. The Options record backup includes all seven IndexedDB stores: profiles, searches, jobs, application sessions, saved resume text, field mappings, and tailoring suggestions. Browser settings and the active-profile selection are not included and are never silently activated during restore.
 
 Side panel support is optional. Some Chromium browsers may not support it reliably. The in-page assistant is the recommended live workflow.
 
@@ -43,7 +45,7 @@ The extension does not submit applications. The user handles login, CAPTCHA, MFA
 
 ## Editable Values In The In-Page Assistant
 
-After field analysis, suggested values can be reviewed and corrected in the in-page assistant before approval. Safe fields can be approved individually or through the safe-field approval action. Sensitive fields, file uploads, hidden fields, disabled fields, read-only fields, and custom widgets remain manual-only.
+After field analysis, suggested values can be reviewed and corrected in the in-page assistant before approval. Safe fields can be approved individually or through the safe-field approval action. Sensitive fields, file uploads, hidden fields, disabled fields, read-only fields, custom widgets, and fields whose page context exceeds safe analysis limits remain manual-only. The assistant explains when context is incomplete; review that field and enter it manually.
 
 Weak job-page analysis is not saved as a real job. If no clear job details are found, review the page or try another job page.
 

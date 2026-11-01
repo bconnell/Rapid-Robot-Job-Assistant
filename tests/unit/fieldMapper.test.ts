@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { detectFormFields } from '../../src/content/formDetector';
 import { mapFieldCandidates } from '../../src/content/fieldMapper';
+import { approveSafeHighConfidence } from '../../src/shared/fill/FillApprovalRules';
+import type { FillPreviewItem } from '../../src/shared/models/FieldMapping';
 
 describe('field mapping', () => {
   it('maps classic contact fields with high confidence', () => {
@@ -100,5 +102,80 @@ describe('field mapping', () => {
     const sensitiveMappings = mapFieldCandidates(detectFormFields(document));
     expect(sensitiveMappings.every((mapping) => mapping.sensitive)).toBe(true);
     expect(sensitiveMappings.every((mapping) => !mapping.fillable)).toBe(true);
+  });
+
+  it('keeps select controls manual when their option list exceeds the reviewed bound', () => {
+    document.body.innerHTML = `<label for="state">State</label><select id="state">${Array.from(
+      { length: 101 },
+      (_, index) => `<option value="state-${index}">State ${index}</option>`
+    ).join('')}</select>`;
+    const mapping = mapFieldCandidates(detectFormFields(document))[0];
+
+    expect(mapping.fillable).toBe(false);
+    expect(mapping.requiresDirectReview).toBe(true);
+    expect(mapping.warning).toContain('select option list');
+  });
+
+  it('keeps incomplete and legacy field context manual-only', () => {
+    const candidates = [
+      {
+        selector: '#incomplete',
+        inputType: 'email',
+        tagName: 'input',
+        labelText: 'Email',
+        options: [],
+        required: false,
+        visible: true,
+        classificationContextComplete: false
+      },
+      {
+        selector: '#legacy',
+        inputType: 'email',
+        tagName: 'input',
+        labelText: 'Email',
+        options: [],
+        required: false,
+        visible: true
+      }
+    ];
+
+    const mappings = mapFieldCandidates(candidates);
+
+    expect(mappings.every((mapping) => !mapping.fillable)).toBe(true);
+    expect(mappings.every((mapping) => mapping.requiresDirectReview)).toBe(true);
+    expect(mappings[0]?.warning).toContain('context is incomplete');
+  });
+
+  it('does not bulk-approve a preview with incomplete or missing context state', () => {
+    const makePreview = (
+      classificationContextComplete: boolean | undefined,
+      selector: string
+    ): FillPreviewItem => ({
+      candidate: {
+        selector,
+        inputType: 'email',
+        tagName: 'input',
+        labelText: 'Email',
+        options: [],
+        required: false,
+        visible: true,
+        ...(classificationContextComplete === undefined ? {} : { classificationContextComplete })
+      },
+      kind: 'email',
+      confidence: 1,
+      sensitive: false,
+      fillable: true,
+      requiresDirectReview: false,
+      value: 'alex@example.test',
+      approved: false,
+      status: 'pending'
+    });
+
+    const result = approveSafeHighConfidence([
+      makePreview(false, '#incomplete'),
+      makePreview(undefined, '#legacy')
+    ]);
+
+    expect(result.every((item) => !item.approved)).toBe(true);
   });
 });

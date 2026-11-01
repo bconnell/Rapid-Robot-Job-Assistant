@@ -25,6 +25,26 @@ export function validateBuildOutput(root = 'dist') {
     throw new Error('Build output is missing dist/shared/styles.css.');
   }
 
+  const noticesPath = resolve(root, 'THIRD-PARTY-NOTICES.txt');
+  if (!existsSync(noticesPath)) {
+    throw new Error('Build output is missing dist/THIRD-PARTY-NOTICES.txt.');
+  }
+  if (existsSync(resolve(root, 'content/THIRD-PARTY-NOTICES.txt'))) {
+    throw new Error('Build output must not duplicate third-party notices in dist/content.');
+  }
+
+  for (const doc of [
+    'application-workflow.md',
+    'privacy-model.md',
+    'browser-compatibility.md',
+    'local-development.md'
+  ]) {
+    const docPath = resolve(root, 'docs', doc);
+    if (!existsSync(docPath)) {
+      throw new Error(`Build output is missing the packaged docs page ${docPath}.`);
+    }
+  }
+
   for (const page of pages) {
     const htmlPath = resolve(root, `${page}/${page}.html`);
     if (!existsSync(htmlPath)) {

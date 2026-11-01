@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest';
 import {
   areFillResultsBoundToPreview,
   areFillResultsConsistentWithPreview,
+  canAccessSessionPageFromSender,
+  canSaveJobFromSender,
   isValidFillPreviewArray,
+  isVerifiedFillResponse,
   normalizePageUrl
 } from '../../src/shared/extension/PageCommandIntegrity';
 import { validateLocalDataImport } from '../../src/shared/data/LocalDataTransfer';
@@ -84,6 +87,70 @@ function importEnvelope(overrides: Record<string, unknown> = {}) {
 }
 
 describe('session lifecycle and import integrity', () => {
+  it('rejects jobs saved under a different originating page URL', () => {
+    const original = 'https://jobs.example.test/role/1?utm_source=search#apply';
+    const canonical = 'https://jobs.example.test/role/1';
+    expect(canSaveJobFromSender({ tab: { url: original } }, canonical)).toBe(true);
+    expect(
+      canSaveJobFromSender({ tab: { url: 'https://jobs.example.test/role/2' } }, canonical)
+    ).toBe(false);
+    expect(
+      canSaveJobFromSender(
+        { tab: { url: 'https://other.example.test/role/1' }, url: canonical },
+        canonical
+      )
+    ).toBe(false);
+    expect(canSaveJobFromSender({ tab: {} }, canonical)).toBe(false);
+    expect(canSaveJobFromSender({}, canonical)).toBe(true);
+  });
+
+  it('binds content-script session reads and writes to the exact sending page', () => {
+    const page = 'https://jobs.example.test/apply/1';
+    expect(canAccessSessionPageFromSender({ tab: { url: page } }, page)).toBe(true);
+    expect(
+      canAccessSessionPageFromSender(
+        { tab: { url: 'https://jobs.example.test/apply/other' } },
+        page
+      )
+    ).toBe(false);
+    expect(
+      canAccessSessionPageFromSender(
+        { tab: { url: 'https://other.example.test/apply/1' }, url: page },
+        page
+      )
+    ).toBe(false);
+    expect(canAccessSessionPageFromSender({ tab: {} }, page)).toBe(false);
+    expect(canAccessSessionPageFromSender({}, page)).toBe(true);
+  });
+
+  it('rejects unverified fill responses and results for unapproved selectors', () => {
+    const pageUrl = 'https://jobs.example.test/apply/1';
+    const approved = preview();
+    const valid = {
+      pageUrl,
+      pageMatched: true,
+      verification: { detected: false, reasons: [] },
+      results: [{ selector: '#email', ok: true, message: 'Filled' }]
+    };
+    expect(isVerifiedFillResponse(valid, pageUrl, [approved])).toBe(true);
+    expect(isVerifiedFillResponse({ ...valid, verification: undefined }, pageUrl, [approved])).toBe(
+      false
+    );
+    expect(
+      isVerifiedFillResponse({ ...valid, pageUrl: 'https://jobs.example.test/apply/2' }, pageUrl, [
+        approved
+      ])
+    ).toBe(false);
+    expect(isVerifiedFillResponse(valid, pageUrl, [{ ...approved, approved: false }])).toBe(false);
+    expect(
+      isVerifiedFillResponse(
+        { ...valid, results: [{ selector: '#unapproved', ok: true, message: 'Filled' }] },
+        pageUrl,
+        [approved]
+      )
+    ).toBe(false);
+  });
+
   it('rejects credential-bearing page URLs and binds every result to a preview selector', () => {
     expect(normalizePageUrl(' https://jobs.example.test/apply/1 ')).toBe(
       'https://jobs.example.test/apply/1'
@@ -236,6 +303,9 @@ describe('session lifecycle and import integrity', () => {
     expect(source).toMatch(/disabled=\{!previewInteractive \|\| item\.status === 'manual-only'\}/);
     expect(source).toContain('patch.fillResults ?? session?.fillResults ?? fillResults');
     expect(source).toContain('isValidApplicationSessionRecord(next)');
+    expect(source).toContain(
+      'canSaveJobFromSender({ tab: { url: result.tabUrl } }, analyzed.sourceUrl)'
+    );
     expect(source).toContain('fillResults.length > 0');
   });
 

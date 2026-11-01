@@ -5,6 +5,11 @@ import {
 } from '../../src/content/inPageAssistant/InPageAssistantController';
 
 const messages: Array<{ command?: string; payload?: unknown }> = [];
+let assistantShadowForTests: ShadowRoot | undefined;
+
+function getAssistantShadow(): ShadowRoot | undefined {
+  return assistantShadowForTests;
+}
 
 async function flushAsyncWork(): Promise<void> {
   await Promise.resolve();
@@ -14,8 +19,17 @@ async function flushAsyncWork(): Promise<void> {
 
 beforeEach(() => {
   messages.length = 0;
+  assistantShadowForTests = undefined;
   closeInPageAssistant();
   document.documentElement.innerHTML = '<head><title></title></head><body></body>';
+  const attachShadow = HTMLElement.prototype.attachShadow;
+  vi.spyOn(HTMLElement.prototype, 'attachShadow').mockImplementation(function (
+    this: HTMLElement,
+    init: ShadowRootInit
+  ) {
+    assistantShadowForTests = attachShadow.call(this, init);
+    return assistantShadowForTests;
+  });
   Object.defineProperty(globalThis, 'chrome', {
     configurable: true,
     value: {
@@ -72,7 +86,7 @@ describe('in-page assistant recursive integrity', () => {
         `<label for="email-${index}">Email</label><input id="email-${index}" type="email" autocomplete="email" />`
     ).join('')}</form></main>`;
     await openInPageAssistant();
-    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    const shadow = getAssistantShadow();
     shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')?.click();
     await flushAsyncWork();
     expect(shadow?.querySelectorAll('[data-field-value]')).toHaveLength(13);
@@ -82,7 +96,7 @@ describe('in-page assistant recursive integrity', () => {
     document.body.innerHTML =
       '<main><h1>Application</h1><form><label for="email">Email</label><input id="email" type="email" autocomplete="email" /></form></main>';
     await openInPageAssistant();
-    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    const shadow = getAssistantShadow();
     shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')?.click();
     await flushAsyncWork();
     shadow?.querySelector<HTMLButtonElement>('[data-action="approve-safe"]')?.click();
@@ -101,7 +115,7 @@ describe('in-page assistant recursive integrity', () => {
   it('does not save an empty application session when no fields are detected', async () => {
     document.body.innerHTML = '<main><h1>Application</h1><p>No form loaded.</p></main>';
     await openInPageAssistant();
-    const shadow = document.getElementById('rapid-robot-job-assistant-root')?.shadowRoot;
+    const shadow = getAssistantShadow();
     shadow?.querySelector<HTMLButtonElement>('[data-action="analyze-fields"]')?.click();
     await flushAsyncWork();
     expect(messages.some((message) => message.command === 'SAVE_APPLICATION_SESSION')).toBe(false);

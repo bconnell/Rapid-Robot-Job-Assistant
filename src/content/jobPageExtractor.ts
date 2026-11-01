@@ -46,6 +46,18 @@ const removableContentSelector = [
   '[aria-modal="true"]',
   '#rapid-robot-job-assistant-root'
 ].join(',');
+const maxDescriptionCandidates = 20;
+const maxDescriptionTextLength = 12_000;
+const maxDescriptionTextNodes = 20_000;
+const maxMetadataCandidates = 100;
+const maxMetadataTextLength = 180;
+const maxMetadataTextNodes = 1_000;
+const maxScannedElements = 10_000;
+
+interface TextTraversalBudget {
+  remainingNodes: number;
+  remainingCharacters: number;
+}
 
 export function extractJobPostingFromDocument(doc: Document = document): JobPosting {
   const title = firstText(doc, [
@@ -58,6 +70,7 @@ export function extractJobPostingFromDocument(doc: Document = document): JobPost
   const company = firstText(doc, [
     '[data-testid*="company" i]',
     '[class*="company-name" i]',
+    '[class~="company" i]',
     '[itemprop="hiringOrganization"]',
     '[aria-label*="company" i]'
   ]);
@@ -89,7 +102,7 @@ export function extractJobPostingFromDocument(doc: Document = document): JobPost
     location: limitOptionalText(location, 180),
     salaryText,
     remoteStatus,
-    descriptionText: bodyText.slice(0, 12000),
+    descriptionText: bodyText.slice(0, maxDescriptionTextLength),
     requirementsText,
     preferredQualificationsText,
     detectedKeywords: detectKeywords(bodyText),
@@ -100,31 +113,123 @@ export function extractJobPostingFromDocument(doc: Document = document): JobPost
 }
 
 function extractJobDescriptionText(doc: Document): string {
+  const budget: TextTraversalBudget = {
+    remainingNodes: maxDescriptionTextNodes,
+    remainingCharacters: maxDescriptionTextLength * maxDescriptionCandidates
+  };
+  const seenCandidates = new Set<HTMLElement>();
+  let candidatesScanned = 0;
+  let bestText = '';
+
   for (const selector of descriptionSelectors) {
-    const candidates = Array.from(doc.querySelectorAll<HTMLElement>(selector))
-      .filter(isVisible)
-      .map((element) => sanitizedText(element))
-      .filter((text) => text.length >= 160)
-      .sort((left, right) => right.length - left.length);
-    if (candidates[0]) return candidates[0];
+    const candidateScan = scanElements(doc, selector, maxDescriptionCandidates);
+    for (const element of candidateScan.elements) {
+      if (seenCandidates.has(element)) continue;
+      if (candidatesScanned >= maxDescriptionCandidates)
+        return bestText || sanitizedText(doc.body, budget);
+      seenCandidates.add(element);
+      candidatesScanned += 1;
+      if (!isVisible(element)) continue;
+
+      const text = sanitizedText(element, budget);
+      if (text.length >= 160 && text.length > bestText.length) bestText = text;
+      if (bestText.length >= maxDescriptionTextLength) return bestText;
+      if (budget.remainingNodes <= 0 || budget.remainingCharacters <= 0) return bestText;
+    }
+    if (candidateScan.truncated) return bestText || sanitizedText(doc.body, budget);
   }
 
-  return doc.body ? sanitizedText(doc.body) : '';
+  return bestText || (doc.body ? sanitizedText(doc.body, budget) : '');
 }
 
-function sanitizedText(element: HTMLElement): string {
-  const clone = element.cloneNode(true) as HTMLElement;
-  clone.querySelectorAll(removableContentSelector).forEach((item) => item.remove());
-  return normalizeWhitespace(clone.textContent ?? '');
+function sanitizedText(element: HTMLElement | null, budget: TextTraversalBudget): string {
+  if (!element) return '';
+  return boundedElementText(element, maxDescriptionTextLength, budget, true);
 }
 
 function firstText(doc: Document, selectors: string[]): string | undefined {
+  const budget: TextTraversalBudget = {
+    remainingNodes: maxMetadataTextNodes,
+    remainingCharacters: maxMetadataTextLength * maxMetadataCandidates
+  };
+  let candidatesScanned = 0;
   for (const selector of selectors) {
-    const element = Array.from(doc.querySelectorAll<HTMLElement>(selector)).find(isVisible);
-    const value = normalizeWhitespace(element?.textContent ?? '');
-    if (value) return value;
+    const candidateScan = scanElements(doc, selector, maxMetadataCandidates);
+    for (const element of candidateScan.elements) {
+      if (candidatesScanned >= maxMetadataCandidates || budget.remainingNodes <= 0)
+        return undefined;
+      candidatesScanned += 1;
+      if (!isVisible(element)) continue;
+      const value = boundedElementText(element, maxMetadataTextLength, budget, true);
+      if (value) return value;
+    }
+    if (candidateScan.truncated) return undefined;
   }
   return undefined;
+}
+
+function scanElements(
+  doc: Document,
+  selector: string,
+  limit: number
+): { elements: HTMLElement[]; truncated: boolean } {
+  const nodeFilter = doc.defaultView?.NodeFilter;
+  if (!nodeFilter || limit <= 0) return { elements: [], truncated: false };
+
+  const walker = doc.createTreeWalker(doc.documentElement ?? doc, nodeFilter.SHOW_ELEMENT);
+  const elements: HTMLElement[] = [];
+  let node = walker.nextNode();
+  let scannedElements = 0;
+  while (node && scannedElements < maxScannedElements) {
+    scannedElements += 1;
+    if ((node as Element).matches(selector)) {
+      elements.push(node as HTMLElement);
+      if (elements.length > limit) return { elements: elements.slice(0, limit), truncated: true };
+    }
+    node = walker.nextNode();
+  }
+  return { elements, truncated: node !== null };
+}
+
+function boundedElementText(
+  element: HTMLElement,
+  maxLength: number,
+  budget: TextTraversalBudget,
+  removeNonContent: boolean
+): string {
+  if (budget.remainingNodes <= 0 || budget.remainingCharacters <= 0) return '';
+
+  const maxCharacters = Math.min(maxLength, budget.remainingCharacters);
+  let text = '';
+  let node: Node | null = element;
+
+  while (node && budget.remainingNodes > 0 && text.length < maxCharacters) {
+    budget.remainingNodes -= 1;
+    if (node.nodeType === 3) {
+      const fragment = (node.nodeValue ?? '').slice(0, maxCharacters - text.length);
+      text += fragment;
+      budget.remainingCharacters -= fragment.length;
+    }
+
+    const skipChildren =
+      removeNonContent &&
+      node !== element &&
+      node.nodeType === 1 &&
+      (node as Element).matches(removableContentSelector);
+    node = nextNodeWithinRoot(node, element, skipChildren);
+  }
+
+  return normalizeWhitespace(text).slice(0, maxLength);
+}
+
+function nextNodeWithinRoot(node: Node, root: Node, skipChildren: boolean): Node | null {
+  if (!skipChildren && node.firstChild) return node.firstChild;
+  let current: Node = node;
+  while (current !== root && !current.nextSibling) {
+    if (!current.parentNode) return null;
+    current = current.parentNode;
+  }
+  return current === root ? null : current.nextSibling;
 }
 
 function detectRemoteStatus(text: string): JobPosting['remoteStatus'] {
@@ -204,7 +309,8 @@ function normalizeSourceUrl(value: string): string {
 
 function isVisible(element: HTMLElement): boolean {
   let current: HTMLElement | null = element;
-  while (current) {
+  let depth = 0;
+  while (current && depth < 100) {
     const style = current.ownerDocument.defaultView?.getComputedStyle(current);
     if (
       current.hasAttribute('hidden') ||
@@ -216,12 +322,13 @@ function isVisible(element: HTMLElement): boolean {
       return false;
     }
     current = current.parentElement;
+    depth += 1;
   }
-  return true;
+  return current === null;
 }
 
 function limitText(value: string, maxLength: number): string {
-  return normalizeWhitespace(value).slice(0, maxLength);
+  return normalizeWhitespace(value.slice(0, maxLength * 2)).slice(0, maxLength);
 }
 
 function limitOptionalText(value: string | undefined, maxLength: number): string | undefined {

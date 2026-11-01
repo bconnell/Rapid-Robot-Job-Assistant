@@ -1,23 +1,46 @@
 import { describe, expect, it } from 'vitest';
 import { extractJobPostingFromDocument } from '../../src/content/jobPageExtractor';
+import { detectFormFields } from '../../src/content/formDetector';
 import { fillApprovedFields } from '../../src/content/formFiller';
 import { getBrowserName } from '../../src/shared/extension/BrowserCompatibility';
+import { isValidFillPreviewArray } from '../../src/shared/extension/PageCommandIntegrity';
 import { isMeaningfulJobPosting } from '../../src/shared/jobs/JobPostingValidation';
 import type { FillPreviewItem, FillResult } from '../../src/shared/models/FieldMapping';
 import { buildWorkflowState, statusTone } from '../../src/shared/workflow/WorkflowState';
 
 function preview(selector: string, value: string): FillPreviewItem {
+  const targetElements = Array.from(document.querySelectorAll<HTMLElement>(selector));
+  for (const element of targetElements) {
+    Object.defineProperty(element, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ width: 100, height: 20 }) as DOMRect
+    });
+  }
+  const candidate = detectFormFields(document).find((field) => {
+    try {
+      const currentElements = Array.from(document.querySelectorAll<HTMLElement>(field.selector));
+      return (
+        currentElements.length === targetElements.length &&
+        currentElements.every((element, index) => element === targetElements[index])
+      );
+    } catch {
+      return false;
+    }
+  });
+
   return {
-    candidate: {
-      selector,
-      inputType: 'text',
-      tagName: 'input',
-      id: selector.startsWith('#') ? selector.slice(1) : undefined,
-      options: [],
-      required: false,
-      visible: true,
-      stableSelector: true
-    },
+    candidate: candidate
+      ? { ...candidate, inputType: 'text' }
+      : {
+          selector,
+          inputType: 'text',
+          tagName: 'input',
+          id: selector.startsWith('#') ? selector.slice(1) : undefined,
+          options: [],
+          required: false,
+          visible: true,
+          stableSelector: true
+        },
     kind: 'fullName',
     confidence: 0.95,
     sensitive: false,
@@ -72,6 +95,25 @@ describe('recursive workflow integrity', () => {
     expect(
       fillApprovedFields([sensitive, unfillable], document).every((result) => !result.ok)
     ).toBe(true);
+  });
+
+  it('transports classifier completeness while keeping legacy previews readable', () => {
+    const item = preview('#name', 'Alex Morgan');
+    const current = [
+      { ...item, candidate: { ...item.candidate, classificationContextComplete: true } }
+    ];
+    const incomplete = [
+      { ...item, candidate: { ...item.candidate, classificationContextComplete: false } }
+    ];
+    const legacy = [{ ...item, candidate: { ...item.candidate } }];
+    const malformed = [
+      { ...item, candidate: { ...item.candidate, classificationContextComplete: 'yes' } }
+    ];
+
+    expect(isValidFillPreviewArray(current)).toBe(true);
+    expect(isValidFillPreviewArray(incomplete)).toBe(true);
+    expect(isValidFillPreviewArray(legacy)).toBe(true);
+    expect(isValidFillPreviewArray(malformed)).toBe(false);
   });
 
   it('does not select a disabled matching radio option', () => {

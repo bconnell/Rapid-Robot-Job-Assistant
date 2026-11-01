@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { detectApplicationIframeWarnings, detectFormFields } from '../../src/content/formDetector';
+import { maxFillItems } from '../../src/shared/extension/PageCommandIntegrity';
 
 function loadFixture(name: string) {
   document.body.innerHTML = readFileSync(
@@ -19,6 +20,7 @@ describe('form detector', () => {
     const state = fields.find((field) => field.id === 'state');
 
     expect(firstName?.labelText).toBe('First name');
+    expect(firstName?.classificationContextComplete).toBe(true);
     expect(firstName?.autocomplete).toBe('given-name');
     expect(state?.options).toContain('Illinois');
     expect(state?.optionValues).toContain('IL');
@@ -116,5 +118,107 @@ describe('form detector', () => {
 
     const [field] = detectFormFields(document);
     expect(field.controlFamily).toBe('native-multi-select');
+  });
+
+  it('bounds detected fields without cloning the shared page container', () => {
+    const container = document.createElement('div');
+    container.append(document.createTextNode('Application context. '.repeat(20)));
+
+    for (let index = 0; index < maxFillItems + 10; index += 1) {
+      const input = document.createElement('input');
+      input.id = `application-field-${index}`;
+      container.append(input);
+    }
+
+    document.body.replaceChildren(container);
+    const cloneNode = vi.spyOn(HTMLElement.prototype, 'cloneNode');
+    const querySelectorAll = vi.spyOn(Document.prototype, 'querySelectorAll');
+
+    try {
+      const fields = detectFormFields(document);
+
+      expect(fields).toHaveLength(maxFillItems + 1);
+      expect(fields.truncated).toBe(true);
+      expect(cloneNode).not.toHaveBeenCalled();
+      expect(querySelectorAll).not.toHaveBeenCalled();
+    } finally {
+      cloneNode.mockRestore();
+      querySelectorAll.mockRestore();
+    }
+  });
+
+  it('reports truncation after a fixed DOM scan budget even when no fields match', () => {
+    const container = document.createElement('div');
+    for (let index = 0; index < 10_050; index += 1) {
+      container.append(document.createElement('span'));
+    }
+    document.body.replaceChildren(container);
+
+    const fields = detectFormFields(document);
+
+    expect(fields).toHaveLength(0);
+    expect(fields.truncated).toBe(true);
+  });
+
+  it('bounds label text traversal through large element-only subtrees', () => {
+    const label = document.createElement('label');
+    label.htmlFor = 'contact';
+    for (let index = 0; index < 500; index += 1) {
+      label.append(document.createElement('span'));
+    }
+    const input = document.createElement('input');
+    input.id = 'contact';
+    document.body.replaceChildren(label, input);
+    const matches = vi.spyOn(Element.prototype, 'matches');
+
+    try {
+      const fields = detectFormFields(document);
+
+      const textTraversalCalls = matches.mock.calls.filter(
+        ([selector]) => selector === 'input, textarea, select, option, script, style'
+      );
+      expect(textTraversalCalls.length).toBeLessThan(1_000);
+      expect(fields[0]?.classificationContextComplete).toBe(false);
+    } finally {
+      matches.mockRestore();
+    }
+  });
+
+  it('marks a field incomplete when a sensitive label suffix is beyond the text bound', () => {
+    document.body.innerHTML = `<form><label for="contact">Email ${'x'.repeat(180)} Social Security Number</label><input id="contact" type="email" autocomplete="email" /></form>`;
+
+    const [field] = detectFormFields(document);
+
+    expect(field?.labelText).not.toContain('Social Security Number');
+    expect(field?.classificationContextComplete).toBe(false);
+  });
+
+  it('keeps a label exactly at the text bound complete when no more label text follows', () => {
+    document.body.innerHTML = `<form><label for="contact">Email ${'x'.repeat(174)}</label><input id="contact" type="email" autocomplete="email" /></form>`;
+
+    const [field] = detectFormFields(document);
+
+    expect(field?.labelText).toHaveLength(180);
+    expect(field?.classificationContextComplete).toBe(true);
+  });
+
+  it('marks referenced and grouped context incomplete when classifier text is truncated', () => {
+    document.body.innerHTML = `
+      <form>
+        <span id="description">${'x'.repeat(180)} Social Security Number</span>
+        <input id="described" aria-describedby="description" />
+        <fieldset>
+          <legend>${'Eligibility '.repeat(20)} Social Security Number</legend>
+          <label><input type="radio" name="authorization" value="yes" /> Yes</label>
+          <label><input type="radio" name="authorization" value="no" /> No</label>
+        </fieldset>
+      </form>`;
+
+    const fields = detectFormFields(document);
+    const described = fields.find((field) => field.id === 'described');
+    const group = fields.find((field) => field.controlFamily === 'radio-group');
+
+    expect(described?.classificationContextComplete).toBe(false);
+    expect(group?.classificationContextComplete).toBe(false);
   });
 });

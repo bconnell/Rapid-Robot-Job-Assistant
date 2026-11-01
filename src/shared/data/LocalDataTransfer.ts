@@ -2,6 +2,9 @@ import type { ApplicationSession } from '../models/ApplicationSession';
 import type { JobPosting } from '../models/JobPosting';
 import type { SavedSearch } from '../models/SavedSearch';
 import type { UserProfile } from '../models/UserProfile';
+import type { ResumeDocument } from '../models/ResumeDocument';
+import type { FieldMapping } from '../models/FieldMapping';
+import type { TailoringSuggestion } from '../ai/TailoringService';
 import {
   areFillResultsBoundToPreview,
   areFillResultsConsistentWithPreview,
@@ -12,14 +15,19 @@ import {
 import type { ExtensionSettings } from '../storage/ChromeStorageRepository';
 import { isCompleteApprovedFill } from '../fill/FillApprovalRules';
 import { normalizeSavedSearchUrl } from '../jobs/SavedSearchService';
+import { maxRecordsPerCollection } from './LocalDataLimits';
 
 export interface LocalDataExport {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   exportedAt: string;
   profiles: UserProfile[];
   savedSearches: SavedSearch[];
   jobPostings: JobPosting[];
   applicationSessions: ApplicationSession[];
+  /** Required for version-two files; optional only for legacy version-one backups. */
+  resumeDocuments?: ResumeDocument[];
+  fieldMappings?: Array<FieldMapping & { id: string }>;
+  tailoringSuggestions?: TailoringSuggestion[];
   settings: Omit<ExtensionSettings, 'aiEndpoint'>;
 }
 
@@ -38,11 +46,61 @@ export interface ImportPreview {
     savedSearches: number;
     jobPostings: number;
     applicationSessions: number;
+    resumeDocuments: number;
+    fieldMappings: number;
+    tailoringSuggestions: number;
   };
   data?: LocalDataExport;
 }
 
-const maxRecordsPerCollection = 5000;
+const exportKeys = new Set([
+  'schemaVersion',
+  'exportedAt',
+  'profiles',
+  'savedSearches',
+  'jobPostings',
+  'applicationSessions',
+  'resumeDocuments',
+  'fieldMappings',
+  'tailoringSuggestions',
+  'settings'
+]);
+const resumeDocumentKeys = new Set([
+  'id',
+  'fileName',
+  'sourceType',
+  'text',
+  'importedAt',
+  'warnings'
+]);
+const resumeWarningKeys = new Set(['section', 'message']);
+const fieldMappingKeys = new Set([
+  'id',
+  'candidate',
+  'kind',
+  'confidence',
+  'sensitive',
+  'fillable',
+  'requiresDirectReview',
+  'warning',
+  'explanation'
+]);
+const tailoringSuggestionKeys = new Set([
+  'id',
+  'originalText',
+  'suggestedText',
+  'reason',
+  'matchedJobKeywords',
+  'truthfulnessWarning',
+  'riskLevel',
+  'status'
+]);
+const importedSettingsKeys = new Set([
+  'localOnlyMode',
+  'aiEnabled',
+  'aiProvider',
+  'manualReviewRequired'
+]);
 const maxShortText = 4000;
 const maxLongText = 20000;
 
@@ -133,12 +191,15 @@ export function createLocalDataExport(input: LocalDataExportInput): LocalDataExp
     manualReviewRequired: true
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     exportedAt: new Date().toISOString(),
     profiles: input.profiles,
     savedSearches: input.savedSearches,
     jobPostings: input.jobPostings,
     applicationSessions: input.applicationSessions,
+    resumeDocuments: input.resumeDocuments ?? [],
+    fieldMappings: input.fieldMappings ?? [],
+    tailoringSuggestions: input.tailoringSuggestions ?? [],
     settings: safeSettings
   };
 }
@@ -148,12 +209,26 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
   if (!isRecord(value)) {
     return emptyPreview(['Import file must contain a JSON object.']);
   }
-  if (value.schemaVersion !== 1) errors.push('Unsupported or missing schemaVersion.');
+  if (value.schemaVersion !== 1 && value.schemaVersion !== 2) {
+    errors.push('Unsupported or missing schemaVersion.');
+  }
+  if (!hasOnlyAllowedKeys(value, exportKeys)) {
+    errors.push('Import contains unsupported top-level fields.');
+  }
 
   const profiles = readArray(value.profiles, 'profiles', errors);
   const savedSearches = readArray(value.savedSearches, 'savedSearches', errors);
   const jobPostings = readArray(value.jobPostings, 'jobPostings', errors);
   const applicationSessions = readArray(value.applicationSessions, 'applicationSessions', errors);
+  // Version two requires all seven collections. Legacy version one has four.
+  const readAdditional = value.schemaVersion === 2 ? readArray : readOptionalArray;
+  const resumeDocuments = readAdditional(value.resumeDocuments, 'resumeDocuments', errors);
+  const fieldMappings = readAdditional(value.fieldMappings, 'fieldMappings', errors);
+  const tailoringSuggestions = readAdditional(
+    value.tailoringSuggestions,
+    'tailoringSuggestions',
+    errors
+  );
 
   validateCollection(profiles, 'profiles', isValidUserProfileRecord, errors);
   validateCollection(savedSearches, 'savedSearches', isValidSavedSearchRecord, errors);
@@ -164,15 +239,23 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
     isValidApplicationSessionRecord,
     errors
   );
+  validateCollection(resumeDocuments, 'resumeDocuments', isValidResumeDocumentRecord, errors);
+  validateCollection(fieldMappings, 'fieldMappings', isValidStoredFieldMappingRecord, errors);
+  validateCollection(
+    tailoringSuggestions,
+    'tailoringSuggestions',
+    isValidTailoringSuggestionRecord,
+    errors
+  );
 
-  if (value.settings !== undefined && !isRecord(value.settings)) {
-    errors.push('settings must be an object.');
+  if (!isRecord(value.settings) || !hasOnlyAllowedKeys(value.settings, importedSettingsKeys)) {
+    errors.push('settings must be a supported object without provider endpoints or secrets.');
   }
 
   const data = errors.length
     ? undefined
     : ({
-        schemaVersion: 1,
+        schemaVersion: 2,
         exportedAt:
           typeof value.exportedAt === 'string' && value.exportedAt.length <= 100
             ? value.exportedAt
@@ -181,6 +264,9 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
         savedSearches: savedSearches as SavedSearch[],
         jobPostings: jobPostings as JobPosting[],
         applicationSessions: applicationSessions as ApplicationSession[],
+        resumeDocuments: resumeDocuments as ResumeDocument[],
+        fieldMappings: fieldMappings as Array<FieldMapping & { id: string }>,
+        tailoringSuggestions: tailoringSuggestions as TailoringSuggestion[],
         settings: {
           localOnlyMode: true,
           aiEnabled: false,
@@ -196,14 +282,16 @@ export function validateLocalDataImport(value: unknown): ImportPreview {
       profiles: profiles.length,
       savedSearches: savedSearches.length,
       jobPostings: jobPostings.length,
-      applicationSessions: applicationSessions.length
+      applicationSessions: applicationSessions.length,
+      resumeDocuments: resumeDocuments.length,
+      fieldMappings: fieldMappings.length,
+      tailoringSuggestions: tailoringSuggestions.length
     },
     data
   };
 }
 
 function readArray(value: unknown, name: string, errors: string[]): unknown[] {
-  if (value === undefined) return [];
   if (!Array.isArray(value)) {
     errors.push(`${name} must be an array.`);
     return [];
@@ -213,6 +301,57 @@ function readArray(value: unknown, name: string, errors: string[]): unknown[] {
     return [];
   }
   return value;
+}
+
+function readOptionalArray(value: unknown, name: string, errors: string[]): unknown[] {
+  return value === undefined ? [] : readArray(value, name, errors);
+}
+
+export function isValidResumeDocumentRecord(value: unknown): value is ResumeDocument {
+  return (
+    isRecord(value) &&
+    hasOnlyAllowedKeys(value, resumeDocumentKeys) &&
+    isSafeId(value.id) &&
+    optionalBoundedString(value.fileName, 300, true) &&
+    (value.sourceType === 'pasted-text' || value.sourceType === 'docx') &&
+    isBoundedString(value.text, 500_000) &&
+    isBoundedString(value.importedAt, 100) &&
+    Array.isArray(value.warnings) &&
+    value.warnings.length <= 500 &&
+    value.warnings.every(
+      (warning: unknown) =>
+        isRecord(warning) &&
+        hasOnlyAllowedKeys(warning, resumeWarningKeys) &&
+        isBoundedString(warning.section, 200, true) &&
+        isBoundedString(warning.message, 4000, true)
+    )
+  );
+}
+
+export function isValidStoredFieldMappingRecord(
+  value: unknown
+): value is FieldMapping & { id: string } {
+  if (!isRecord(value) || !isSafeId(value.id) || !hasOnlyAllowedKeys(value, fieldMappingKeys)) {
+    return false;
+  }
+  const mapping = { ...value };
+  delete mapping.id;
+  return isValidFillPreviewArray([{ ...mapping, approved: false }]);
+}
+
+export function isValidTailoringSuggestionRecord(value: unknown): value is TailoringSuggestion {
+  return (
+    isRecord(value) &&
+    hasOnlyAllowedKeys(value, tailoringSuggestionKeys) &&
+    isSafeId(value.id) &&
+    isBoundedString(value.originalText, 20000, true) &&
+    isBoundedString(value.suggestedText, 20000, true) &&
+    isBoundedString(value.reason, 4000, true) &&
+    isBoundedStringArray(value.matchedJobKeywords, 500, 500) &&
+    optionalBoundedString(value.truthfulnessWarning, 4000, true) &&
+    ['low', 'medium', 'high'].includes(String(value.riskLevel)) &&
+    ['suggested', 'accepted', 'edited', 'rejected'].includes(String(value.status))
+  );
 }
 
 function validateCollection(
@@ -456,7 +595,15 @@ function emptyPreview(errors: string[]): ImportPreview {
   return {
     valid: false,
     errors,
-    counts: { profiles: 0, savedSearches: 0, jobPostings: 0, applicationSessions: 0 }
+    counts: {
+      profiles: 0,
+      savedSearches: 0,
+      jobPostings: 0,
+      applicationSessions: 0,
+      resumeDocuments: 0,
+      fieldMappings: 0,
+      tailoringSuggestions: 0
+    }
   };
 }
 

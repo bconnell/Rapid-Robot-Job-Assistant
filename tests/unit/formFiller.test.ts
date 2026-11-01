@@ -1,18 +1,40 @@
 import { describe, expect, it } from 'vitest';
+import { detectFormFields } from '../../src/content/formDetector';
 import { fillApprovedFields } from '../../src/content/formFiller';
 import type { FillPreviewItem } from '../../src/shared/models/FieldMapping';
 
 function preview(selector: string, value: string, inputType = 'text'): FillPreviewItem {
+  const targetElements = Array.from(document.querySelectorAll<HTMLElement>(selector));
+  for (const element of targetElements) {
+    Object.defineProperty(element, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ width: 100, height: 20 }) as DOMRect
+    });
+  }
+  const candidate = detectFormFields(document).find((field) => {
+    try {
+      const currentElements = Array.from(document.querySelectorAll<HTMLElement>(field.selector));
+      return (
+        currentElements.length === targetElements.length &&
+        currentElements.every((element, index) => element === targetElements[index])
+      );
+    } catch {
+      return false;
+    }
+  });
+
   return {
-    candidate: {
-      selector,
-      inputType,
-      tagName: 'input',
-      options: [],
-      required: false,
-      visible: true,
-      stableSelector: true
-    },
+    candidate: candidate
+      ? { ...candidate }
+      : {
+          selector,
+          inputType,
+          tagName: 'input',
+          options: [],
+          required: false,
+          visible: true,
+          stableSelector: true
+        },
     kind: 'fullName',
     confidence: 0.95,
     sensitive: false,
@@ -117,7 +139,7 @@ describe('form filler', () => {
     document.body.innerHTML = '<fieldset disabled><input id="name" /></fieldset>';
     const [result] = fillApprovedFields([preview('#name', 'Alex Morgan')], document);
     expect(result.ok).toBe(false);
-    expect(result.message).toContain('not editable');
+    expect(result.message).toContain('Disabled fields');
   });
 
   it('rechecks stable identity attributes before filling', () => {

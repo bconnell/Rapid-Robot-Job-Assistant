@@ -111,7 +111,13 @@ export function buildFillPreview(
       approved: false,
       rejected: !canApprove,
       status: manualOnly ? 'manual-only' : canApprove ? 'pending' : 'rejected',
-      warning: [mapping.warning, resolved.warning, manualOnlyReason].filter(Boolean).join(' ')
+      warning: Array.from(
+        new Set(
+          [mapping.warning, resolved.warning, manualOnlyReason].filter(
+            (message): message is string => Boolean(message)
+          )
+        )
+      ).join(' ')
     };
   });
 }
@@ -123,6 +129,9 @@ export function getManualOnlyReason(mapping: FieldMapping): string | undefined {
   if (candidate.readOnly) return 'Read-only fields are not filled.';
   if (candidate.stableSelector === false) {
     return 'Manual review required because no stable selector was found.';
+  }
+  if (candidate.classificationContextComplete !== true) {
+    return 'Field context is incomplete. Review this field and enter it manually.';
   }
   if (
     candidate.inputType === 'file' ||

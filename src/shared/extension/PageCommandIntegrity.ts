@@ -95,6 +95,8 @@ const candidateKeys = new Set([
   'ariaLabel',
   'ariaDescribedBy',
   'ariaLabelledBy',
+  'formContext',
+  'domIdentity',
   'placeholder',
   'name',
   'id',
@@ -107,6 +109,10 @@ const candidateKeys = new Set([
   'fieldsetLegend',
   'options',
   'optionValues',
+  'optionCount',
+  'optionListComplete',
+  'groupMemberCount',
+  'groupMemberIdentities',
   'required',
   'visible',
   'disabled',
@@ -115,7 +121,8 @@ const candidateKeys = new Set([
   'controlFamily',
   'candidateSource',
   'frameWarning',
-  'stableSelector'
+  'stableSelector',
+  'classificationContextComplete'
 ]);
 const fillResultKeys = new Set(['selector', 'ok', 'message']);
 
@@ -138,6 +145,47 @@ export function isSamePageUrl(expected: string, actual: string): boolean {
   return Boolean(expectedUrl && actualUrl && expectedUrl === actualUrl);
 }
 
+/**
+ * Extension-owned views can edit a saved session. A content script, however,
+ * may only access a session belonging to the exact page that sent the message.
+ */
+export function canAccessSessionPageFromSender(
+  sender: { tab?: { url?: string }; url?: string },
+  pageUrl: string
+): boolean {
+  if (!sender.tab) return true;
+  const actualUrl = sender.tab.url ?? sender.url;
+  return typeof actualUrl === 'string' && isSamePageUrl(actualUrl, pageUrl);
+}
+
+/**
+ * Job extraction intentionally strips common tracking parameters and fragments.
+ * A content script must still only save a posting for its own exact page,
+ * even after these harmless URL decorations have been removed.
+ */
+export function canSaveJobFromSender(
+  sender: { tab?: { url?: string }; url?: string },
+  jobSourceUrl: string
+): boolean {
+  if (!sender.tab) return true;
+  const senderUrl = sender.tab.url ?? sender.url;
+  if (!senderUrl) return false;
+  const normalizedSender = normalizeJobSourceUrl(senderUrl);
+  const normalizedJob = normalizeJobSourceUrl(jobSourceUrl);
+  return Boolean(normalizedSender && normalizedJob && normalizedSender === normalizedJob);
+}
+
+function normalizeJobSourceUrl(value: string): string | undefined {
+  const normalized = normalizePageUrl(value);
+  if (!normalized) return undefined;
+  const url = new URL(normalized);
+  url.hash = '';
+  for (const name of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content']) {
+    url.searchParams.delete(name);
+  }
+  return url.href;
+}
+
 export function readFillApprovedFieldsRequest(
   value: unknown
 ): FillApprovedFieldsRequest | undefined {
@@ -145,6 +193,38 @@ export function readFillApprovedFieldsRequest(
   const pageUrl = typeof value.pageUrl === 'string' ? normalizePageUrl(value.pageUrl) : undefined;
   if (!pageUrl || !isValidFillPreviewArray(value.preview)) return undefined;
   return { pageUrl, preview: value.preview };
+}
+
+/**
+ * The content-script response is untrusted until it is tied to the requested
+ * page and every reported fill is tied to an explicitly approved selector.
+ * The page may already have changed even when a response is malformed, so
+ * callers must not blindly retry a fill.
+ */
+export function isVerifiedFillResponse(
+  value: unknown,
+  pageUrl: string,
+  approvedPreview: FillPreviewItem[]
+): boolean {
+  if (
+    !isRecord(value) ||
+    value.pageMatched !== true ||
+    typeof value.pageUrl !== 'string' ||
+    !isSamePageUrl(value.pageUrl, pageUrl) ||
+    !isRecord(value.verification) ||
+    typeof value.verification.detected !== 'boolean' ||
+    !Array.isArray(value.verification.reasons) ||
+    !value.verification.reasons.every(
+      (reason: unknown) => typeof reason === 'string' && reason.length <= 4000
+    ) ||
+    !isValidFillResultArray(value.results)
+  ) {
+    return false;
+  }
+  const approved = new Set(
+    approvedPreview.filter((item) => item.approved).map((item) => item.candidate.selector)
+  );
+  return value.results.every((result: FillResult) => approved.has(result.selector));
 }
 
 export function isValidFillPreviewArray(value: unknown): value is FillPreviewItem[] {
@@ -215,12 +295,31 @@ function isValidFillPreviewItem(value: unknown): value is FillPreviewItem {
         candidate.optionValues.every((option) =>
           isBoundedString(option, maxOptionLength, true)
         ))) &&
+    (candidate.groupMemberCount === undefined ||
+      (Number.isInteger(candidate.groupMemberCount) &&
+        candidate.groupMemberCount >= 1 &&
+        candidate.groupMemberCount <= 101)) &&
+    (candidate.optionCount === undefined ||
+      (Number.isInteger(candidate.optionCount) &&
+        candidate.optionCount >= 0 &&
+        candidate.optionCount <= 101)) &&
+    (candidate.optionListComplete === undefined ||
+      typeof candidate.optionListComplete === 'boolean') &&
+    (candidate.domIdentity === undefined ||
+      (Number.isSafeInteger(candidate.domIdentity) && candidate.domIdentity >= 1)) &&
+    (candidate.groupMemberIdentities === undefined ||
+      (Array.isArray(candidate.groupMemberIdentities) &&
+        candidate.groupMemberIdentities.length <= 100 &&
+        candidate.groupMemberIdentities.every(
+          (identity) => Number.isSafeInteger(identity) && identity >= 1
+        ))) &&
     everyOptionalStringBounded(candidate, [
       'inputType',
       'labelText',
       'ariaLabel',
       'ariaDescribedBy',
       'ariaLabelledBy',
+      'formContext',
       'placeholder',
       'name',
       'id',
@@ -241,6 +340,7 @@ function isValidFillPreviewItem(value: unknown): value is FillPreviewItem {
     optionalBoolean(candidate.disabled) &&
     optionalBoolean(candidate.readOnly) &&
     optionalBoolean(candidate.stableSelector) &&
+    optionalBoolean(candidate.classificationContextComplete) &&
     typeof value.kind === 'string' &&
     fieldMappingKinds.has(value.kind as FieldMappingKind) &&
     typeof value.confidence === 'number' &&

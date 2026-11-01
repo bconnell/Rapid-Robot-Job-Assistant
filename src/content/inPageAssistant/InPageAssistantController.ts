@@ -12,11 +12,13 @@ import {
   getBraveShieldsGuidance
 } from '../../shared/extension/BrowserCompatibility';
 import type { ExtensionCommandResult } from '../../shared/extension/ExtensionMessaging';
+import { safeSendBackgroundMessage } from '../../shared/extension/SafeBackgroundCommand';
 import type { ApplicationSession } from '../../shared/models/ApplicationSession';
 import type { FillPreviewItem, FillResult } from '../../shared/models/FieldMapping';
 import type { JobPosting } from '../../shared/models/JobPosting';
 import type { UserProfile } from '../../shared/models/UserProfile';
 import { isMeaningfulJobPosting } from '../../shared/jobs/JobPostingValidation';
+import { createLocalTailoringSuggestions } from '../../shared/ai/TailoringService';
 import { isSamePageUrl, maxFillItems } from '../../shared/extension/PageCommandIntegrity';
 import { detectCaptchaAndBotCheck } from '../../shared/security/CaptchaAndBotCheckRules';
 import { fillApprovedFields } from '../formFiller';
@@ -39,6 +41,7 @@ interface InPageAssistantState {
   warnings: string[];
   minimized: boolean;
   manualVerificationRequired: boolean;
+  sessionSaved: boolean;
   busy: boolean;
 }
 
@@ -72,7 +75,8 @@ export async function openInPageAssistant(): Promise<{
   const root = document.createElement('div');
   root.id = rootId;
   root.dataset.minimized = 'false';
-  const shadow = root.attachShadow({ mode: 'open' });
+  // Keep profile-derived previews and their controls out of page-script reach.
+  const shadow = root.attachShadow({ mode: 'closed' });
   document.documentElement.append(root);
 
   const pageUrl = document.location.href;
@@ -96,6 +100,7 @@ export async function openInPageAssistant(): Promise<{
     warnings: [],
     minimized: false,
     manualVerificationRequired: recentSession?.manualVerificationRequired ?? false,
+    sessionSaved: Boolean(recentSession),
     busy: false
   };
   render(shadow, activeState);
@@ -292,7 +297,12 @@ function bindPanelEvents(
   panel
     .querySelector<HTMLButtonElement>('[data-action="options"]')
     ?.addEventListener('click', () => {
-      void chrome.runtime.sendMessage({ command: 'OPEN_OPTIONS' });
+      void safeSendBackgroundMessage({ command: 'OPEN_OPTIONS' }).then((result) => {
+        if (!result.ok) {
+          state.status = result.userMessage ?? 'Could not open Options.';
+          render(shadow, state);
+        }
+      });
     });
 
   panel
@@ -361,6 +371,55 @@ function bindPanelEvents(
     });
   });
 
+  for (const status of ['submitted-by-user', 'skipped'] as const) {
+    const action = status === 'submitted-by-user' ? 'mark-submitted' : 'mark-skipped';
+    panel
+      .querySelector<HTMLButtonElement>('[data-action="' + action + '"]')
+      ?.addEventListener('click', () => {
+        void runBusy(shadow, state, async () => {
+          if (!state.sessionSaved || !isSamePageUrl(state.pageUrl, document.location.href)) {
+            state.status = 'The application page changed. No status update was saved.';
+            return;
+          }
+          if (
+            status === 'submitted-by-user' &&
+            !window.confirm(
+              'Confirm you personally submitted this application. This extension did not submit it.'
+            )
+          ) {
+            state.status = 'Submission history was not changed.';
+            return;
+          }
+          const result = await safeSendBackgroundMessage<ApplicationSession>({
+            command: 'SAVE_APPLICATION_SESSION',
+            payload: { pageUrl: state.pageUrl, status }
+          });
+          state.status = result.ok
+            ? status === 'submitted-by-user'
+              ? 'Marked as personally submitted. No form was submitted by the extension.'
+              : 'Application marked skipped locally.'
+            : (result.userMessage ?? 'Application status could not be saved.');
+        });
+      });
+  }
+
+  panel.querySelectorAll<HTMLButtonElement>('[data-action="copy-suggestion"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      void runBusy(shadow, state, async () => {
+        const index = Number(button.dataset.index);
+        if (!Number.isInteger(index) || !state.job || !state.profile) return;
+        const item = createLocalTailoringSuggestions(state.job, state.profile)[index];
+        if (!item || item.riskLevel !== 'low' || item.truthfulnessWarning) return;
+        try {
+          await navigator.clipboard.writeText(item.suggestedText);
+          state.status = 'Supported wording copied. Review and edit it before use.';
+        } catch {
+          state.status = 'Clipboard access failed. Select and copy the wording manually.';
+        }
+      });
+    });
+  });
+
   panel.querySelectorAll<HTMLButtonElement>('[data-action="skip-field"]').forEach((button) => {
     button.addEventListener('click', () => {
       void runBusy(shadow, state, async () => {
@@ -410,6 +469,7 @@ function resetForPageChange(state: InPageAssistantState): void {
   state.preview = [];
   state.fillResults = [];
   state.manualVerificationRequired = false;
+  state.sessionSaved = false;
   state.warnings = [];
   state.status = 'The page changed. Analyze this page before continuing.';
 }
@@ -438,9 +498,9 @@ function analyzeCurrentApplicationFields() {
     verification,
     iframeWarnings: [
       ...iframeWarnings,
-      ...(detectedFields.length > maxFillItems
+      ...(detectedFields.length > maxFillItems || detectedFields.truncated
         ? [
-            `Only the first ${maxFillItems} detected fields are included. Review the remaining fields manually.`
+            'Page analysis reached its field limit. Some fields may be omitted; review the page manually.'
           ]
         : [])
     ],
@@ -454,6 +514,8 @@ function buildMarkup(state: InPageAssistantState): string {
   const approvals = state.preview.filter((item) => item.approved).length;
   const fields = state.preview.length;
   const disabled = state.busy ? 'disabled' : '';
+  const approveSafeDisabled =
+    state.busy || !state.preview.some(canIndividuallyApprove) ? 'disabled' : '';
   return `
     <div class="header">
       <div>
@@ -497,11 +559,13 @@ function buildMarkup(state: InPageAssistantState): string {
             )}</p></div>`
           : ''
       }
+      ${buildTailoringMarkup(state)}
+      ${buildSessionCompletionMarkup(state)}
       ${
         fields
           ? `<div class="card"><h3>Field Summary</h3><p>All ${fields} detected fields are shown. ${approvals} approved.</p>
             <div class="row">
-              <button class="secondary" data-action="approve-safe" ${disabled}>Approve Safe Fields</button>
+              <button class="secondary" data-action="approve-safe" ${approveSafeDisabled}>Approve Safe Fields</button>
               <button data-action="fill" ${state.busy || !approvals ? 'disabled' : ''}>Fill Approved</button>
             </div>
             ${state.preview.map((item, index) => fieldMarkup(item, index, state.busy)).join('')}
@@ -519,6 +583,56 @@ function buildMarkup(state: InPageAssistantState): string {
           : ''
       }
     </div>`;
+}
+
+function buildSessionCompletionMarkup(state: InPageAssistantState): string {
+  if (!state.sessionSaved) return '';
+  const disabled = state.busy ? 'disabled' : '';
+  return (
+    '<div class="card"><h3>Finish Manually</h3>' +
+    '<p>Only you submit an application. These actions record your decision locally.</p>' +
+    '<div class="row">' +
+    '<button class="secondary" data-action="mark-submitted" ' +
+    disabled +
+    '>Mark Submitted By Me</button>' +
+    '<button class="secondary" data-action="mark-skipped" ' +
+    disabled +
+    '>Mark Skipped</button></div></div>'
+  );
+}
+
+function buildTailoringMarkup(state: InPageAssistantState): string {
+  if (!state.job || !state.profile) return '';
+  const suggestions = createLocalTailoringSuggestions(state.job, state.profile);
+  const rows = suggestions
+    .map((suggestion, index) => {
+      const warning = suggestion.truthfulnessWarning ?? '';
+      const safeToCopy = suggestion.riskLevel === 'low' && !warning;
+      const statusClass = safeToCopy ? '' : 'warn';
+      return (
+        '<p class="' +
+        statusClass +
+        '">' +
+        escapeHtml(suggestion.suggestedText) +
+        (warning ? ' ' + escapeHtml(warning) : '') +
+        '</p>' +
+        (safeToCopy
+          ? '<button class="secondary" data-action="copy-suggestion" data-index="' +
+            String(index) +
+            '" ' +
+            (state.busy ? 'disabled' : '') +
+            '>Copy Reviewed Wording</button>'
+          : '')
+      );
+    })
+    .join('');
+  return (
+    '<div class="card"><h3>Local Job Match</h3>' +
+    '<p>These suggestions use only saved profile skills and job text. ' +
+    'Review them manually. Nothing is sent to an AI provider or filled automatically.</p>' +
+    (rows || '<p>No supported skill matches were found.</p>') +
+    '</div>'
+  );
 }
 
 function fieldMarkup(item: FillPreviewItem, index: number, busy: boolean): string {
@@ -572,7 +686,8 @@ function canIndividuallyApprove(item: FillPreviewItem): boolean {
     item.candidate.visible &&
     !item.candidate.disabled &&
     !item.candidate.readOnly &&
-    item.candidate.stableSelector !== false
+    item.candidate.stableSelector !== false &&
+    item.candidate.classificationContextComplete === true
   );
 }
 
@@ -589,18 +704,18 @@ function updatePreviewStatusesFromResults(
 }
 
 async function loadActiveProfile(): Promise<UserProfile | undefined> {
-  const result = (await chrome.runtime.sendMessage({
+  const result = await safeSendBackgroundMessage<UserProfile | undefined>({
     command: 'GET_ACTIVE_PROFILE'
-  })) as ExtensionCommandResult<UserProfile | undefined>;
+  });
   return result.ok ? (result.data ?? result.response) : undefined;
 }
 
 async function loadRecentSession(pageUrl: string): Promise<ApplicationSession | undefined> {
   try {
-    const result = (await chrome.runtime.sendMessage({
+    const result = await safeSendBackgroundMessage<ApplicationSession | undefined>({
       command: 'GET_RECENT_SESSION_FOR_PAGE',
       payload: { pageUrl }
-    })) as ExtensionCommandResult<ApplicationSession | undefined>;
+    });
     return result.ok ? (result.data ?? result.response) : undefined;
   } catch {
     return undefined;
@@ -608,10 +723,10 @@ async function loadRecentSession(pageUrl: string): Promise<ApplicationSession | 
 }
 
 async function saveAnalyzedJob(job: JobPosting): Promise<ExtensionCommandResult<JobPosting>> {
-  return (await chrome.runtime.sendMessage({
+  return safeSendBackgroundMessage<JobPosting>({
     command: 'SAVE_ANALYZED_JOB',
     payload: job
-  })) as ExtensionCommandResult<JobPosting>;
+  });
 }
 
 async function persistApplicationSession(
@@ -633,12 +748,11 @@ async function persistApplicationSession(
   try {
     const write = sessionWriteChain
       .catch(() => undefined)
-      .then(
-        () =>
-          chrome.runtime.sendMessage({
-            command: 'SAVE_APPLICATION_SESSION',
-            payload
-          }) as Promise<ExtensionCommandResult<ApplicationSession>>
+      .then(() =>
+        safeSendBackgroundMessage<ApplicationSession>({
+          command: 'SAVE_APPLICATION_SESSION',
+          payload
+        })
       );
     sessionWriteChain = write.then(() => undefined);
     const result = await write;
@@ -650,6 +764,7 @@ async function persistApplicationSession(
       ].filter(uniqueOnly);
       return false;
     }
+    state.sessionSaved = true;
     return true;
   } catch {
     state.warnings = [...state.warnings, 'The application session was not saved locally.'].filter(
@@ -660,14 +775,22 @@ async function persistApplicationSession(
 }
 
 function snapshotPreview(preview: FillPreviewItem[]): FillPreviewItem[] {
-  return preview.map((item) => ({
-    ...item,
-    candidate: {
-      ...item.candidate,
-      options: [...item.candidate.options],
-      optionValues: item.candidate.optionValues ? [...item.candidate.optionValues] : undefined
-    }
-  }));
+  return preview.map((item) => {
+    const candidate = { ...item.candidate };
+    // These live-DOM checks are only needed until the current fill attempt ends.
+    delete candidate.formContext;
+    delete candidate.domIdentity;
+    delete candidate.groupMemberCount;
+    delete candidate.groupMemberIdentities;
+    return {
+      ...item,
+      candidate: {
+        ...candidate,
+        options: [...item.candidate.options],
+        optionValues: item.candidate.optionValues ? [...item.candidate.optionValues] : undefined
+      }
+    };
+  });
 }
 
 function uniqueOnly(value: string, index: number, values: string[]): boolean {

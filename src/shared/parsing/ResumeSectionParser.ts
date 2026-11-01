@@ -244,7 +244,7 @@ function extractLink(text: string, host: 'linkedin.com' | 'github.com'): string 
         : hostIndex;
   const raw = text
     .slice(start)
-    .split(/\s|\||,|\)|(?=Email|Phone|LinkedIn|GitHub|Portfolio|Summary|Skills)/i)[0];
+    .split(/\s|\||,|\)|(?=(?:Email|Phone|LinkedIn|GitHub|Portfolio|Summary|Skills)(?:\s|:|$))/i)[0];
   const cleaned = raw.replace(/[.,;:]+$/, '');
   return cleaned.startsWith('http') ? cleaned : `https://${cleaned}`;
 }

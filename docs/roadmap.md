@@ -22,11 +22,23 @@
 - Field filling avoids file uploads and navigation.
 - Custom widgets are detected but manual-only. The extension does not click custom dropdowns.
 - Cross-origin iframe forms are not inspected. Users may need to open the frame directly or fill it manually.
-- Import is validation-preview only. Merge/replace import still needs another review pass.
+- Additive import restores new backup records only. Duplicate IDs cancel the entire import. Replacing existing records is not supported; browser settings and the active-profile selection are not restored.
+- All seven IndexedDB collections are included in a consistent record backup. Actual browser settings and active-profile selection are not transferred; the JSON contains only fixed local-only schema markers. Older version-one four-store backups remain compatible. Version-two exports require all seven collections.
+- Backups support up to 16 MiB and 5,000 records per collection; larger exports and imports are refused with a clear capacity message.
 - AI provider network calls are scaffolded but intentionally not executed.
 - Resume parsing is improved but still review-first. Users should verify every parsed field.
 - Experience fallback parsing is conservative. Inferred entries should be checked and corrected.
 - Chrome Web Store packaging and publishing are future work.
+
+## Verified Connected Workflows (2026-10-31)
+
+- Options contains a searchable, locally paginated view of saved jobs and application sessions, with direct user-triggered opening of saved pages.
+- Saved searches can be opened in a browser tab and separately marked manually reviewed.
+- Importing a new resume creates a distinct profile. New profile/resume writes fail on collisions without overwriting existing data.
+- Saved job deduplication is atomic under concurrent writes and session history lookup chooses the latest updated matching record.
+- Local skills matching and truthfulness-checked wording are connected to the side panel and the in-page assistant without network AI calls.
+- Background messaging failures are returned as explicit errors rather than uncaught rejections, and manual submission status requires a current target and confirmation.
+- The connected workflows passed the documented local validation and synthetic Chrome for Testing acceptance. The exact commands, browser scope, screenshots, and remaining NOT RUN consent step are recorded in `docs/completeness-release-gate.md`.
 
 ## Completed Workflow Wiring
 
@@ -38,9 +50,9 @@
 - Application sessions persist field preview, notes, manual verification state, fill results, and user-marked status.
 - Side panel has per-field edit, approve, skip, bulk-safe approval, clear approvals, and fill-result feedback.
 - Profile value resolution fills only saved values and does not invent missing data.
-- Local export is implemented with a privacy warning.
-- Import validates JSON and shows preview counts, but does not merge records yet.
-- CI runs install, build, test, typecheck, lint, and format.
+- Local export includes all seven IndexedDB stores with a privacy warning, a 16 MiB byte limit, and a 5,000-record per-collection limit.
+- Import validates JSON, previews record counts, and requires confirmation before atomic additive restoration. Collisions prevent all writes.
+- The previous CI definition runs install, build, test, typecheck, lint, and format, but hosted Actions are currently unavailable. The equivalent local gate is `npm run validate:local`.
 
 ## Options UI And Resume Parsing Hardening Completed
 
@@ -142,14 +154,10 @@
 
 - Add a Chrome Web Store readiness checklist.
 - Add a dedicated privacy policy page.
-- Add safe merge/replace import after another review pass.
+- Evaluate explicit conflict resolution or replace import under a separately reviewed recovery contract.
 - Continue real browser QA fixes as they appear.
 - Add more application form fixture coverage.
 - Continue improving resume parsing for unusual layouts after real browser QA.
 - Add visible search-result extraction for controlled fake fixtures and current-page only.
-- Add richer application session history.
 - Add optional site permission management.
 - Add a small permissions view for reviewing and removing granted sites.
-- Add Chrome Web Store readiness checklist.
-- Add stronger manual QA pages for extension testing.
-- Add controlled browser QA fixtures.

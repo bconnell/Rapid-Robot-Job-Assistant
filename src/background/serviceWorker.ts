@@ -18,7 +18,10 @@ import { isCompleteApprovedFill } from '../shared/fill/FillApprovalRules';
 import {
   areFillResultsBoundToPreview,
   areFillResultsConsistentWithPreview,
+  canAccessSessionPageFromSender,
+  canSaveJobFromSender,
   isSamePageUrl,
+  isVerifiedFillResponse,
   isValidFillPreviewArray,
   isValidFillResultArray,
   normalizePageUrl,
@@ -126,6 +129,12 @@ async function handleMessage(
         userMessage: 'The page did not contain enough reliable job information to save.'
       };
     }
+    if (!canSaveJobFromSender(sender, job.sourceUrl)) {
+      return {
+        ok: false,
+        userMessage: 'The job page changed. No posting was saved.'
+      };
+    }
     const saved = await jobRepo.saveOrUpdate({ ...job, status: 'saved' });
     return {
       ok: true,
@@ -143,6 +152,12 @@ async function handleMessage(
     if (!pageUrl) {
       return { ok: false, userMessage: 'No valid application page was available to save.' };
     }
+    if (!canAccessSessionPageFromSender(sender, pageUrl)) {
+      return {
+        ok: false,
+        userMessage: 'The application page changed. No session data was saved.'
+      };
+    }
     const storedExisting = await sessionRepo.findByPageUrl(pageUrl);
     if (storedExisting && !isValidApplicationSessionRecord(storedExisting)) {
       return {
@@ -151,6 +166,12 @@ async function handleMessage(
       };
     }
     const existing = storedExisting;
+    if (!existing && (payload?.status === 'submitted-by-user' || payload?.status === 'skipped')) {
+      return {
+        ok: false,
+        userMessage: 'Analyze and save an application session before marking it completed.'
+      };
+    }
     const now = new Date().toISOString();
 
     if (payload?.fieldPreview !== undefined && !isValidFillPreviewArray(payload.fieldPreview)) {
@@ -249,7 +270,13 @@ async function handleMessage(
   if (message.command === 'GET_RECENT_SESSION_FOR_PAGE') {
     const rawPageUrl = (message.payload as { pageUrl?: string } | undefined)?.pageUrl;
     const pageUrl = typeof rawPageUrl === 'string' ? normalizePageUrl(rawPageUrl) : undefined;
-    const storedSession = pageUrl ? await sessionRepo.findByPageUrl(pageUrl) : undefined;
+    if (!pageUrl || !canAccessSessionPageFromSender(sender, pageUrl)) {
+      return {
+        ok: false,
+        userMessage: 'The application page changed. Session history was not exposed.'
+      };
+    }
+    const storedSession = await sessionRepo.findByPageUrl(pageUrl);
     const session =
       storedSession && isValidApplicationSessionRecord(storedSession) ? storedSession : undefined;
     return {
@@ -275,6 +302,9 @@ async function handleMessage(
       typeof payload?.pageUrl === 'string' ? normalizePageUrl(payload.pageUrl) : undefined;
     if (!pageUrl) {
       return { ok: false, userMessage: 'No valid application page was selected.' };
+    }
+    if (!canAccessSessionPageFromSender(sender, pageUrl)) {
+      return { ok: false, userMessage: 'The application page changed. Notes were not saved.' };
     }
     if (payload?.notes !== undefined && typeof payload.notes !== 'string') {
       return { ok: false, userMessage: 'The application notes were invalid.' };
@@ -481,6 +511,20 @@ async function sendToActiveContent(
           tabUrl: fillResponse?.pageUrl ?? capability.url,
           originPattern: capability.originPattern,
           reason: 'tab-changed'
+        };
+      }
+      if (
+        !fillRequest ||
+        !isVerifiedFillResponse(fillResponse, capability.url, fillRequest.preview)
+      ) {
+        return {
+          ok: false,
+          userMessage:
+            'The fill response could not be verified. Some fields may already have changed. ' +
+            'Inspect the form manually and analyze again before trying another fill.',
+          tabUrl: capability.url,
+          originPattern: capability.originPattern,
+          reason: 'fill-response-invalid'
         };
       }
     }

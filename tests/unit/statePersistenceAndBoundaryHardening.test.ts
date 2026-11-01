@@ -109,6 +109,6 @@ describe('state persistence and boundary hardening', () => {
     ).join('')}</form>`;
     const result = analyzeApplicationFields();
     expect(result.fieldCount).toBe(maxFillItems);
-    expect(result.warnings.join(' ')).toMatch(/first 500/i);
+    expect(result.warnings.join(' ')).toMatch(/field limit/i);
   });
 });

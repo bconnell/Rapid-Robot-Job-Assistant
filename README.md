@@ -12,6 +12,37 @@ This is not a mass application bot. It does not auto-submit applications, bypass
 
 Newest changes are listed first.
 
+### 2026-10-31. Local Release Candidate Acceptance
+
+- Connected profile and resume import, saved-search management, job analysis, local job matching, application-field review, explicitly approved filling, durable application history, and seven-store backup/restore into the supported local workflow.
+- `npm run validate:local` passed TypeScript, 41 test files / 232 tests, ESLint, Prettier, both production builds, and packaged-output checks. `npm audit --audit-level=low` reported no vulnerabilities; the production dependency tree resolved the four declared runtime packages.
+- Chrome for Testing 156.0.8078.47 exercised the production extension in disposable headless profiles with synthetic localhost pages and records. The workflow covered import, analysis, saved searches, field approval/filling, history, backup/restore, and failure recovery. Screenshots of the popup, in-page assistant, side panel, and Options at narrow and wide layouts were inspected.
+- The unmodified manifest was checked for its no-required-host-permission behavior and blocked-page fallback. A separate temporary test copy added only localhost access for the interaction run. The native optional-origin consent dialog was **NOT RUN to completion**; no optional origin was granted. No real job sites or applications were used, and no application was submitted.
+
+### 2026-10-15. Connected Workflow Completion Candidate
+
+- Saved searches now open safely on direct user request. Recording a manual review is a separate action.
+- New resume imports create separate profiles rather than overwriting the active profile.
+- Options exposes searchable local saved jobs and application-session history, with explicit links back to saved pages.
+- Job deduplication is now transactional across concurrent job analyses; duplicate session URLs resolve to the most recently updated session.
+- Local job-skill matching and truthfulness-checked wording are surfaced in the side panel and in-page assistant. Supported wording can be copied only by a user action; missing qualifications remain warnings.
+- Background worker errors fail closed, with no automatic retry of fill actions. Marking an application submitted requires a fresh target-page check and explicit user confirmation.
+- Browser acceptance, npm validation, and release verification are not inferred from these source changes.
+
+### 2026-10-15. Additive Backup Restore Candidate
+
+- Options previews a local JSON backup and requests separate confirmation before importing.
+- Export reads a coherent IndexedDB snapshot and verifies the import contract before offering the backup file.
+- Clearing IndexedDB data uses one transaction, so a later store clear failure rolls back earlier clears. Full cleanup retains Chrome settings when that database operation fails and reports later cross-storage cleanup failures.
+- Import atomically adds profiles, saved searches, jobs, sessions, saved resume text, field mappings, and tailoring suggestions in one IndexedDB transaction.
+- Existing IDs or storage failures cancel the restore without overwriting existing data.
+- The backup contains only fixed local-only settings markers; actual browser settings and active profile selection remain unchanged. Older four-collection backups remain importable.
+- The backup UI lists all seven included IndexedDB stores and the intentionally excluded browser settings and active-profile selection.
+- Backups are capped at 16 MiB and 5,000 records per collection; larger snapshots are refused before a file is created.
+- Imported profiles can be selected in Options; new profiles cannot silently overwrite an unselected imported record.
+- Local builds, automated tests, and unpacked-browser QA remain required before release. No manual user testing is requested for an unverified candidate.
+- Reports a committed restore as successful even if the Options view must be reopened to refresh.
+
 ### 2026-07-26. Session Lifecycle And Stored-Record Integrity
 
 - Kept restored application history read-only until a fresh field analysis is completed.
@@ -154,10 +185,10 @@ Newest changes are listed first.
 
 - `.docx` resume import is wired into Options.
 - Parsed profiles can be reviewed, edited, saved, and loaded as the active profile.
-- Saved searches can be created, listed, checked manually, and deleted.
+- Saved searches can be created, opened in a new tab, marked reviewed after manual inspection, listed, and deleted.
 - Job page analysis saves or updates local job records.
 - Application field analysis creates local sessions with notes, manual status, fill preview, approvals, and fill results.
-- Local data export is available with a privacy warning. Import is validation-preview only for now.
+- At this initial stage, local export was available and import was limited to a validation preview. Later revisions added confirmed restoration.
 - CI validates build, tests, typecheck, lint, and formatting on GitHub.
 
 ### 2026-05-21. Project Foundation
@@ -166,11 +197,13 @@ Newest changes are listed first.
 - Strict TypeScript, React, Vite, Vitest, ESLint, and Prettier setup.
 - Local storage wrappers for Chrome storage and IndexedDB.
 - Deterministic job-page extraction, form-field detection, CAPTCHA and bot-check detection, sensitive-field rules, field mapping, and safe fill preview/fill execution.
-- Local resume text parsing and initial `.docx` extraction support through `mammoth`.
-- AI provider interfaces with a manual local fallback. AI requests require explicit review before anything is sent.
+- Local resume text parsing and bounded `.docx` extraction from the Word document part.
+- AI provider interfaces are placeholders; this build does not send data to AI providers.
 - Fake-only fixtures and unit tests for core logic.
 
 Known limitations are documented in [docs/roadmap.md](docs/roadmap.md).
+
+The consolidated local product acceptance and its remaining proof boundaries are recorded in [docs/completeness-release-gate.md](docs/completeness-release-gate.md). Owner review is separate from the internal synthetic acceptance evidence.
 
 ## Public Repo Privacy Warning
 
@@ -204,13 +237,16 @@ Run tests:
 npm test
 ```
 
-Run type checking and linting:
+Run all local executable gates without GitHub Actions:
 
 ```bash
-npm run typecheck
-npm run lint
-npm run format
+npm ci
+npm run validate:local
 ```
+
+The combined gate runs typecheck, tests, lint, formatting, build, and output validation. It stops on the first failure. Use a separate isolated browser profile for unpacked extension acceptance, which is not replaced by this gate.
+
+Individual checks are also available: `npm run typecheck`, `npm run lint`, and `npm run format`.
 
 ## Load The Extension In Chrome
 
@@ -244,7 +280,7 @@ AI is disabled by default. If a provider is configured later, the extension must
 
 The extension does not inject remote scripts, use `eval`, log private data, or submit forms.
 
-Exports may contain private data. Keep `rapid-robot-job-assistant-export.json` out of git and shared folders.
+Exports may contain private data. Keep `rapid-robot-job-assistant-export.json` out of git and shared folders. Import is local, requires review and confirmation, and adds records only when their IDs do not already exist.
 
 ## CAPTCHA And Bot Checks
 
@@ -264,10 +300,15 @@ Tests and examples use fake data only. Do not copy real job applications, resume
 - Vite for local development and extension bundling.
 - TypeScript for typed models and message contracts.
 - `idb` for a small IndexedDB wrapper.
-- `mammoth` for initial `.docx` resume text extraction.
+- `jszip` for bounded access to the selected `.docx` Word document part.
 - Vitest and jsdom for unit tests.
 - ESLint and Prettier for baseline project hygiene.
+
+DOCX import accepts files up to 10 MiB, limits the main Word XML part to 2 MiB, and rejects
+archives with more than 2,048 entries. The parser does not resolve external relationships or
+fetch remote content.
 
 ## License
 
 Rapid Robot Job Assistant is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+Third-party license texts are packaged at `dist/THIRD-PARTY-NOTICES.txt` and exposed in Options.

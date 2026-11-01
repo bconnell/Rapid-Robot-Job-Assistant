@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ApplicationSession } from '../shared/models/ApplicationSession';
 import type { FillPreviewItem, FillResult } from '../shared/models/FieldMapping';
 import type { JobPosting } from '../shared/models/JobPosting';
@@ -25,7 +25,13 @@ import {
 } from '../shared/fill/FillApprovalRules';
 import { buildFillPreview } from '../shared/fill/ProfileValueResolver';
 import { isMeaningfulJobPosting } from '../shared/jobs/JobPostingValidation';
-import { isSamePageUrl, normalizePageUrl } from '../shared/extension/PageCommandIntegrity';
+import { createLocalTailoringSuggestions } from '../shared/ai/TailoringService';
+import {
+  canSaveJobFromSender,
+  isSamePageUrl,
+  normalizePageUrl
+} from '../shared/extension/PageCommandIntegrity';
+import { safeSendBackgroundMessage } from '../shared/extension/SafeBackgroundCommand';
 import {
   isValidApplicationSessionRecord,
   isValidJobPostingRecord,
@@ -92,7 +98,7 @@ export function SidePanelApp() {
 
   async function loadTabStatus() {
     const requestId = ++loadSequence.current;
-    const result = (await chrome.runtime.sendMessage({
+    const result = (await safeSendBackgroundMessage({
       command: 'GET_CURRENT_TAB_STATUS'
     })) as ExtensionCommandResult<TabCapabilityResult>;
     if (requestId !== loadSequence.current) return;
@@ -157,7 +163,7 @@ export function SidePanelApp() {
   }
 
   async function analyzeJob() {
-    const result = (await chrome.runtime.sendMessage({
+    const result = (await safeSendBackgroundMessage({
       command: 'ANALYZE_CURRENT_JOB_PAGE'
     })) as ExtensionCommandResult<{ job?: JobPosting; verification?: { detected?: boolean } }>;
     if (!result.ok) {
@@ -171,6 +177,14 @@ export function SidePanelApp() {
       setStatus('No reliable job data was found. Nothing was saved.');
       return;
     }
+    if (
+      !result.tabUrl ||
+      !canSaveJobFromSender({ tab: { url: result.tabUrl } }, analyzed.sourceUrl)
+    ) {
+      setJob(undefined);
+      setStatus('The job page changed during analysis. Nothing was saved.');
+      return;
+    }
     const saved = await jobRepo.saveOrUpdate({ ...analyzed, status: 'saved' });
     setJob(saved.job);
     setVerification(
@@ -182,7 +196,7 @@ export function SidePanelApp() {
   }
 
   async function analyzeFields() {
-    const result = (await chrome.runtime.sendMessage({
+    const result = (await safeSendBackgroundMessage({
       command: 'ANALYZE_APPLICATION_FIELDS'
     })) as ExtensionCommandResult<{
       pageUrl?: string;
@@ -310,12 +324,18 @@ export function SidePanelApp() {
       return;
     }
 
-    const result = (await chrome.runtime.sendMessage({
+    const result = (await safeSendBackgroundMessage({
       command: 'FILL_APPROVED_FIELDS',
       payload: { pageUrl, preview: requestPreview }
     })) as ExtensionCommandResult<FillApprovedFieldsResponse>;
     if (!result.ok) {
-      await handleCommandFailure(result);
+      // The page may have changed before the worker returned an error. A fill
+      // request is not safe to replay without fresh analysis and approval.
+      clearSessionBoundState();
+      setStatus(
+        (result.userMessage ?? 'The fill result could not be verified.') +
+          ' Inspect the form manually before analyzing it again.'
+      );
       return;
     }
 
@@ -366,7 +386,7 @@ export function SidePanelApp() {
   }
 
   async function useCurrentPage() {
-    const result = (await chrome.runtime.sendMessage({
+    const result = (await safeSendBackgroundMessage({
       command: 'USE_CURRENT_PAGE'
     })) as ExtensionCommandResult;
     setStatus(
@@ -406,6 +426,34 @@ export function SidePanelApp() {
   async function markStatus(nextStatus: ApplicationSession['status']) {
     if (!session) {
       setStatus('No application session is available to update.');
+      return;
+    }
+    const current = await safeSendBackgroundMessage<TabCapabilityResult>({
+      command: 'GET_CURRENT_TAB_STATUS'
+    });
+    const activePage = current.data ?? current.response;
+    if (
+      !current.ok ||
+      !activePage?.ok ||
+      !activePage.url ||
+      !isSamePageUrl(activePage.url, session.pageUrl)
+    ) {
+      try {
+        await loadTabStatus();
+      } catch {
+        // The original status guard still prevents a stale update.
+      }
+      setStatus(
+        'The current target no longer matches this session. No status change was recorded.'
+      );
+      return;
+    }
+    if (
+      nextStatus === 'submitted-by-user' &&
+      !window.confirm(
+        'Confirm you personally submitted this application. The extension has not submitted it.'
+      )
+    ) {
       return;
     }
     const saved = await saveSession({
@@ -555,6 +603,19 @@ export function SidePanelApp() {
   const compactSteps = compactWorkflowSteps(workflow.steps, workflow.currentStepId);
   const primaryAction = getPrimaryAction(workflow.currentStepId, blockedPage);
   const targetStatus = buildTargetStatus(pageStatus);
+  const tailoringSuggestions = useMemo(
+    () => (job && profile ? createLocalTailoringSuggestions(job, profile) : []),
+    [job, profile]
+  );
+
+  async function copyTailoredText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus('Reviewed local wording copied. Edit it to fit the application before use.');
+    } catch {
+      setStatus('Clipboard access failed. Select and copy the wording manually.');
+    }
+  }
 
   return (
     <main className="app stack">
@@ -704,6 +765,40 @@ export function SidePanelApp() {
         </Card>
       </section>
 
+      {job && (
+        <section className="card stack">
+          <h2>Local Job Match and Wording</h2>
+          <p className="muted">
+            Suggestions use only saved profile information and analyzed job text. Nothing is sent to
+            an AI provider or inserted into an application automatically.
+          </p>
+          {!profile && (
+            <p className="warn">
+              Select a saved profile in Options to review matching skills for this job.
+            </p>
+          )}
+          {profile && tailoringSuggestions.length === 0 && (
+            <p className="muted">No supported skill matches were found for this posting.</p>
+          )}
+          {tailoringSuggestions.map((suggestion) => (
+            <div className="mini-card stack" key={suggestion.id}>
+              <p>{suggestion.suggestedText}</p>
+              <p className={suggestion.riskLevel === 'low' ? 'muted' : 'warn'}>
+                {suggestion.reason} {suggestion.truthfulnessWarning ?? ''}
+              </p>
+              {suggestion.riskLevel === 'low' && !suggestion.truthfulnessWarning && (
+                <button
+                  className="secondary"
+                  onClick={() => void copyTailoredText(suggestion.suggestedText)}
+                >
+                  Copy Reviewed Wording
+                </button>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+
       <section className="card stack">
         <h2>Fill Preview</h2>
         <p className="muted">
@@ -766,7 +861,8 @@ export function SidePanelApp() {
                     !item.candidate.visible ||
                     item.candidate.disabled ||
                     item.candidate.readOnly ||
-                    item.candidate.stableSelector === false
+                    item.candidate.stableSelector === false ||
+                    item.candidate.classificationContextComplete !== true
                   }
                   onChange={(event) =>
                     updatePreview(item.candidate.selector, {

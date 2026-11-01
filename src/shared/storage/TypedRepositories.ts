@@ -6,7 +6,8 @@ import type { SavedSearch } from '../models/SavedSearch';
 import type { UserProfile } from '../models/UserProfile';
 import { buildJobDedupeKey } from '../jobs/JobDedupeService';
 import { normalizePageUrl } from '../extension/PageCommandIntegrity';
-import { IndexedDbRepository } from './IndexedDbRepository';
+import { isValidJobPostingRecord } from '../data/LocalDataTransfer';
+import { getDb, IndexedDbRepository } from './IndexedDbRepository';
 
 class TypedRepository<T> {
   constructor(private readonly repo: IndexedDbRepository<any>) {}
@@ -46,18 +47,36 @@ export class JobPostingRepository extends TypedRepository<JobPosting> {
   }
 
   async saveOrUpdate(job: JobPosting): Promise<{ job: JobPosting; created: boolean }> {
-    const existing = (await this.list()).find(
-      (candidate) => buildJobDedupeKey(candidate) === buildJobDedupeKey(job)
-    );
-    const now = new Date().toISOString();
-    const saved = {
-      ...job,
-      id: existing?.id ?? job.id,
-      status: existing?.status ?? job.status ?? 'saved',
-      updatedAt: now
-    };
-    await this.save(saved);
-    return { job: saved, created: !existing };
+    // Read and write under one store lock. The side panel and in-page assistant
+    // may analyze the same posting concurrently; neither should create a duplicate.
+    const db = await getDb();
+    const tx = db.transaction('jobPostings', 'readwrite');
+    try {
+      const store = tx.objectStore('jobPostings');
+      const jobs = (await store.getAll()) as JobPosting[];
+      const key = buildJobDedupeKey(job);
+      // Corrupt older local records must not prevent new valid jobs being saved.
+      const existing = jobs.find(
+        (candidate) => isValidJobPostingRecord(candidate) && buildJobDedupeKey(candidate) === key
+      );
+      const saved: JobPosting = {
+        ...job,
+        id: existing?.id ?? job.id,
+        status: existing?.status ?? job.status ?? 'saved',
+        updatedAt: new Date().toISOString()
+      };
+      await store.put(saved, saved.id);
+      await tx.done;
+      return { job: saved, created: !existing };
+    } catch (error) {
+      try {
+        tx.abort();
+      } catch {
+        // An IndexedDB request failure may have aborted the transaction.
+      }
+      await tx.done.catch(() => undefined);
+      throw error;
+    }
   }
 }
 
@@ -69,7 +88,20 @@ export class ApplicationSessionRepository extends TypedRepository<ApplicationSes
   async findByPageUrl(pageUrl: string): Promise<ApplicationSession | undefined> {
     const normalized = normalizePageUrl(pageUrl);
     if (!normalized) return undefined;
-    return (await this.list()).find((session) => normalizePageUrl(session.pageUrl) === normalized);
+    const matches = (await this.list()).filter(
+      (session) =>
+        session &&
+        typeof session.pageUrl === 'string' &&
+        normalizePageUrl(session.pageUrl) === normalized
+    );
+    // Old or damaged local records must not make history lookup throw.
+    return matches.sort((left, right) => {
+      const leftTime = typeof left.updatedAt === 'string' ? left.updatedAt : '';
+      const rightTime = typeof right.updatedAt === 'string' ? right.updatedAt : '';
+      const leftId = typeof left.id === 'string' ? left.id : '';
+      const rightId = typeof right.id === 'string' ? right.id : '';
+      return rightTime.localeCompare(leftTime) || rightId.localeCompare(leftId);
+    })[0];
   }
 }
 
